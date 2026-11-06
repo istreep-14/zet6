@@ -16,11 +16,15 @@ export function parseTime(raw) {
   if (!text) return { valid: true, empty: true, value: null };
   if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(text)) return { valid: false, empty: false, value: null };
   const value = Number(text);
+  // 15-minute grid: every time sits on a .25 step, so scrub/stepper UIs can
+  // assume a finite set of positions and snapping is lossless.
   const inRange = Number.isFinite(value) && value >= 0 && value < 13;
+  const onQuarter = Number.isInteger(value * 4);
+  const valid = inRange && onQuarter;
   return {
-    valid: inRange,
+    valid,
     empty: false,
-    value: inRange ? value : null,
+    value: valid ? value : null,
   };
 }
 

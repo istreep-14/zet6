@@ -49,12 +49,35 @@ function render(s) {
   renderRemModal(lastVm);
   renderDefaultsModal(lastVm);
   updateTabIndicators(lastVm);
+  renderSettings(s);
   persist.save(s);
+}
+
+// Settings switches on the More tab. Multiple pools can't be switched off
+// while extra pools exist (that would hide entered cash) — remove them first.
+function renderSettings(s) {
+  const set = (id, on, disabled) => {
+    const el = $(id);
+    if (!el) return;
+    el.setAttribute('aria-checked', String(on));
+    el.disabled = !!disabled;
+  };
+  const extraPools = s.pools.length > 1;
+  set('set-allRoles', s.settings.allRoles);
+  set('set-multiPool', s.settings.multiPool || extraPools, extraPools);
+  const hint = $('set-multiPool-hint');
+  if (hint) {
+    hint.textContent = extraPools
+      ? 'On while ' + s.pools.length + ' pools exist — remove extras to turn off'
+      : 'Split tips by time window (e.g. lunch / dinner)';
+  }
 }
 
 store.subscribe(render);
 
 // ── Global handler surface for inline on* attributes ──────────────────────────
+
+const rolesOn = () => store.getState().settings.allRoles;
 
 window.App = {
   // tabs
@@ -63,9 +86,18 @@ window.App = {
     store.setActiveTab(name);
   },
 
+  // settings
+  toggleSetting(key) {
+    const s = store.getState();
+    if (key === 'multiPool' && s.pools.length > 1) return;
+    invalidateStaffList();
+    invalidatePools();
+    store.setSetting(key, !s.settings[key]);
+  },
+
   // staff
   addStaff() {
-    store.addStaff(store.getState().ui.staffViewRole);
+    store.addStaff(rolesOn() ? store.getState().ui.staffViewRole : 'bartender');
   },
   delStaff: store.removeStaff,
   staffField: store.updateStaff,
@@ -75,14 +107,19 @@ window.App = {
     invalidateStaffList();
     store.setStaffViewRole(role);
   },
+  // Simple mode edits the whole-shift open/close; roles mode the role default.
   roleDefaultInline(field, value) {
-    store.setRoleDefault(store.getState().ui.staffViewRole, field, value.trim());
+    if (rolesOn()) store.setRoleDefault(store.getState().ui.staffViewRole, field, value.trim());
+    else store.setGlobalDefault(field, value.trim());
   },
   roleDefault(role, field, value) {
     store.setRoleDefault(role, field, value.trim());
   },
   globalDefault(field, value) {
     store.setGlobalDefault(field, value.trim());
+  },
+  supportDefault(value) {
+    store.setSupportDefault(value.trim());
   },
 
   // pools
@@ -102,6 +139,29 @@ window.App = {
   },
   poolNet(id, value) {
     store.updatePool(id, p => { p.cash.netTotal = value; });
+  },
+  poolSupport(id, field, value) {
+    store.updatePool(id, p => {
+      p.support ||= { pct: '', rate: '', hours: {} };
+      p.support[field] = value;
+    });
+  },
+  poolSupportHours(id, staffId, value) {
+    store.updatePool(id, p => {
+      p.support ||= { pct: '', rate: '', hours: {} };
+      p.support.hours[staffId] = value;
+    });
+  },
+  // Enter / "next" key hops down the denomination rows ($100 → $50 → … → $1)
+  billKey(e, poolId) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const card = document.querySelector(`[data-pid="${poolId}"]`);
+    if (!card) return;
+    const inputs = [...card.querySelectorAll('[data-bill]')];
+    const next = inputs[inputs.indexOf(e.target) + 1];
+    if (next) { next.focus(); next.select?.(); }
+    else e.target.blur();
   },
 
   // modals
@@ -130,9 +190,6 @@ window.App = {
 
   // session
   setDate: store.setDate,
-  toggleSessionMenu() {
-    $('sessionMenu')?.classList.toggle('hidden');
-  },
   exportSession() {
     const s = store.getState();
     const blob = new Blob([persist.serialize(s)], { type: 'application/json' });
@@ -170,7 +227,10 @@ window.App = {
   },
   clearSession() {
     if (!confirm('Start a new session? This will clear all current data.')) return;
-    persist.clear();
+    // Settings are a preference, not session data — carry them over.
+    const fresh = store.initialState();
+    fresh.settings = { ...store.getState().settings };
+    persist.save(fresh);
     location.reload();
   },
 };
@@ -178,14 +238,6 @@ window.App = {
 // ── One-time DOM wiring ───────────────────────────────────────────────────────
 
 $('tipDate').value = state.meta.date;
-
-document.addEventListener('click', e => {
-  const menu = $('sessionMenu');
-  if (!menu || menu.classList.contains('hidden')) return;
-  if (!menu.contains(e.target) && e.target.id !== 'sessionMenuBtn') {
-    menu.classList.add('hidden');
-  }
-});
 
 // Hide the tab bar when the software keyboard is open.
 if (window.visualViewport) {
@@ -198,6 +250,40 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('scroll', updateKeyboardState);
 }
 
+// Swipe left/right on the content area to move between tabs. Ignored when the
+// gesture starts in a sideways-scrolling table, while typing, or when it's
+// mostly vertical (normal scrolling).
+const TAB_ORDER = ['summary', 'staff', 'cash', 'bills', 'more'];
+(() => {
+  const area = $('mainContent');
+  let x0 = 0, y0 = 0, t0 = 0, tracking = false;
+
+  area.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    const t = e.target;
+    tracking = !t.closest('.tbl-wrap')
+      && !(t.matches('input') && t === document.activeElement)
+      && !document.body.classList.contains('keyboard-open');
+    x0 = e.touches[0].clientX;
+    y0 = e.touches[0].clientY;
+    t0 = Date.now();
+  }, { passive: true });
+
+  area.addEventListener('touchend', e => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.changedTouches[0].clientX - x0;
+    const dy = e.changedTouches[0].clientY - y0;
+    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - t0 > 700) return;
+    const cur = TAB_ORDER.indexOf(store.getState().ui.activeTab || 'summary');
+    const next = TAB_ORDER[cur + (dx < 0 ? 1 : -1)];
+    if (!next) return;
+    document.activeElement?.blur?.();
+    switchTab(next, { swipe: dx < 0 ? 'left' : 'right' });
+    store.setActiveTab(next);
+  }, { passive: true });
+})();
+
 // ── First render ──────────────────────────────────────────────────────────────
 
 switchTab(state.ui.activeTab || 'summary');
@@ -206,9 +292,9 @@ render(state);
 // Pulse-hint the first empty staff name field on a fresh session
 const firstEmpty = document.querySelector('#staffList [data-field="name"]');
 if (firstEmpty && !firstEmpty.value.trim()) {
-  const row = firstEmpty.closest('.staff-row-modal');
+  const row = firstEmpty.closest('.staff-row');
   if (row) {
-    row.classList.add('pulse-hint');
-    setTimeout(() => row.classList.remove('pulse-hint'), 1600);
+    row.classList.add('pulse');
+    setTimeout(() => row.classList.remove('pulse'), 1600);
   }
 }

@@ -1,0 +1,10 @@
+# Only the app itself should be served — keep docs/tooling out of the deployment
+CLAUDE.md
+README.md
+project-overview.md
+context
+appsscript
+tests
+.claude
+*.code-workspace
+.DS_Store

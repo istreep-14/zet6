@@ -28,6 +28,9 @@ export function newPool(label = 'Pool') {
     window: { start: '', end: '' },
     roles: { bartender: true, server: true },
     includeSupport: false,
+    // Tip-out config: pct overrides defaults.supportPct, rate overrides the
+    // pct-derived $/hr, hours[staffId] overrides a support person's overlap.
+    support: { pct: '', rate: '', hours: {} },
     cash: {
       entryMode: 'nettotal',
       billCounts: blankBillStrings(),
@@ -42,6 +45,7 @@ export function initialState() {
     meta: { date: '' },
     staff: [newStaff(), newStaff(), newStaff()],
     defaults: {
+      supportPct: '',          // default support tip-out % per pool ('' = 10)
       global: { in: '5', out: '2' },
       byRole: {
         bartender: { in: '', out: '' },
@@ -51,6 +55,9 @@ export function initialState() {
     },
     pools: [pool],
     overrides: { bonuses: {} },
+    // Simple mode by default: one staff list, one pool. allRoles exposes the
+    // server/support split; multiPool exposes add-pool / windows / labels.
+    settings: { allRoles: false, multiPool: false },
     ui: { activeTab: 'summary', staffViewRole: 'bartender', selectedPool: pool.id },
   };
   return state;
@@ -105,6 +112,7 @@ export function removeStaff(id) {
   mutate(s => {
     s.staff = s.staff.filter(p => p.id !== id);
     delete s.overrides.bonuses[id];
+    s.pools.forEach(pool => { if (pool.support) delete pool.support.hours[id]; });
   }, { immediate: true });
 }
 
@@ -130,6 +138,10 @@ export function setGlobalDefault(field, value) {
 
 export function setRoleDefault(role, field, value) {
   mutate(s => { s.defaults.byRole[role][field] = value; });
+}
+
+export function setSupportDefault(value) {
+  mutate(s => { s.defaults.supportPct = value; });
 }
 
 // ── Pool actions ──────────────────────────────────────────────────────────────
@@ -182,6 +194,27 @@ export function setBonuses(map) {
 
 export function clearBonuses() {
   mutate(s => { s.overrides.bonuses = {}; }, { immediate: true });
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
+// Fill in settings for snapshots that predate them. Sessions already using
+// roles or several pools keep those features visible.
+export function normalizeSettings(state) {
+  const s = state.settings && typeof state.settings === 'object' ? state.settings : {};
+  const usesRoles = state.staff.some(p => p.role !== 'bartender') || state.pools.some(p => p.includeSupport);
+  state.settings = {
+    allRoles: typeof s.allRoles === 'boolean' ? s.allRoles : usesRoles,
+    multiPool: typeof s.multiPool === 'boolean' ? s.multiPool : state.pools.length > 1,
+  };
+  return state;
+}
+
+export function setSetting(key, value) {
+  mutate(s => {
+    s.settings[key] = !!value;
+    if (key === 'allRoles' && !value) s.ui.staffViewRole = 'bartender';
+  }, { immediate: true });
 }
 
 // ── UI / meta ─────────────────────────────────────────────────────────────────

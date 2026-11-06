@@ -1,257 +1,178 @@
-// Summary tab — single-pool sessions render the night-shift card layout,
-// multi-pool sessions render the day-style matrix. Same view model.
+// Payout tab — hero totals, 2-up tool row, warnings, then either the person list
+// (single pool) or the pool × person matrix (multi-pool). Same view model.
 
 import { escapeHTML, fmtHrs, poolValue } from '../util.js';
 import { fmtTimeAbs } from '../time.js';
-import { renderRequirementSummary } from './dist.js';
+import { renderRequirementSummary, tradeSuggestionHTML, distErrorText, smallBillsShort } from './dist.js';
 
 const $ = id => document.getElementById(id);
 
-function emptyStateHTML() {
-  return `<div class="empty-state">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-    <div class="empty-title">No data yet</div>
-    Enter cash &amp; staff to calculate
+const ROLE_SHORT = { bartender: 'bar', server: 'srv', support: 'sup' };
+
+const initials = name => escapeHTML(name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2));
+
+function emptyHTML() {
+  return `<div class="empty">
+    <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+    <div class="empty-title">No shift yet</div>
+    Add who worked, then enter the tips.
+    <div><button class="btn btn--primary" onclick="App.tab('staff')">Add staff</button></div>
   </div>`;
 }
 
-function blockedHTML(reason) {
-  return `<div class="warn-box">⚠ ${escapeHTML(reason)}</div>`;
+function blockedHTML(vm) {
+  const goCash = /cash|total|count|window|support (%|\$|hours)/i.test(vm.blocked);
+  return `<div class="msg msg--error">⚠ ${escapeHTML(vm.blocked)}
+    <button class="link-btn" onclick="App.tab('${goCash ? 'cash' : 'staff'}')">Fix →</button></div>`;
+}
+
+const TOOL_ICONS = {
+  close: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  bonus: '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+};
+
+export function quickActionsHTML() {
+  return `<div class="tools">
+    <button class="tool" onclick="App.openCloseTime()">${TOOL_ICONS.close}Close time</button>
+    <button class="tool" onclick="App.openRemModal()">${TOOL_ICONS.bonus}Bonus</button>
+  </div>`;
 }
 
 function dateLabel(state) {
-  const dateVal = state.meta.date;
-  const [yr, mo, dy] = dateVal ? dateVal.split('-') : ['', '', ''];
-  return (mo && dy && yr) ? `${parseInt(mo)}/${parseInt(dy)}/${yr}` : '';
+  const [yr, mo, dy] = state.meta.date ? state.meta.date.split('-') : [];
+  return mo && dy ? `${parseInt(mo)}/${parseInt(dy)}` : '';
 }
 
-function warnBoxHTML(vm) {
-  const dist = vm.dist;
-  const shares = vm.shares;
-  const unpaid = vm.people.reduce((s, p) => {
-    const paid = poolValue(dist.byPerson[p.id] || {});
-    return s + Math.max(0, p.final - paid);
-  }, 0);
-  const remainderPaid = poolValue(dist.remainderBills);
-  const remShort = shares.leftover > 0 && remainderPaid !== shares.leftover;
-  const warnMsg = dist.error
-    || (unpaid > 0 ? 'Distribution short $' + unpaid
-      : remShort ? 'Remainder cannot be represented by available bills' : '');
-  const poolWarnings = shares.perPool.map(p => p.warning).filter(Boolean);
+function warningsHTML(vm) {
+  const { shares } = vm;
+  const warnMsg = distErrorText(vm);
 
-  let html = poolWarnings.map(w => `<div class="warn-box">⚠ ${escapeHTML(w)}</div>`).join('');
+  let html = shares.perPool.map(p => p.warning).filter(Boolean)
+    .map(w => `<div class="msg msg--error">⚠ ${escapeHTML(w)}</div>`).join('');
   if (warnMsg) {
-    html += `<div class="warn-box">⚠ ${escapeHTML(warnMsg)} `
-      + `<button onclick="App.tab('cash')" style="background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;padding:0;font:inherit;font-weight:700">→ Go to Cash</button></div>`
-      + renderRequirementSummary(vm.req, vm.bills);
+    const trade = tradeSuggestionHTML(vm);
+    html += `<div class="msg msg--error">⚠ ${escapeHTML(warnMsg)}`
+      + (trade ? '' : `<button class="link-btn" onclick="App.tab('cash')">Cash →</button>`)
+      + `</div>`
+      + (smallBillsShort(vm.req, vm.bills) ? `<div class="card">${renderRequirementSummary(vm.req, vm.bills)}</div>` : '')
+      + trade;
   }
   return html;
 }
 
-// ── Single pool: card layout ──────────────────────────────────────────────────
-
-function singlePoolHTML(vm) {
-  const shares = vm.shares;
-  const dateStr = dateLabel(vm.state);
-  const sumFinal = shares.perPerson.reduce((s, p) => s + p.final, 0);
-  const grandTotal = sumFinal + shares.leftover;
-
-  const personCards = shares.perPerson.map(p => {
-    const safe = escapeHTML(p.name);
-    const initials = escapeHTML(p.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2));
-    const inStr = fmtTimeAbs(p.inAbs);
-    const outStr = fmtTimeAbs(p.outAbs);
-    const closerBadge = p.closer ? '<span class="closer-badge">closer</span>' : '';
-    const roleBadge = p.role !== 'bartender'
-      ? `<span class="role-badge role-${p.role}" style="margin-left:4px">${p.role === 'support' ? 'sup' : 'srv'}</span>`
-      : '';
-
-    const bonusLine = p.bonus > 0
-      ? `<div class="person-bonus-row">
-           <span class="person-bonus-base">${p.base}</span>
-           <span class="person-bonus-pill">+${p.bonus}</span>
-         </div>`
-      : `<div class="person-bonus-row">
-           <span class="person-bonus-base person-bonus-base--only">${p.base}</span>
-         </div>`;
-
-    return `<div class="person-card" onclick="App.personModal('${p.id}')">
-      <div class="person-card-top">
-        <div class="person-avatar">${initials}</div>
-        <div class="person-main">
-          <div class="person-name-row"><span class="person-name">${safe}</span>${closerBadge}${roleBadge}</div>
-        </div>
-        <div class="person-hrs-block">
-          <div class="person-hrs-val">${fmtHrs(p.hours)}</div>
-          <div class="person-hrs-times">${inStr}–${outStr}</div>
-        </div>
-        <div class="person-tip-col">
-          <div class="person-tip">${p.final}</div>
-          ${bonusLine}
-        </div>
-      </div>
-    </div>`;
-  }).join('');
-
-  const remainderCard = shares.leftover > 0
-    ? `<div class="person-card remainder-card">
-        <div class="person-card-top">
-          <div class="person-avatar remainder-avatar">C</div>
-          <div class="person-main">
-            <div class="person-name-row"><span class="person-name" style="color:var(--muted)">Chump</span></div>
-          </div>
-          <div class="person-hrs-block">
-            <div class="person-hrs-val muted" style="font-size:.72rem">stays</div>
-            <div class="person-hrs-times">in drawer</div>
-          </div>
-          <div class="person-tip-col"><div class="person-tip muted">$${shares.leftover}</div></div>
-        </div>
-      </div>`
-    : '';
-
-  const leftoverMeta = shares.leftover > 0
-    ? `<div class="summary-meta-item"><div class="summary-meta-lbl">Chump</div><div class="summary-meta-val" style="color:var(--muted)">$${shares.leftover}</div></div>`
-    : '';
-
-  return `
-    <div class="summary-hero">
-      <div class="summary-hero-label">Total Pool${dateStr ? ' · ' + dateStr : ''}</div>
-      <div class="summary-hero-val">$${shares.totalCash}</div>
-      <div class="summary-meta">
-        <div class="summary-meta-item"><div class="summary-meta-lbl">Total Hrs</div><div class="summary-meta-val">${fmtHrs(shares.totalHours)}</div></div>
-        <div class="summary-meta-item"><div class="summary-meta-lbl">Rate</div><div class="summary-meta-val">$${shares.rate.toFixed(2)}/hr</div></div>
-        <div class="summary-meta-item"><div class="summary-meta-lbl">Paid Out</div><div class="summary-meta-val">$${sumFinal}</div></div>
-        ${leftoverMeta}
-      </div>
+function heroHTML(vm, extraStats = '') {
+  const s = vm.shares;
+  const date = dateLabel(vm.state);
+  const paid = s.perPerson.reduce((t, p) => t + p.final, 0);
+  return `<div class="card hero">
+    <div class="eyebrow">Total pool${date ? ' · ' + date : ''}</div>
+    <div class="hero-val">$${s.totalCash}</div>
+    <div class="stats">
+      <span class="stat-inline"><span class="k">Hours</span><span class="v">${fmtHrs(s.totalHours)}</span></span>
+      <span class="stat-inline"><span class="k">Rate</span><span class="v rate">$${s.rate.toFixed(2)}</span></span>
+      <span class="stat-inline"><span class="k">Paid</span><span class="v pool">$${paid}</span></span>
+      ${s.leftover > 0 ? `<span class="stat-inline"><span class="k">Chump</span><span class="v chump">$${s.leftover}</span></span>` : ''}
+      ${extraStats}
     </div>
-    <div class="section-hdr">Breakdown</div>
-    <div class="summary-breakdown-head"><span></span><span></span><span>Hrs</span><span>Tip</span></div>
-    ${personCards}
-    ${remainderCard}
-    <div class="summary-totals-strip">
-      <span class="summary-totals-lbl">Total</span>
-      <div class="summary-totals-right">
-        <span class="summary-totals-hrs">${fmtHrs(shares.totalHours)}</span>
-        <span class="summary-totals-val">$${grandTotal}</span>
-      </div>
-    </div>
-    <button class="bill-chart-btn" onclick="App.openModal('distModal')">Bill chart →</button>
-    ${warnBoxHTML(vm)}
-  `;
+  </div>`;
 }
 
-// ── Multi-pool: matrix layout ─────────────────────────────────────────────────
+// ── Single pool: person list ─────────────────────────────────────────────────
+
+function personRowHTML(p) {
+  const badges = (p.closer ? '<span class="badge badge--closer">closer</span>' : '')
+    + (p.role !== 'bartender' ? `<span class="badge badge--${p.role}">${ROLE_SHORT[p.role]}</span>` : '');
+  const breakdown = p.bonus > 0 ? `${p.base}<em>+${p.bonus}</em>` : '';
+  return `<button class="person" onclick="App.personModal('${p.id}')">
+    <span class="avatar" data-role="${p.role}">${initials(p.name)}</span>
+    <span class="person-main">
+      <span class="person-name"><span>${escapeHTML(p.name)}</span>${badges}</span>
+      <span class="person-sub">${fmtTimeAbs(p.inAbs)}–${fmtTimeAbs(p.outAbs)}</span>
+    </span>
+    <span class="person-hrs">${fmtHrs(p.hours)}h</span>
+    <span class="person-pay"><span class="v">$${p.final}</span><span class="b">${breakdown}</span></span>
+  </button>`;
+}
+
+function singlePoolHTML(vm) {
+  const s = vm.shares;
+  const chump = s.leftover > 0
+    ? `<div class="person person--chump">
+        <span class="avatar">C</span>
+        <span class="person-main"><span class="person-name"><span>Chump</span></span><span class="person-sub">stays in drawer</span></span>
+        <span></span>
+        <span class="person-pay"><span class="v">$${s.leftover}</span></span>
+      </div>`
+    : '';
+  const grand = s.perPerson.reduce((t, p) => t + p.final, 0) + s.leftover;
+
+  return heroHTML(vm)
+    + quickActionsHTML()
+    + warningsHTML(vm)
+    + `<div class="section-title">Payouts</div>
+    <div class="card card--flush">
+      <div class="people">${s.perPerson.map(personRowHTML).join('')}${chump}</div>
+      <div class="totals"><span>Total</span><span><span class="h">${fmtHrs(s.totalHours)}h</span><span class="v">$${grand}</span></span></div>
+    </div>`;
+}
+
+// ── Multi-pool: matrix ───────────────────────────────────────────────────────
 
 function multiPoolHTML(vm) {
-  const shares = vm.shares;
-  const dateStr = dateLabel(vm.state);
-  const pools = shares.perPool;
-  const colCount = pools.length + 2;
+  const s = vm.shares;
+  const pools = s.perPool;
 
-  const fmtAbs = t => fmtTimeAbs(t);
-  const fmtH = h => fmtHrs(h);
+  const head = `<tr><th class="c-name">Name</th>${pools.map(p => `<th>${escapeHTML(p.label)}</th>`).join('')}<th class="c-tot">Total</th></tr>`;
 
-  const thCols = pools.map(p => `<th class="ds-pool-col">${escapeHTML(p.label)}</th>`).join('')
-    + '<th class="ds-total-col">Total</th>';
+  const meta = [
+    ['Window', pools.map(p => `${fmtTimeAbs(p.startAbs)}–${fmtTimeAbs(p.endAbs)}`), ''],
+    ['Tips', pools.map(p => p.total > 0 ? '$' + p.total : '—'), '$' + s.totalCash],
+    ['Hours', pools.map(p => p.hours > 0 ? fmtHrs(p.hours) : '—'), fmtHrs(s.totalHours)],
+    ['$/hr', pools.map(p => p.hours > 0 ? (p.total / p.hours).toFixed(2) : '—'), s.totalHours > 0 ? s.rate.toFixed(2) : '—'],
+  ].map(([label, vals, tot]) =>
+    `<tr><td class="c-name muted">${label}</td>${vals.map(v => `<td>${escapeHTML(String(v))}</td>`).join('')}<td class="c-tot">${tot}</td></tr>`
+  ).join('');
 
-  const metaRows = [
-    { label: 'Start', vals: pools.map(p => fmtAbs(p.startAbs)), total: null },
-    { label: 'End', vals: pools.map(p => fmtAbs(p.endAbs)), total: null },
-    { label: 'Window', vals: pools.map(p => fmtH(p.endAbs - p.startAbs)), total: null },
-    { label: 'Tips', vals: pools.map(p => p.total > 0 ? p.total : '—'), total: shares.totalCash, boldTotal: true },
-    { label: 'Hours', vals: pools.map(p => p.hours > 0 ? fmtH(p.hours) : '—'), total: fmtH(shares.totalHours) },
-    {
-      label: 'Hourly', vals: pools.map(p => p.hours > 0 ? (p.total / p.hours).toFixed(2) : '—'),
-      total: shares.totalHours > 0 ? shares.rate.toFixed(2) : '—',
-    },
-  ];
-
-  const metaTbody = metaRows.map(row => {
-    const tds = row.vals.map(v => `<td class="ds-pool-col">${escapeHTML(String(v))}</td>`).join('');
-    const tot = row.total != null
-      ? `<td class="ds-total-col${row.boldTotal ? ' ds-bold' : ''}">${escapeHTML(String(row.total))}</td>`
-      : `<td class="ds-total-col ds-muted">—</td>`;
-    return `<tr class="ds-meta-row"><td class="ds-label-col">${escapeHTML(row.label)}</td>${tds}${tot}</tr>`;
-  }).join('');
-
-  const roleLbl = { bartender: 'bar', server: 'srv', support: 'sup' };
-  const personRows = shares.perPerson.map(p => {
-    const roleBadge = `<span class="ds-role-badge ds-role-${p.role}">${roleLbl[p.role]}</span>`;
-    const closerDot = p.closer ? '<span class="ds-closer-dot"></span>' : '';
-    const tds = pools.map(pool => {
+  const people = s.perPerson.map(p => {
+    const cells = pools.map(pool => {
       const share = p.perPool[pool.id];
-      if (!share || share.raw <= 0) return '<td class="ds-pool-col ds-empty">—</td>';
-      return `<td class="ds-pool-col ds-person-cell">
-        <span class="ds-pay">${Math.floor(share.raw)}</span><span class="ds-hrs">${fmtH(share.hours)}h</span>
-      </td>`;
+      if (!share || share.raw <= 0) return '<td class="z">—</td>';
+      return `<td><span class="cell-split"><span class="has">${Math.floor(share.raw)}</span><small>${fmtHrs(share.hours)}h</small></span></td>`;
     }).join('');
-    return `<tr class="ds-person-row" onclick="App.personModal('${p.id}')">
-      <td class="ds-label-col ds-name-cell">${escapeHTML(p.name)}${roleBadge}${closerDot}</td>
-      ${tds}
-      <td class="ds-total-col ds-bold">$${p.final}</td>
-    </tr>`;
+    return `<tr class="row-click" onclick="App.personModal('${p.id}')">
+      <td class="c-name${p.closer ? ' closer-dot' : ''}">${escapeHTML(p.name)}</td>${cells}<td class="c-tot">$${p.final}</td></tr>`;
   }).join('');
 
-  const totalsTds = pools.map(pool => {
-    const paid = pool.participants.reduce((s, px) => s + Math.floor(px.raw), 0);
-    return `<td class="ds-pool-col ds-person-cell ds-totals-cell">
-      <span class="ds-pay">${paid > 0 ? paid : '—'}</span><span class="ds-hrs">${fmtH(pool.hours)}h</span>
-    </td>`;
-  }).join('');
-
-  const totalPaid = shares.perPerson.reduce((s, p) => s + p.final, 0);
-  const totalsRow = `<tr class="ds-totals-row">
-    <td class="ds-label-col">Total</td>
-    ${totalsTds}
-    <td class="ds-total-col ds-bold">$${totalPaid}</td>
-  </tr>`;
-
-  const remRow = shares.leftover > 0
-    ? `<tr class="ds-rem-row">
-        <td class="ds-label-col">Chump</td>
-        ${pools.map(() => '<td class="ds-pool-col"></td>').join('')}
-        <td class="ds-total-col ds-muted-val">$${shares.leftover}</td>
-      </tr>`
+  const chump = s.leftover > 0
+    ? `<tr class="row-chump"><td class="c-name">Chump</td>${pools.map(() => '<td></td>').join('')}<td class="c-tot">$${s.leftover}</td></tr>`
     : '';
+  const paid = s.perPerson.reduce((t, p) => t + p.final, 0);
+  const foot = `<tr><td class="c-name">Total</td>${pools.map(pool => {
+    const sum = pool.participants.reduce((t, x) => t + Math.floor(x.raw), 0);
+    return `<td>${sum > 0 ? sum : '—'}</td>`;
+  }).join('')}<td class="c-tot">$${paid + s.leftover}</td></tr>`;
 
-  return `
-    <div class="ds-hero">
-      <div class="ds-hero-label">Tip Pool${dateStr ? ' · ' + dateStr : ''}</div>
-      <div class="ds-hero-val">$${shares.totalCash}</div>
-    </div>
-    <div class="ds-table-wrap">
-      <table class="ds-table">
-        <thead>
-          <tr><th class="ds-label-col ds-cut-hdr">Pool</th>${thCols}</tr>
-        </thead>
-        <tbody>
-          ${metaTbody}
-          <tr class="ds-divider"><td colspan="${colCount}"></td></tr>
-          <tr class="ds-name-hdr">
-            <th class="ds-label-col">Name</th>
-            ${pools.map(p => `<th class="ds-pool-col">${escapeHTML(p.label)}</th>`).join('')}
-            <th class="ds-total-col">Total</th>
-          </tr>
-          ${personRows}
-          ${totalsRow}
-          ${remRow}
-        </tbody>
-      </table>
-    </div>
-    <button class="bill-chart-btn" onclick="App.openModal('distModal')">Bill chart →</button>
-    ${warnBoxHTML(vm)}
-  `;
+  return heroHTML(vm)
+    + quickActionsHTML()
+    + warningsHTML(vm)
+    + `<div class="section-title">By pool</div>
+    <div class="tbl-wrap"><table class="tbl">
+      <thead>${head}</thead>
+      <tbody>${meta}<tr class="row-sect"><td colspan="${pools.length + 2}">Payouts</td></tr>${people}${chump}</tbody>
+      <tfoot>${foot}</tfoot>
+    </table></div>
+    <div class="tbl-cap">Pool cells are unrounded shares (floored); totals include closer bonus. Tap a row for details.</div>`;
 }
 
 export function renderSummary(vm) {
   const el = $('summary-content');
   if (!el) return;
+  el.className = 'stack';
 
   if (vm.blocked) {
     const pristine = !vm.hasNamedStaff && vm.totalCash === 0;
-    el.innerHTML = pristine ? emptyStateHTML() : blockedHTML(vm.blocked);
+    el.innerHTML = pristine ? emptyHTML() : blockedHTML(vm);
     return;
   }
-
   el.innerHTML = vm.state.pools.length === 1 ? singlePoolHTML(vm) : multiPoolHTML(vm);
 }

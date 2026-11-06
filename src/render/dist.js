@@ -1,10 +1,12 @@
-// Bill distribution modal + Close Time sidebar.
+// Bills tab (distribution, small-bill needs, trades) + Close Time sidebar.
 
 import { DENOMS, escapeHTML, poolValue } from '../util.js';
 import { parseTime } from '../time.js';
-import { previewSmallBillTrades, computeTradeUp } from '../engine.js';
+import { previewSmallBillTrades, suggestBreaks, computeTradeUp, distribute } from '../engine.js';
 import { buildCloseTimeColumn } from '../viewmodel.js';
 import { updatePool, setGlobalDefault } from '../store.js';
+import { pipStripHTML } from './tabs.js';
+import { invalidatePools } from './pools.js';
 
 const $ = id => document.getElementById(id);
 
@@ -18,123 +20,96 @@ export function renderRequirementSummary(req, pool) {
   if (!req) return '';
   const minFives = Math.max(0, (req.minOneFiveValue - req.minOnes) / 5);
   const minTens = Math.max(0, (req.minOneFiveTenValue - req.minOneFiveValue) / 10);
-  const shortFives = Math.max(0, minFives - (pool[5] || 0));
-  const shortTens = Math.max(0, minTens - (pool[10] || 0));
-
-  function reqRow(label, need, have, short) {
-    const ok = short <= 0;
-    const cls = ok ? 'req-row--ok' : 'req-row--short';
-    const badge = ok
-      ? '<span class="req-badge req-badge--ok">covered</span>'
-      : `<span class="req-badge req-badge--short">short&nbsp;${short}</span>`;
-    return `<div class="req-row ${cls}">
-      <span class="req-row-lbl">${label}</span>
-      <span class="req-row-need">${Math.ceil(need)}&nbsp;min</span>
-      <span class="req-row-have">${have}&nbsp;have</span>
-      ${badge}
+  // Coverage is cumulative: spare $1s stand in for $5s, spare $1s+$5s for
+  // $10s. A denomination is only "short" when the running value is short.
+  const row = (label, need, have, valueShort, unit) => {
+    let status;
+    if (valueShort > 0) status = `<span class="req-short">short ${Math.ceil(valueShort / unit)}</span>`;
+    else if (have < Math.ceil(need)) status = '<span class="req-ok">✓ via smaller</span>';
+    else status = '<span class="req-ok">✓ ok</span>';
+    return `<div class="req-row">
+      <span class="d">${label}</span>
+      <span class="m">need ${Math.ceil(need)}</span>
+      <span class="m">have ${have}</span>
+      ${status}
     </div>`;
-  }
+  };
 
-  return `<div class="req-summary">
-    <div class="req-summary-hdr">Minimum small bills</div>
-    ${reqRow('$1s', req.minOnes, pool[1] || 0, req.onesShort)}
-    ${reqRow('$5s', minFives, pool[5] || 0, shortFives)}
-    ${reqRow('$10s', minTens, pool[10] || 0, shortTens)}
+  return `<div class="req">
+    <div class="eyebrow">Small bills needed</div>
+    ${row('$1', req.minOnes, pool[1] || 0, req.onesShort, 1)}
+    ${row('$5', minFives, pool[5] || 0, req.oneFiveShort, 5)}
+    ${row('$10', minTens, pool[10] || 0, req.oneFiveTenShort, 10)}
   </div>`;
 }
 
 // ── Distribution table markup ─────────────────────────────────────────────────
 
-function renderCountCell(count) {
-  return count > 0 ? `<td class="has-bills">${count}</td>` : '<td class="zero">—</td>';
+function countCell(count) {
+  return count > 0 ? `<td class="has">${count}</td>` : '<td class="z">—</td>';
 }
 
-export function renderDistTableMarkup(people, byPerson, options = {}) {
-  const multiRole = people.some(p => p.role && p.role !== 'bartender');
-  const hCols = DENOMS.map(d => `<th><span class="dist-tbl-denom">$${d}</span></th>`).join('')
-    + '<th class="total-col"><span class="dist-tbl-denom" style="color:var(--text2)">TOT</span></th>';
-  const sumRem = options.leftover || 0;
-  const previewLabel = options.preview
-    ? '<div class="dist-preview-label">Distribution after simple trades</div>'
-    : '';
+const denomHead = () => DENOMS.map(d => `<th>$${d}</th>`).join('');
 
-  const roleLbl = r => r === 'support' ? 'sup' : r === 'bartender' ? 'bar' : 'srv';
+export function renderDistTableMarkup(people, byPerson, options = {}) {
+  const leftover = options.leftover || 0;
+  const caption = options.preview ? '<div class="tbl-cap">After the suggested trades</div>' : '';
+
   const rows = people.map(p => {
     const bills = byPerson[p.id] || {};
-    const safe = escapeHTML(p.name);
-    const pt = poolValue(bills);
-    const roleBadge = multiRole && p.role
-      ? `<span class="role-badge role-${p.role}" style="margin-left:3px">${roleLbl(p.role)}</span>`
-      : '';
-    const dot = p.closer
-      ? '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-left:3px;vertical-align:middle"></span>'
-      : '';
-    const cols = DENOMS.map(d => renderCountCell(bills[d] || 0)).join('');
-    return `<tr><td>${safe}${roleBadge}${dot}</td>${cols}<td class="person-total">$${pt}</td></tr>`;
+    return `<tr><td class="c-name${p.closer ? ' closer-dot' : ''}">${escapeHTML(p.name)}</td>`
+      + DENOMS.map(d => countCell(bills[d] || 0)).join('')
+      + `<td class="c-tot">$${poolValue(bills)}</td></tr>`;
   }).join('');
 
-  let remRow = '', remBills = {}, remAT = 0;
-  if (sumRem > 0) {
+  let remRow = '', remBills = {};
+  if (leftover > 0) {
     remBills = options.remainderBills || {};
-    remAT = poolValue(remBills);
-    const rc = DENOMS.map(d => {
-      const n = remBills[d] || 0;
-      return n > 0
-        ? `<td style="color:var(--muted);font-weight:600;font-size:.74rem">${n}</td>`
-        : `<td class="zero">—</td>`;
-    }).join('');
-    remRow = `<tr class="dist-rem-row"><td>Chump</td>${rc}<td style="color:var(--muted);font-weight:600;border-left:1px solid var(--border);font-size:.74rem">$${sumRem}</td></tr>`;
+    remRow = `<tr class="row-chump"><td class="c-name">Chump</td>`
+      + DENOMS.map(d => (remBills[d] || 0) > 0 ? `<td>${remBills[d]}</td>` : '<td class="z">—</td>').join('')
+      + `<td class="c-tot">$${leftover}</td></tr>`;
   }
 
-  const dtCols = DENOMS.map(d => {
+  const colTotals = DENOMS.map(d => {
     const t = people.reduce((s, p) => s + ((byPerson[p.id] || {})[d] || 0), 0) + (remBills[d] || 0);
-    return t > 0 ? `<td style="color:var(--gold)">${t}</td>` : `<td class="zero">—</td>`;
+    return t > 0 ? `<td>${t}</td>` : '<td class="z">—</td>';
   }).join('');
-  const dGT = people.reduce((s, p) => s + poolValue(byPerson[p.id] || {}), 0) + remAT;
-  const totalRow = `<tr class="dist-totals-row"><td>Total</td>${dtCols}<td class="grand-total">$${dGT}</td></tr>`;
+  const grand = people.reduce((s, p) => s + poolValue(byPerson[p.id] || {}), 0) + poolValue(remBills);
 
-  return previewLabel
-    + `<div class="dist-tbl-wrap"><table class="dist-tbl"><thead><tr><th>Name</th>${hCols}</tr></thead><tbody>${rows}${remRow}</tbody><tfoot>${totalRow}</tfoot></table></div>`;
+  return caption + `<div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th class="c-name">Name</th>${denomHead()}<th class="c-tot">Total</th></tr></thead>
+    <tbody>${rows}${remRow}</tbody>
+    <tfoot><tr><td class="c-name">Total</td>${colTotals}<td class="c-tot">$${grand}</td></tr></tfoot>
+  </table></div>`;
 }
 
 // ── Trade cards ───────────────────────────────────────────────────────────────
 
 function tradeTableHTML(nowPool, deltas, afterPool) {
-  const nowCells = DENOMS.map(d => renderCountCell(nowPool[d] || 0)).join('');
   const deltaCells = DENOMS.map(d => {
-    const delta = deltas[d] || 0;
-    if (delta === 0) return '<td class="zero">—</td>';
-    return `<td class="${delta > 0 ? 'delta-pos' : 'delta-neg'}">${delta > 0 ? '+' : ''}${delta}</td>`;
+    const v = deltas[d] || 0;
+    return v === 0 ? '<td class="z">—</td>' : `<td class="${v > 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : ''}${v}</td>`;
   }).join('');
-  const afterCells = DENOMS.map(d => renderCountCell(afterPool[d] || 0)).join('');
-
-  const nowTotal = poolValue(nowPool);
   const deltaTotal = DENOMS.reduce((s, d) => s + (deltas[d] || 0) * d, 0);
-  const afterTotal = poolValue(afterPool);
-  const deltaTotalCell = deltaTotal === 0
-    ? '<td class="delta-pos grand-total">$0</td>'
-    : `<td class="${deltaTotal > 0 ? 'delta-pos' : 'delta-neg'} grand-total">${deltaTotal > 0 ? '+$' : '-$'}${Math.abs(deltaTotal)}</td>`;
 
-  return `<div class="dist-tbl-wrap dist-trade-table">
-    <table class="dist-tbl">
-      <thead><tr><th></th>${DENOMS.map(d => `<th><span class="dist-tbl-denom">$${d}</span></th>`).join('')}<th class="total-col"><span class="dist-tbl-denom" style="color:var(--text2)">TOT</span></th></tr></thead>
-      <tbody>
-        <tr><td>Now</td>${nowCells}<td class="person-total">$${nowTotal}</td></tr>
-        <tr><td>Delta</td>${deltaCells}${deltaTotalCell}</tr>
-        <tr><td>After</td>${afterCells}<td class="person-total">$${afterTotal}</td></tr>
-      </tbody>
-    </table>
-  </div>`;
+  return `<div class="tbl-wrap"><table class="tbl">
+    <thead><tr><th class="c-name"></th>${denomHead()}<th class="c-tot">Total</th></tr></thead>
+    <tbody>
+      <tr><td class="c-name muted">Now</td>${DENOMS.map(d => countCell(nowPool[d] || 0)).join('')}<td class="c-tot">$${poolValue(nowPool)}</td></tr>
+      <tr><td class="c-name muted">Swap</td>${deltaCells}<td class="c-tot">${deltaTotal === 0 ? '$0' : (deltaTotal > 0 ? '+$' : '−$') + Math.abs(deltaTotal)}</td></tr>
+      <tr><td class="c-name">After</td>${DENOMS.map(d => countCell(afterPool[d] || 0)).join('')}<td class="c-tot">$${poolValue(afterPool)}</td></tr>
+    </tbody>
+  </table></div>`;
 }
 
 function renderTradeUpCard(tradeUp, pool) {
-  return `<div class="trade-card trade-card--up">
-    <div class="trade-card-hdr">
-      <div class="trade-card-info">
-        <div class="trade-card-title">↑ Consolidate → $20s</div>
-        <div class="trade-card-sub">Swap excess small bills for ${tradeUp.new20s}&nbsp;×&nbsp;$20. Cash tab updates on apply.</div>
+  return `<div class="card trade trade--up">
+    <div class="trade-hdr">
+      <div class="trade-info">
+        <div class="trade-title">Consolidate into $20s</div>
+        <div class="trade-sub">Swap extra small bills for ${tradeUp.new20s} × $20. Updates Cash on apply.</div>
       </div>
-      <button class="trade-apply-btn" onclick="App.applyTradeUp()">Apply</button>
+      <button class="btn btn--sm btn--primary" onclick="App.applyTradeUp()">Apply</button>
     </div>
     ${tradeTableHTML(pool, tradeUp.delta, tradeUp.newPool)}
   </div>`;
@@ -142,18 +117,18 @@ function renderTradeUpCard(tradeUp, pool) {
 
 function renderTradeDownCard(preview, pool) {
   if (!preview) return '';
-  const tradeItems = preview.trades.length
+  const items = preview.trades.length
     ? `<ul>${preview.trades.map(t => `<li>${escapeHTML(t)}</li>`).join('')}</ul>`
     : '';
-  return `<div class="trade-card trade-card--down">
-    <div class="trade-card-hdr">
-      <div class="trade-card-info">
-        <div class="trade-card-title">↓ Break Bills → Small Change</div>
-        <div class="trade-card-sub">Counts not saved until applied.</div>
+  return `<div class="card trade trade--down">
+    <div class="trade-hdr">
+      <div class="trade-info">
+        <div class="trade-title">Fix: make change</div>
+        <div class="trade-sub">Fewest swaps that make exact change. Apply updates the Cash counts.</div>
       </div>
-      <button class="trade-apply-btn" onclick="App.applyTradeDown()">Apply</button>
+      <button class="btn btn--sm btn--primary" onclick="App.applyTradeDown()">Apply</button>
     </div>
-    <div class="trade-card-trades">${tradeItems}</div>
+    ${items}
     ${tradeTableHTML(pool, preview.deltas, preview.pool)}
   </div>`;
 }
@@ -164,6 +139,60 @@ function tradesEnabled(vm) {
   return vm.state.pools.length === 1;
 }
 
+// Actionable break-bills card for the Summary warn box — same preview the
+// dist modal computes, so the Apply button (wired to pendingTradeDown, set by
+// renderDist in the same render pass) resolves to identical counts.
+export function tradeSuggestionHTML(vm) {
+  if (!vm.dist || !tradesEnabled(vm)) return '';
+  const preview = breakPlan(vm);
+  return preview ? renderTradeDownCard(preview, vm.bills) : '';
+}
+
+// Fewest bill-breaks that make exact change (any denomination), falling back
+// to the older small-bill heuristic. Memoized per view model — Summary and the
+// dist sheet both ask during the same render.
+const planCache = new WeakMap();
+function breakPlan(vm) {
+  if (!planCache.has(vm)) {
+    const { people, bills, shares } = vm;
+    planCache.set(vm, suggestBreaks(people, bills, shares.leftover)
+      ?? previewSmallBillTrades(people, bills, shares.leftover));
+  }
+  return planCache.get(vm);
+}
+
+// True when the $1/$5/$10 minimums aren't covered — only then is the
+// "small bills needed" card the actual explanation of a failure.
+export function smallBillsShort(req, pool) {
+  if (!req) return false;
+  // Cumulative value checks — extra $1s cover missing $5s, etc.
+  return req.onesShort > 0 || req.oneFiveShort > 0 || req.oneFiveTenShort > 0;
+}
+
+// Trade-up ("consolidate into $20s") only counts small-bill minimums, which
+// can strip bills the real split needs — e.g. undo a just-applied $20 → 2×$10
+// break. Only offer it when the consolidated drawer still pays out exactly.
+function safeTradeUp(vm) {
+  const plan = computeTradeUp(vm.bills, vm.req);
+  if (!plan) return null;
+  return distribute(vm.people, plan.newPool, vm.shares.leftover).error ? null : plan;
+}
+
+// Plain-language reason for a failed distribution.
+export function distErrorText(vm) {
+  const { dist, people, shares, req, bills } = vm;
+  const unpaid = people.reduce((s, p) => s + Math.max(0, p.final - poolValue(dist.byPerson[p.id] || {})), 0);
+  if (dist.error && !smallBillsShort(req, bills)) {
+    return 'These bills can’t be split into exact payouts. Small bills are covered — the larger bills don’t divide evenly.';
+  }
+  if (dist.error) return 'Not enough small bills to make exact change.';
+  if (unpaid > 0) return 'Drawer is short $' + unpaid + ' in usable bills.';
+  if (shares.leftover > 0 && poolValue(dist.remainderBills) !== shares.leftover) {
+    return 'The chump can’t be made from the bills left over.';
+  }
+  return '';
+}
+
 function applyBillCountsToPool(vm, newPool) {
   const poolId = vm.state.pools[0].id;
   updatePool(poolId, pool => {
@@ -172,6 +201,9 @@ function applyBillCountsToPool(vm, newPool) {
       pool.cash.billCounts[d] = (newPool[d] || 0) > 0 ? String(newPool[d]) : '';
     });
   });
+  // Counts changed outside the inputs — rebuild the Cash card so the boxes
+  // show the new values (the keystroke patch path never rewrites input values).
+  invalidatePools();
 }
 
 export function applyPendingTradeUp() {
@@ -182,7 +214,7 @@ export function applyPendingTradeDown() {
   if (currentVm && pendingTradeDown) applyBillCountsToPool(currentVm, pendingTradeDown.pool);
 }
 
-// ── Dist modal content ────────────────────────────────────────────────────────
+// ── Bills tab content ────────────────────────────────────────────────────────
 
 export function renderDist(vm) {
   currentVm = vm;
@@ -190,10 +222,10 @@ export function renderDist(vm) {
   if (!el) return;
 
   if (vm.blocked || !vm.dist) {
-    el.innerHTML = `<div class="empty-state">
-      <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
-      <div class="empty-title">No distribution</div>
-      ${escapeHTML(vm.blocked || 'Calculate first to see bill distribution')}
+    el.innerHTML = `<div class="empty">
+      <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></svg>
+      <div class="empty-title">Nothing to split yet</div>
+      ${escapeHTML(vm.blocked || 'Enter staff and cash first.')}
     </div>`;
     pendingTradeUp = pendingTradeDown = null;
     if ($('closeTimeSidebar')?.classList.contains('open')) renderCloseTimeSidebar();
@@ -201,20 +233,18 @@ export function renderDist(vm) {
   }
 
   const { dist, shares, people, bills, req } = vm;
-  const unpaid = people.reduce((s, p) => s + Math.max(0, p.final - poolValue(dist.byPerson[p.id] || {})), 0);
-  const remPV = poolValue(dist.remainderBills);
-  const hasRemShort = shares.leftover > 0 && remPV !== shares.leftover;
-  const hasErr = !!dist.error || unpaid > 0 || hasRemShort;
-  const errMsg = dist.error
-    || (unpaid > 0 ? 'Distribution short $' + unpaid : 'Remainder not representable by available bills');
+  const errMsg = distErrorText(vm);
+  const hasErr = !!errMsg;
 
   const reqHTML = renderRequirementSummary(req, bills);
   const canTrade = tradesEnabled(vm);
 
-  pendingTradeDown = hasErr && canTrade ? previewSmallBillTrades(people, bills, shares.leftover) : null;
-  pendingTradeUp = !hasErr && canTrade ? computeTradeUp(bills, req) : null;
+  pendingTradeDown = hasErr && canTrade ? breakPlan(vm) : null;
+  pendingTradeUp = !hasErr && canTrade ? safeTradeUp(vm) : null;
 
-  const ctBtn = '<button class="ct-open-btn" onclick="App.openCloseTime()">⏱ Close Time</button>';
+  const ctBtn = '<button class="btn btn--block" onclick="App.openCloseTime()">Close-time what-if</button>';
+  // On failure, the small-bill card only shows when it's the actual cause.
+  const reqCard = !hasErr || smallBillsShort(req, bills) ? `<div class="card">${reqHTML}</div>` : '';
 
   if (hasErr) {
     const previewTableHTML = pendingTradeDown
@@ -225,23 +255,24 @@ export function renderDist(vm) {
         })
       : '';
 
-    el.innerHTML =
-      `<div class="warn-box" style="margin-bottom:10px">⚠ ${escapeHTML(errMsg)}`
+    el.innerHTML = pipStripHTML(vm)
+      + `<div class="msg msg--error">⚠ ${escapeHTML(errMsg)}`
       + (pendingTradeDown
         ? ''
-        : ` <button onclick="App.closeModal('distModal');App.tab('cash')" style="background:none;border:none;color:inherit;text-decoration:underline;cursor:pointer;padding:0;font:inherit;font-weight:700">→ Go to Cash</button>`)
+        : `<button class="link-btn" onclick="App.tab('cash')">Cash →</button>`)
       + `</div>`
-      + reqHTML
+      + reqCard
       + renderTradeDownCard(pendingTradeDown, bills)
       + previewTableHTML
       + ctBtn;
   } else {
-    el.innerHTML = reqHTML
-      + (pendingTradeUp ? renderTradeUpCard(pendingTradeUp, bills) : '')
+    el.innerHTML = pipStripHTML(vm)
       + renderDistTableMarkup(people, dist.byPerson, {
           remainderBills: dist.remainderBills,
           leftover: shares.leftover,
         })
+      + reqCard
+      + (pendingTradeUp ? renderTradeUpCard(pendingTradeUp, bills) : '')
       + ctBtn;
   }
 
@@ -286,7 +317,7 @@ function renderCloseTimeSidebar() {
   if (!body || !currentVm) return;
 
   if (!currentVm.shares || !currentVm.bills) {
-    body.innerHTML = `<div class="rem-unavailable">${escapeHTML(currentVm.blocked || 'Enter cash and staff first.')}</div>`;
+    body.innerHTML = `<div class="empty">${escapeHTML(currentVm.blocked || 'Enter cash and staff first.')}</div>`;
     return;
   }
 
@@ -302,10 +333,12 @@ function renderCloseTimeSidebar() {
   const cols = times.map(t => buildCloseTimeColumn(state, t, drawer));
   const nowIdx = times.findIndex(t => Math.abs(t - ctCenter) < 0.01);
 
-  body.innerHTML = closeTimeTableHTML(times, cols, drawer, nowIdx);
+  body.innerHTML = pipStripHTML(currentVm)
+    + '<div class="hint">Tap a time to set it as the close. Pinch the table to widen or narrow the range.</div>'
+    + closeTimeTableHTML(times, cols, drawer, nowIdx);
 
   // Pinch to widen/narrow the time range
-  const wrap = body.querySelector('.ct-scroll-wrap');
+  const wrap = body.querySelector('.tbl-wrap');
   if (!wrap) return;
   let pinchStartDist = 0;
   wrap.addEventListener('touchstart', e => {
@@ -332,64 +365,43 @@ function renderCloseTimeSidebar() {
 
 function closeTimeTableHTML(times, cols, pool, nowIdx) {
   const people = currentVm.shares.perPerson;
-  const n = i => i === nowIdx ? ' ct-col-now' : '';
+  const n = i => i === nowIdx ? ' now' : '';
+  const dash = i => `<td class="z${n(i)}">—</td>`;
 
-  const thCells = times.map((t, i) =>
-    `<th class="${i === nowIdx ? 'ct-th-now' : 'ct-th-sel'}" onclick="App.selectCloseTime(${t})">${fmtCloseTime(t)}</th>`
+  const head = times.map((t, i) =>
+    `<th class="pick${n(i)}" onclick="App.selectCloseTime(${t})">${fmtCloseTime(t)}</th>`
   ).join('');
 
   const personRows = people.map(person => {
     const cells = cols.map((col, i) => {
-      if (!col) return `<td class="zero${n(i)}">—</td>`;
-      const p = col.shares.perPerson.find(x => x.id === person.id);
-      if (!p || p.final <= 0) return `<td class="zero${n(i)}">—</td>`;
-      return `<td class="${p.closer ? 'ct-closer' : 'ct-person'}${n(i)}">$${p.final}</td>`;
+      const p = col?.shares.perPerson.find(x => x.id === person.id);
+      if (!p || p.final <= 0) return dash(i);
+      return `<td class="${p.closer ? 'closer' : ''}${n(i)}">$${p.final}</td>`;
     }).join('');
-    return `<tr><td class="ct-lbl">${escapeHTML(person.name)}</td>${cells}</tr>`;
+    return `<tr><td class="c-name">${escapeHTML(person.name)}</td>${cells}</tr>`;
   }).join('');
 
-  const remRow = `<tr class="ct-rem-row"><td class="ct-lbl">Chump</td>`
-    + cols.map((col, i) => {
-      if (!col || !col.shares.leftover) return `<td class="zero${n(i)}">—</td>`;
-      return `<td class="ct-rem${n(i)}">$${col.shares.leftover}</td>`;
-    }).join('')
+  const remRow = `<tr class="row-chump"><td class="c-name">Chump</td>`
+    + cols.map((col, i) => col?.shares.leftover ? `<td class="${n(i)}">$${col.shares.leftover}</td>` : dash(i)).join('')
     + '</tr>';
 
   const avail15 = (pool[1] || 0) + (pool[5] || 0) * 5;
   const avail1510 = avail15 + (pool[10] || 0) * 10;
+  const dataRow = (label, get) => `<tr><td class="c-name muted">${label}</td>`
+    + cols.map((col, i) => {
+      if (!col) return dash(i);
+      const { ok, val } = get(col);
+      return `<td class="${ok ? 'ok' : 'short'}${n(i)}">${val}</td>`;
+    }).join('') + '</tr>';
 
-  function dataRow(label, getVal) {
-    return `<tr><td class="ct-lbl">${label}</td>`
-      + cols.map((col, i) => {
-        if (!col) return `<td class="zero${n(i)}">—</td>`;
-        const { cls, val } = getVal(col);
-        return `<td class="${cls}${n(i)}">${val}</td>`;
-      }).join('')
-      + '</tr>';
-  }
-
-  const onesRow = dataRow('$1s', col => {
-    const v = col.req.minOnes, ok = v <= (pool[1] || 0);
-    return { cls: ok ? 'ct-ok' : 'ct-short', val: v };
-  });
-  const val15Row = dataRow('$1+5', col => {
-    const v = col.req.minOneFiveValue, ok = v <= avail15;
-    return { cls: ok ? 'ct-ok' : 'ct-short', val: '$' + v };
-  });
-  const val1510Row = dataRow('$1+5+10', col => {
-    const v = col.req.minOneFiveTenValue, ok = v <= avail1510;
-    return { cls: ok ? 'ct-ok' : 'ct-short', val: '$' + v };
-  });
-
-  const divRow = label =>
-    `<tr class="ct-sect-hdr"><td colspan="${times.length + 1}">${label}</td></tr>`;
-
-  return `<div class="ct-scroll-wrap"><table class="ct-tbl">
-    <thead><tr><th class="ct-lbl-th"></th>${thCells}</tr></thead>
+  return `<div class="tbl-wrap"><table class="tbl ct">
+    <thead><tr><th class="c-name">Close</th>${head}</tr></thead>
     <tbody>
       ${personRows}${remRow}
-      ${divRow('Bills')}
-      ${onesRow}${val15Row}${val1510Row}
+      <tr class="row-sect"><td colspan="${times.length + 1}">Small bills needed</td></tr>
+      ${dataRow('$1s', c => ({ ok: c.req.minOnes <= (pool[1] || 0), val: c.req.minOnes }))}
+      ${dataRow('$1+5', c => ({ ok: c.req.minOneFiveValue <= avail15, val: '$' + c.req.minOneFiveValue }))}
+      ${dataRow('$1+5+10', c => ({ ok: c.req.minOneFiveTenValue <= avail1510, val: '$' + c.req.minOneFiveTenValue }))}
     </tbody>
   </table></div>`;
 }

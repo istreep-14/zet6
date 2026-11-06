@@ -3,6 +3,7 @@
 import { DENOMS, escapeHTML, fmtHrs } from '../util.js';
 import { fmtTimeAbs } from '../time.js';
 import { setBonuses, clearBonuses } from '../store.js';
+import { pipStripHTML } from './tabs.js';
 
 const $ = id => document.getElementById(id);
 
@@ -37,60 +38,52 @@ export function renderPersonModal(vm) {
   if (!person) { closeModal('personModal'); return; }
 
   const raw = vm.state.staff.find(p => p.id === openPersonId);
-  const safe = escapeHTML(person.name);
-  const initials = escapeHTML(person.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2));
+  const initials = escapeHTML(person.name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2));
   const inStr = fmtTimeAbs(person.inAbs);
   const outStr = fmtTimeAbs(person.outAbs);
   const hrsStr = fmtHrs(person.hours);
-  const closerBadge = person.closer ? '<span class="closer-badge" style="margin-left:5px">closer</span>' : '';
+  const badges = (person.closer ? '<span class="badge badge--closer">closer</span>' : '')
+    + `<span class="badge badge--${person.role}">${person.role}</span>`;
 
   const bills = vm.dist?.byPerson[openPersonId];
   const hasBills = bills && DENOMS.some(d => (bills[d] || 0) > 0);
   const billsHTML = hasBills
-    ? '<div class="profile-bills-row">' + DENOMS.map(d => {
+    ? '<div class="bill-chips">' + DENOMS.map(d => {
         const c = bills[d] || 0;
-        return `<div class="profile-bill-chip"><span class="pbc2-denom">$${d}</span><span class="pbc2-count${c === 0 ? ' zero' : ''}">${c === 0 ? '—' : c}</span></div>`;
+        return `<div class="bill-chip"><span class="d">$${d}</span><span class="c num${c ? '' : ' zero'}">${c || '—'}</span></div>`;
       }).join('') + '</div>'
-    : `<div style="color:var(--muted);font-size:.75rem;font-family:var(--font-mono);padding:6px 0">No distribution calculated yet</div>`;
+    : '<div class="hint">No bill distribution yet.</div>';
 
-  const rateCell = person.bonus > 0
-    ? `<div class="profile-tip-cell bonus"><div class="profile-tip-cell-lbl">Bonus</div><div class="profile-tip-cell-val">+$${person.bonus}</div></div>`
-    : `<div class="profile-tip-cell"><div class="profile-tip-cell-lbl">Rate</div><div class="profile-tip-cell-val" style="font-size:.82rem">$${(vm.shares.rate || 0).toFixed(2)}/h</div></div>`;
+  const second = person.bonus > 0
+    ? `<div class="kv kv--bonus"><div class="k">Closer bonus</div><div class="v">+$${person.bonus}</div></div>`
+    : `<div class="kv"><div class="k">Rate</div><div class="v">$${(vm.shares.rate || 0).toFixed(2)}</div><div class="s">per hour</div></div>`;
 
-  $('personModalLabel').textContent = person.name;
+  $('personModalLabel').textContent = 'Payout';
   $('personModalBody').innerHTML = `
-    <div class="person-profile-hdr">
-      <div class="person-profile-avatar">${initials}</div>
-      <div class="person-profile-name">${safe}${closerBadge}</div>
-      <div class="person-profile-sub">${hrsStr}h · ${inStr}–${outStr}</div>
+    <div class="profile">
+      <span class="avatar" data-role="${person.role}">${initials}</span>
+      <div>
+        <div class="profile-name">${escapeHTML(person.name)}${badges}</div>
+        <div class="profile-sub">${hrsStr}h · ${inStr} – ${outStr}</div>
+      </div>
     </div>
-    <div class="person-profile-body">
-      <div class="profile-section">
-        <div class="profile-section-lbl">Hours</div>
-        <div class="profile-hours-block">
-          <div class="profile-hrs-big">${escapeHTML(hrsStr)}h</div>
-          <div class="profile-hours-detail"><div class="profile-in-out">${inStr} – ${outStr}</div><div class="profile-shift-lbl">Start – End</div></div>
-        </div>
-        <div class="profile-edit-row">
-          <span class="profile-edit-lbl">In</span>
-          <input class="profile-time-input" value="${escapeHTML(raw?.in ?? '')}" placeholder="${inStr}" inputmode="decimal"
-            onchange="App.staffField('${person.id}','in',this.value)">
-          <span class="profile-edit-sep">–</span>
-          <span class="profile-edit-lbl">Out</span>
-          <input class="profile-time-input" value="${escapeHTML(raw?.out ?? '')}" placeholder="${person.usedCloseTime ? 'closer' : outStr}" inputmode="decimal"
-            onchange="App.staffField('${person.id}','out',this.value)">
-        </div>
+    ${pipStripHTML(vm)}
+    <div class="kv-grid">
+      <div class="kv kv--wide"><div class="k">Takes home</div><div class="v">$${person.final}</div></div>
+      <div class="kv"><div class="k">Base</div><div class="v">$${person.base}</div><div class="s">$${person.exact.toFixed(2)} exact</div></div>
+      ${second}
+    </div>
+    <div class="card stack">
+      <div class="eyebrow">Shift</div>
+      <div class="field-row">
+        <label class="field"><span>In</span><input value="${escapeHTML(raw?.in ?? '')}" placeholder="${inStr}" inputmode="decimal"
+          onchange="App.staffField('${person.id}','in',this.value)"></label>
+        <label class="field"><span>Out</span><input value="${escapeHTML(raw?.out ?? '')}" placeholder="${person.usedCloseTime ? 'close' : outStr}" inputmode="decimal"
+          onchange="App.staffField('${person.id}','out',this.value)"></label>
       </div>
-      <div class="profile-section">
-        <div class="profile-section-lbl">Tips</div>
-        <div class="profile-tips-grid">
-          <div class="profile-tip-cell"><div class="profile-tip-cell-lbl">Base</div><div class="profile-tip-cell-val">$${person.base}</div></div>
-          ${rateCell}
-          <div class="profile-tip-cell span2"><div class="profile-tip-cell-lbl">Total Payout</div><div class="profile-tip-cell-val">$${person.final}</div></div>
-        </div>
-      </div>
-      <div class="profile-section"><div class="profile-section-lbl">Bill Distribution</div>${billsHTML}</div>
-    </div>`;
+    </div>
+    <div class="section-title">Bills</div>
+    ${billsHTML}`;
 }
 
 // ── Remainder split modal ─────────────────────────────────────────────────────
@@ -105,7 +98,7 @@ export function renderRemModal(vm) {
   if (!body || !$('remModal')?.classList.contains('open')) return;
 
   if (!vm.shares || !vm.totalCash) {
-    body.innerHTML = '<div class="rem-unavailable">Enter cash and staff to see the remainder breakdown.</div>';
+    body.innerHTML = '<div class="empty">Enter cash and staff to see the remainder breakdown.</div>';
     return;
   }
 
@@ -117,61 +110,34 @@ export function renderRemModal(vm) {
   const available = Math.max(0, leftover);
   const hasOverrides = shares.bonusMode === 'manual';
 
-  const rows = shares.perPerson.map(p => {
-    const canAdd = available > 0;
-    const canSub = p.bonus > 0;
-    const closerHtml = p.closer ? '<span class="rem-closer-badge">CLOSER</span>' : '';
-
-    return `
-      <div class="rem-row">
-        <div class="rem-name-row">
-          <span class="rem-name">${escapeHTML(p.name)}</span>
-          ${closerHtml}
-        </div>
-        <div class="rem-val-row">
-          <span class="rem-exact">$${p.exact.toFixed(2)}</span>
-          <span class="rem-arrow">→</span>
-          <span class="rem-base">$${p.base}</span>
-          <div class="rem-bonus-ctrl">
-            <button class="rem-btn rem-btn-sub" onclick="App.remBonus('${p.id}',-1)"${canSub ? '' : ' disabled'}>−</button>
-            <span class="rem-bonus-val${p.bonus > 0 ? ' active' : ''}">${p.bonus > 0 ? '+$' + p.bonus : '—'}</span>
-            <button class="rem-btn rem-btn-add" onclick="App.remBonus('${p.id}',1)"${canAdd ? '' : ' disabled'}>+</button>
-          </div>
-          <span class="rem-final${p.bonus > 0 ? ' boosted' : ''}">$${p.final}</span>
-        </div>
-      </div>`;
-  }).join('');
-
-  const modeBadge = hasOverrides
-    ? '<span class="rem-mode-badge rem-mode-manual">MANUAL</span>'
-    : '<span class="rem-mode-badge rem-mode-auto">AUTO · CLOSERS</span>';
-
-  const resetBtn = hasOverrides
-    ? '<button class="rem-reset-btn" onclick="App.resetRemBonuses()">↺ Reset to Auto (Closers)</button>'
-    : '';
+  const rows = shares.perPerson.map(p => `
+    <div class="rem-row">
+      <div class="rem-main">
+        <div class="rem-name"><span>${escapeHTML(p.name)}</span>${p.closer ? '<span class="badge badge--closer">closer</span>' : ''}</div>
+        <div class="rem-calc">$${p.exact.toFixed(2)} → $${p.base}</div>
+      </div>
+      <div class="stepper">
+        <button onclick="App.remBonus('${p.id}',-1)"${p.bonus > 0 ? '' : ' disabled'} aria-label="Less">−</button>
+        <span class="v${p.bonus > 0 ? ' on' : ''}">${p.bonus > 0 ? '+' + p.bonus : '0'}</span>
+        <button onclick="App.remBonus('${p.id}',1)"${available > 0 ? '' : ' disabled'} aria-label="More">+</button>
+      </div>
+      <span class="rem-final">$${p.final}</span>
+    </div>`).join('');
 
   body.innerHTML = `
-    <div class="rem-top-strip">
-      <span class="rem-pool-label">Pool&nbsp;<strong>$${shares.totalCash}</strong>&nbsp;·&nbsp;$${shares.rate.toFixed(2)}/hr</span>
-      ${modeBadge}
+    ${pipStripHTML(vm)}
+    <div class="card rem-top">
+      <span>$${remainder} left after rounding down</span>
+      ${hasOverrides ? '<span class="badge badge--manual">manual</span>' : '<span class="badge badge--auto">auto · closers</span>'}
     </div>
-    <div class="rem-rows">${rows}</div>
-    <div class="rem-summary">
-      <div class="rem-sum-row">
-        <span>Floored sum</span><span>$${floored}</span>
-      </div>
-      <div class="rem-sum-row rem-sum-remainder">
-        <span>Raw remainder</span><span>$${remainder}</span>
-      </div>
-      <div class="rem-sum-row">
-        <span>Distributed</span><span>${bonusSum > 0 ? '$' + bonusSum : '—'}</span>
-      </div>
-      <div class="rem-sum-row">
-        <span>Chump</span>
-        <span class="${leftover > 0 ? 'rem-leftover' : ''}">${leftover > 0 ? '$' + leftover : '—'}</span>
-      </div>
+    <div class="card card--flush"><div class="rem-list">${rows}</div></div>
+    <div class="card sum-rows">
+      <div><span>Rounded-down shares</span><span>$${floored}</span></div>
+      <div><span>Remainder</span><span>$${remainder}</span></div>
+      <div><span>Given as bonus</span><span>${bonusSum > 0 ? '$' + bonusSum : '—'}</span></div>
+      <div class="hl"><span>Chump (stays in drawer)</span><span>${leftover > 0 ? '$' + leftover : '—'}</span></div>
     </div>
-    ${resetBtn}`;
+    ${hasOverrides ? '<button class="btn btn--block" onclick="App.resetRemBonuses()">↺ Reset to auto (closers split)</button>' : ''}`;
 }
 
 export function adjustRemBonus(vm, id, delta) {
@@ -211,6 +177,7 @@ export function renderDefaultsModal(vm) {
   };
   setIfBlurred('gc-in', d.global.in);
   setIfBlurred('gc-out', d.global.out);
+  setIfBlurred('gc-sup-pct', d.supportPct ?? '');
   const keys = { bartender: 'bar', server: 'srv', support: 'sup' };
   Object.entries(keys).forEach(([role, key]) => {
     setIfBlurred('rdef-modal-' + key + '-in', d.byRole[role].in);

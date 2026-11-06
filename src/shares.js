@@ -2,7 +2,10 @@
 // sidebar, net-total ideal targets) runs this same function, so the closer
 // rule cannot diverge between views.
 //
-// Per pool: participants share by overlap hours at rate = total / Σhours.
+// Per pool: support participants are paid a tip-out first — their $/hr rate
+// is (pct% × pool total) ÷ pool window hours (or a typed $/hr override) times
+// their hours in the pool; that cut comes off the top. Bar/server then share
+// the rest by overlap hours at rate = (total − support cut) / Σtipped hours.
 // Then ONCE across all pools (single-floor fairness):
 //   exact = Σ rawShares;  base = floor(exact)
 //   remainder = Σ poolTotals − Σ base
@@ -34,16 +37,41 @@ export function computeShares(pools, staff, overrides = {}) {
   const perPool = pools.map(pool => {
     const parts = poolParticipants(pool, staff);
     const hours = parts.reduce((s, x) => s + x.hours, 0);
-    const rate = hours > 0 ? pool.total / hours : 0;
+
+    // Support tip-out off the top.
+    const sup = pool.support || { pct: 0, rateOverride: null };
+    const supportParts = parts.filter(x => x.person.role === 'support');
+    const tippedParts = parts.filter(x => x.person.role !== 'support');
+    const windowHours = Math.max(0, pool.endAbs - pool.startAbs);
+    const derivedRate = windowHours > 0 ? (sup.pct / 100) * pool.total / windowHours : 0;
+    let supportRate = sup.rateOverride != null ? sup.rateOverride : derivedRate;
+    const supportHours = supportParts.reduce((s, x) => s + x.hours, 0);
+    let supportCut = supportRate * supportHours;
+    if (supportCut > pool.total) { // never cut more than the pool holds
+      supportRate = supportHours > 0 ? pool.total / supportHours : 0;
+      supportCut = pool.total;
+    }
+
+    const tippedHours = tippedParts.reduce((s, x) => s + x.hours, 0);
+    const tippedTotal = pool.total - supportCut;
+    const rate = tippedHours > 0 ? tippedTotal / tippedHours : 0;
 
     const participants = parts.map(({ person, hours: h }) => {
-      const raw = h * rate;
+      const raw = h * (person.role === 'support' ? supportRate : rate);
       const pp = byId.get(person.id);
       pp.perPool[pool.id] = { hours: h, raw };
       pp.hours += h;
       pp.exact += raw;
       return { id: person.id, name: person.name, role: person.role, hours: h, raw };
     });
+
+    // Cash with nobody to earn it silently becomes remainder — surface it.
+    let warning = '';
+    if (pool.total > 0 && !participants.length) {
+      warning = pool.label + ' has cash but no participants — its total falls into the remainder.';
+    } else if (tippedTotal > 0.5 && !tippedParts.length && supportParts.length) {
+      warning = pool.label + ' has cash left after the support cut but no bar/server participants — it falls into the remainder.';
+    }
 
     return {
       id: pool.id,
@@ -54,10 +82,17 @@ export function computeShares(pools, staff, overrides = {}) {
       hours,
       rate,
       participants,
-      // Cash with nobody to earn it silently becomes remainder — surface it.
-      warning: pool.total > 0 && !participants.length
-        ? pool.label + ' has cash but no participants — its total falls into the remainder.'
-        : '',
+      tippedTotal,
+      tippedHours,
+      support: pool.includeSupport ? {
+        pct: sup.pct,
+        rate: supportRate,
+        derivedRate,
+        rateOverridden: sup.rateOverride != null,
+        hours: supportHours,
+        cut: supportCut,
+      } : null,
+      warning,
     };
   });
 

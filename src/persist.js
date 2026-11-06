@@ -4,7 +4,7 @@
 // discarded, never crashed on.
 
 import { DENOMS, parseWholeNumber } from './util.js';
-import { newStaff, newPool, initialState, blankBillStrings, ROLES } from './store.js';
+import { newStaff, newPool, initialState, blankBillStrings, ROLES, normalizeSettings } from './store.js';
 import { seedIds } from './ids.js';
 
 export const STORAGE_KEY = 'tippool_v1';
@@ -58,12 +58,36 @@ export function validateV4(state) {
     });
   });
 
+  assertString(state.defaults.supportPct, 'supportPct');
+  state.pools.forEach(pool => {
+    if (pool.support == null) return;
+    if (!isPlainObject(pool.support)) throw new Error('pool support must be an object');
+    assertString(pool.support.pct, 'pool support pct');
+    assertString(pool.support.rate, 'pool support rate');
+    if (pool.support.hours != null && !isPlainObject(pool.support.hours)) {
+      throw new Error('pool support hours must be an object');
+    }
+    Object.values(pool.support.hours || {}).forEach(v => assertString(v, 'pool support hours'));
+  });
+
   if (!isPlainObject(state.overrides) || !isPlainObject(state.overrides.bonuses)) {
     throw new Error('overrides missing');
   }
   Object.values(state.overrides.bonuses).forEach(v => {
     if (typeof v !== 'number' || !Number.isSafeInteger(v) || v < 0) throw new Error('bonus overrides must be whole dollars');
   });
+}
+
+// Older v4 snapshots predate the support tip-out fields — fill them in.
+function normalizeV4(state) {
+  if (typeof state.defaults.supportPct !== 'string') state.defaults.supportPct = '';
+  state.pools.forEach(pool => {
+    if (!isPlainObject(pool.support)) pool.support = { pct: '', rate: '', hours: {} };
+    if (typeof pool.support.pct !== 'string') pool.support.pct = '';
+    if (typeof pool.support.rate !== 'string') pool.support.rate = '';
+    if (!isPlainObject(pool.support.hours)) pool.support.hours = {};
+  });
+  return state;
 }
 
 // ── v3 → v4 migration ─────────────────────────────────────────────────────────
@@ -141,11 +165,13 @@ export function deserialize(raw) {
   if (snap.v === 4) {
     validateV4(snap.state);
     seedIds([...snap.state.staff.map(p => p.id), ...snap.state.pools.map(p => p.id)]);
-    return snap.state;
+    return normalizeSettings(normalizeV4(snap.state));
   }
 
   if (snap.v === 1 || snap.v === 2 || snap.v === 3) {
-    return migrateV3(snap);
+    const migrated = migrateV3(snap);
+    delete migrated.settings;          // derive from the migrated staff/pools
+    return normalizeSettings(migrated);
   }
 
   throw new Error('Incompatible file version');

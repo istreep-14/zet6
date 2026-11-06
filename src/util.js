@@ -14,6 +14,19 @@ export function parseWholeNumber(raw) {
   };
 }
 
+// Non-negative decimal (percent, $/hr, hours) — up to 2 decimal places.
+export function parseDecimalNumber(raw) {
+  const text = String(raw ?? '').trim();
+  if (!text) return { valid: true, empty: true, value: 0 };
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return { valid: false, empty: false, value: 0 };
+  const value = Number(text);
+  return {
+    valid: Number.isFinite(value),
+    empty: false,
+    value: Number.isFinite(value) ? value : 0,
+  };
+}
+
 export function blankBills() {
   return { 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 1: 0 };
 }

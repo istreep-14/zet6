@@ -22,6 +22,14 @@ assert.strictEqual(parseTime('13').valid, false);
 assert.strictEqual(parseTime('5abc').valid, false);
 assert.strictEqual(parseTime('-1').valid, false);
 
+// 15-minute grid: only .25 steps are valid times
+assert.strictEqual(parseTime('5.25').value, 5.25);
+assert.strictEqual(parseTime('10.75').value, 10.75);
+assert.strictEqual(parseTime('.25').value, 0.25);
+assert.strictEqual(parseTime('5.3').valid, false);
+assert.strictEqual(parseTime('5.1').valid, false);
+assert.strictEqual(parseTime('10.33').valid, false);
+
 // IN times — fixed rule: 9–11:59 → AM, else PM (noon stays 12)
 assert.strictEqual(resolveIn(9), 9);     // 9a
 assert.strictEqual(resolveIn(11), 11);   // 11a

@@ -10,13 +10,13 @@
 // naturally — someone typed *past* close becomes the closer, ties share.
 
 import { parseTime, resolveIn, nextAfter, atOrAfter, overlapHours } from './time.js';
-import { parseWholeNumber, poolValue, DENOMS } from './util.js';
+import { parseWholeNumber, parseDecimalNumber, poolValue, DENOMS } from './util.js';
 
 const EPS = 1e-9;
 
 function parseField(raw, label, errors) {
   const p = parseTime(raw);
-  if (!p.valid) errors.push(label + ' is not a valid time (e.g. 5, 11, 12.5).');
+  if (!p.valid) errors.push(label + ' is not a valid time — use 15-min steps (e.g. 5, 5.25, 10.5, 11.75).');
   return p;
 }
 
@@ -177,6 +177,23 @@ export function resolvePools(state, resolved) {
       total = parsed.valid ? parsed.value : 0;
     }
 
+    // Support tip-out config. Pct chain: pool override → global default → 10.
+    // A non-blank rate replaces the pct-derived $/hr; hours entries replace
+    // a support person's overlap with the window (their In/Out is untouched).
+    const supRaw = pool.support || {};
+    const pctStr = String(supRaw.pct ?? '').trim() || String(state.defaults.supportPct ?? '').trim() || '10';
+    const pctParsed = parseDecimalNumber(pctStr);
+    if (!pctParsed.valid) errors.push(label + ' support % must be a number.');
+    const rateParsed = parseDecimalNumber(supRaw.rate);
+    if (!rateParsed.valid) errors.push(label + ' support $/hr must be a number.');
+    const hoursOverrides = {};
+    Object.entries(supRaw.hours || {}).forEach(([sid, v]) => {
+      if (!String(v ?? '').trim()) return;
+      const h = parseDecimalNumber(v);
+      if (!h.valid) { errors.push(label + ' support hours must be a number.'); return; }
+      hoursOverrides[sid] = h.value;
+    });
+
     return {
       id: pool.id,
       label,
@@ -184,6 +201,12 @@ export function resolvePools(state, resolved) {
       endAbs,
       roles: { ...pool.roles },
       includeSupport: !!pool.includeSupport,
+      support: {
+        pct: pctParsed.valid ? pctParsed.value : 10,
+        pctOverridden: !!String(supRaw.pct ?? '').trim(),
+        rateOverride: rateParsed.valid && !rateParsed.empty ? rateParsed.value : null,
+        hoursOverrides,
+      },
       entryMode: pool.cash.entryMode,
       total,
       billCounts,
@@ -196,6 +219,13 @@ export function resolvePools(state, resolved) {
 export function poolParticipants(pool, staff) {
   return staff
     .filter(p => pool.roles[p.role] || (p.role === 'support' && pool.includeSupport))
-    .map(p => ({ person: p, hours: overlapHours(p.inAbs, p.outAbs, pool.startAbs, pool.endAbs) }))
+    .map(p => {
+      let hours = overlapHours(p.inAbs, p.outAbs, pool.startAbs, pool.endAbs);
+      if (p.role === 'support') {
+        const override = pool.support?.hoursOverrides?.[p.id];
+        if (override != null) hours = override;
+      }
+      return { person: p, hours };
+    })
     .filter(x => x.hours > 0);
 }

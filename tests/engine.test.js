@@ -1,7 +1,7 @@
 // Regression gate — same scenarios as the v3 engine.test.js, against the
 // ported pure distribute() API.
 import assert from 'node:assert';
-import { distribute } from '../src/engine.js';
+import { distribute, suggestBreaks } from '../src/engine.js';
 
 function totalBills(bills) {
   return [100, 50, 20, 10, 5, 1].reduce((sum, d) => sum + (bills[d] || 0) * d, 0);
@@ -120,6 +120,27 @@ function assertDenomSpread(byPerson, ids, denom, maxSpread, label) {
   const dist = distribute([{ id: 'a', final: 99 }], { 100: 1 }, 0);
   assert.ok(dist.error.length > 0, 'short on $1s should error');
   assert.deepStrictEqual(dist.byPerson, {});
+}
+
+// ── suggestBreaks: fix comes from a large bill, not more $1s ──
+// 3 × $316 + $2 chump from 7×100 3×50 4×20 3×5 5×1 is impossible as-is
+// (no $10s, and $310 without a $10 needs three $20s each). One swap fixes it.
+{
+  const people = ['a', 'b', 'c'].map(id => ({ id, final: 316 }));
+  const bills = { 100: 7, 50: 3, 20: 4, 10: 0, 5: 3, 1: 5 };
+  assert.ok(distribute(people, bills, 2).error, 'drawer should fail as entered');
+  const plan = suggestBreaks(people, bills, 2);
+  assert.ok(plan, 'a fix should be found');
+  assert.strictEqual(plan.trades.length, 1);
+  assert.strictEqual(plan.pool[1], 5, 'no extra $1s needed');
+  const fixed = distribute(people, plan.pool, 2);
+  assert.strictEqual(fixed.error, '');
+  people.forEach(p => {
+    const v = Object.entries(fixed.byPerson[p.id]).reduce((s, [d, n]) => s + d * n, 0);
+    assert.strictEqual(v, 316);
+  });
+  // already-working drawer → no suggestion
+  assert.strictEqual(suggestBreaks(people, plan.pool, 2), null);
 }
 
 console.log('engine distribution tests passed');

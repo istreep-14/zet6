@@ -630,6 +630,76 @@ export function distribute(people, bills, leftover) {
   };
 }
 
+// ── Break-bill search ─────────────────────────────────────────────────────────
+// When distribute() fails, find the fewest "break one bill into smaller bills"
+// swaps that make exact change possible. Unlike previewSmallBillTrades this
+// considers every denomination — e.g. three $316 payouts from 7×100 3×50 4×20
+// 3×5 5×1 need nine $20s, and the fix is "break 1 × $100 into 5 × $20", not
+// more $1s. Iterative deepening (1 swap, then 2, …) over unique drawers; among
+// solutions with the fewest swaps, the one leaving the fewest bills wins.
+// Returns the same shape as previewSmallBillTrades, or null if none ≤ maxSwaps.
+
+const BREAKS = [
+  [100, { 20: 5 }], [100, { 50: 2 }], [100, { 50: 1, 20: 2, 10: 1 }], [100, { 10: 10 }],
+  [50, { 20: 2, 10: 1 }], [50, { 10: 5 }], [50, { 20: 1, 10: 3 }],
+  [20, { 10: 2 }], [20, { 10: 1, 5: 2 }], [20, { 5: 4 }],
+  [10, { 5: 2 }], [10, { 5: 1, 1: 5 }], [10, { 1: 10 }],
+  [5, { 1: 5 }],
+];
+
+export function suggestBreaks(people, poolIn, leftoverAmount, maxSwaps = 3) {
+  const start = normalizePool(poolIn);
+  const leftover = leftoverAmount || 0;
+  const target = people.reduce((s, p) => s + (p.final || 0), 0) + leftover;
+  if (poolValue(start) !== target) return null;
+  if (runPipeline(people, start, leftover).success) return null;
+
+  const key = pool => DENOMS.map(d => pool[d]).join(',');
+  const billCount = pool => DENOMS.reduce((s, d) => s + pool[d], 0);
+  const seen = new Set([key(start)]);
+  let frontier = [{ pool: start, moves: [] }];
+
+  for (let depth = 1; depth <= maxSwaps; depth++) {
+    const next = [];
+    const solved = [];
+    for (const node of frontier) {
+      for (let m = 0; m < BREAKS.length; m++) {
+        const [from, bundle] = BREAKS[m];
+        if (node.pool[from] <= 0) continue;
+        const pool = { ...node.pool };
+        pool[from]--;
+        Object.entries(bundle).forEach(([d, n]) => { pool[d] += n; });
+        const k = key(pool);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        const child = { pool, moves: [...node.moves, m] };
+        if (runPipeline(people, pool, leftover).success) solved.push(child);
+        else next.push(child);
+      }
+    }
+    if (solved.length) {
+      solved.sort((a, b) => billCount(a.pool) - billCount(b.pool));
+      return describeBreaks(people, start, solved[0], leftover);
+    }
+    frontier = next;
+  }
+  return null;
+}
+
+function describeBreaks(people, start, node, leftover) {
+  const grouped = new Map();
+  node.moves.forEach(m => grouped.set(m, (grouped.get(m) || 0) + 1));
+  const trades = [...grouped].map(([m, times]) => {
+    const [from, bundle] = BREAKS[m];
+    const parts = DENOMS.filter(d => bundle[d]).map(d => bundle[d] * times + ' × $' + d).join(' + ');
+    return 'Break ' + times + ' × $' + from + ' into ' + parts;
+  });
+  const deltas = blankBills();
+  DENOMS.forEach(d => { deltas[d] = node.pool[d] - start[d]; });
+  const dist = distribute(people, node.pool, leftover);
+  return { trades, deltas, pool: node.pool, byPerson: dist.byPerson, remainderBills: dist.remainderBills };
+}
+
 // Trade-up plan: convert excess $1s/$5s/$10s into $20s.
 // Returns { newPool, delta, new20s } or null if no $20s can be gained.
 export function computeTradeUp(pool, req) {

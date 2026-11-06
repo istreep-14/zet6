@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Full-bleed square: iOS/Android apply their own corner mask. Glyph sits
+       inside the central 80% safe zone so "maskable" crops never clip it. -->
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="28%" r="80%">
+      <stop offset="0" stop-color="#22202a"/>
+      <stop offset="1" stop-color="#0b0b10"/>
+    </radialGradient>
+    <linearGradient id="coin" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffd966"/>
+      <stop offset="1" stop-color="#e9b52c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <!-- three bills fanning into a pool -->
+  <g transform="translate(256 262)">
+    <rect x="-118" y="-72" width="236" height="144" rx="18" fill="#2a2834" transform="rotate(-14)"/>
+    <rect x="-118" y="-72" width="236" height="144" rx="18" fill="#34313f" transform="rotate(-5)"/>
+    <rect x="-118" y="-72" width="236" height="144" rx="18" fill="url(#coin)" transform="rotate(5)"/>
+    <g transform="rotate(5)">
+      <rect x="-98" y="-52" width="196" height="104" rx="10" fill="none" stroke="#0b0b10" stroke-opacity=".22" stroke-width="5"/>
+      <circle r="38" fill="#0b0b10" fill-opacity=".14"/>
+      <text x="0" y="22" text-anchor="middle" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
+            font-weight="800" font-size="72" fill="#14120a">$</text>
+    </g>
+  </g>
+</svg>
