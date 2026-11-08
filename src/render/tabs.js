@@ -5,6 +5,8 @@ import { poolValue, escapeHTML } from '../util.js';
 
 const $ = id => document.getElementById(id);
 
+const TITLES = { summary: 'Payout', staff: 'Staff', cash: 'Cash', bills: 'Bills', more: 'More' };
+
 // opts.swipe = 'left' | 'right' slides the new panel in from that side and
 // skips the auto-focus (a swipe shouldn't pop the keyboard).
 export function switchTab(name, opts = {}) {
@@ -14,6 +16,8 @@ export function switchTab(name, opts = {}) {
   panel?.classList.add('active');
   if (opts.swipe) panel?.classList.add(opts.swipe === 'left' ? 'from-right' : 'from-left');
   $('tb-' + name)?.classList.add('active');
+  const title = $('hdrTitle');
+  if (title) title.textContent = TITLES[name] || 'Tip Pool';
   // The HUD duplicates Payout (and Bills' own live strip) — only float it over
   // the input tabs.
   $('pipHud')?.classList.toggle('is-off', name !== 'staff' && name !== 'cash');

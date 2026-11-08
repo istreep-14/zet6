@@ -101,9 +101,13 @@ function cardHTML(pool, vm, isOpen, removable) {
     const s = billSub(v, d);
     return `<div class="bill-row">
       <span class="bill-denom">$${d}</span>
-      <input type="number" min="0" step="1" placeholder="0" inputmode="numeric" enterkeyhint="next" data-bill="${d}"
-        aria-label="$${d} bills" value="${escapeHTML(String(v))}"
-        oninput="App.poolBill('${pool.id}','${d}',this.value)" onkeydown="App.billKey(event,'${pool.id}')">
+      <div class="stepper bill-step">
+        <button onclick="App.billStep('${pool.id}','${d}',-1)" aria-label="One fewer $${d}" tabindex="-1">−</button>
+        <input type="number" min="0" step="1" placeholder="0" inputmode="numeric" enterkeyhint="next" data-bill="${d}"
+          aria-label="$${d} bills" value="${escapeHTML(String(v))}"
+          oninput="App.poolBill('${pool.id}','${d}',this.value)" onkeydown="App.billKey(event,'${pool.id}')">
+        <button onclick="App.billStep('${pool.id}','${d}',1)" aria-label="One more $${d}" tabindex="-1">+</button>
+      </div>
       <span class="${s.cls}" data-sub="${d}">${s.text}</span>
     </div>`;
   }).join('')}</div>`;
@@ -192,7 +196,7 @@ export function renderPools(vm) {
       cardHTML(pool, vm, state.ui.selectedPool === pool.id, state.pools.length > 1)
     ).join('')
       + (state.settings.multiPool || state.pools.length > 1
-        ? `<button class="btn btn--dashed btn--block" onclick="App.addPool()">+ Add pool</button>`
+        ? `<button class="btn btn--tonal btn--block" onclick="App.addPool()">+ Add pool</button>`
         : '')
       + `<div id="pool-breakdown">${breakdownHTML(vm)}</div>`;
     return;

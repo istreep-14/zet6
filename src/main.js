@@ -6,7 +6,11 @@ import * as store from './store.js';
 import * as persist from './persist.js';
 import { buildViewModel } from './viewmodel.js';
 import { switchTab, updateTabIndicators } from './render/tabs.js';
-import { renderStaff, invalidateStaffList, staffTabNav } from './render/staff.js';
+import {
+  renderStaff, invalidateStaffList, staffTabNav,
+  initStaffGestures, closeAllSwipes, toggleRosterEdit,
+} from './render/staff.js';
+import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderPools, invalidatePools } from './render/pools.js';
 import { renderSummary } from './render/summary.js';
 import {
@@ -103,6 +107,45 @@ window.App = {
   staffField: store.updateStaff,
   staffTab: staffTabNav,
   toggleCloser: store.toggleCloserOverride,
+
+  // Swipe-revealed row actions (Closer / Reset / Delete)
+  rowAction(kind, id) {
+    closeAllSwipes();
+    if (kind === 'closer') store.toggleCloserOverride(id);
+    else if (kind === 'delete') store.removeStaff(id);
+    else if (kind === 'reset') {
+      store.mutate(s => {
+        const p = s.staff.find(x => x.id === id);
+        if (p) { p.in = ''; p.out = ''; }
+      }, { immediate: true });
+    }
+  },
+
+  // Roster: remember names as they're committed, one-tap re-add next shift
+  rememberStaff(id) {
+    const p = store.getState().staff.find(x => x.id === id);
+    if (p && rememberName(p.name, p.role)) render(store.getState());
+  },
+  quickAdd(name) {
+    const s = store.getState();
+    const roles = rolesOn();
+    const role = roles ? s.ui.staffViewRole : 'bartender';
+    invalidateStaffList();                       // name inputs must show the new value
+    store.mutate(st => {
+      const visible = roles ? st.staff.filter(p => p.role === role) : st.staff;
+      const blank = visible.find(p => !p.name.trim());
+      if (blank) blank.name = name;
+      else st.staff.push({ ...store.newStaff(role), name });
+    }, { immediate: true });
+  },
+  forgetName(name) {
+    forgetName(name);
+    render(store.getState());
+  },
+  rosterEdit() {
+    toggleRosterEdit();
+    render(store.getState());
+  },
   switchRole(role) {
     invalidateStaffList();
     store.setStaffViewRole(role);
@@ -151,6 +194,17 @@ window.App = {
       p.support ||= { pct: '', rate: '', hours: {} };
       p.support.hours[staffId] = value;
     });
+  },
+  // −/+ steppers on a bill row. The input is updated directly because the
+  // keystroke patch path never rewrites input values (it would steal focus).
+  billStep(id, denom, delta) {
+    const pool = store.getState().pools.find(p => p.id === id);
+    if (!pool) return;
+    const cur = parseInt(pool.cash.billCounts[denom], 10) || 0;
+    const next = Math.max(0, cur + delta);
+    store.updatePool(id, p => { p.cash.billCounts[denom] = next ? String(next) : ''; });
+    const input = document.querySelector(`[data-pid="${id}"] [data-bill="${denom}"]`);
+    if (input) input.value = next ? String(next) : '';
   },
   // Enter / "next" key hops down the denomination rows ($100 → $50 → … → $1)
   billKey(e, poolId) {
@@ -241,13 +295,24 @@ $('tipDate').value = state.meta.date;
 
 // Hide the tab bar when the software keyboard is open.
 if (window.visualViewport) {
-  const KEYBOARD_THRESHOLD = 120;
+  // Compare the visible area to the layout viewport (innerHeight), not the
+  // physical screen: in regular Safari the address bar + toolbar alone are
+  // >120pt, which used to flag "keyboard open" and hide the tab bar while
+  // just scrolling. The keyboard shrinks only the visual viewport, and only
+  // while a text field has focus.
+  const KEYBOARD_THRESHOLD = 150;
+  const isTyping = () => {
+    const el = document.activeElement;
+    return !!el && (el.tagName === 'TEXTAREA'
+      || (el.tagName === 'INPUT' && !['date', 'file', 'checkbox', 'radio', 'button'].includes(el.type)));
+  };
   const updateKeyboardState = () => {
-    const shrink = window.screen.height - window.visualViewport.height;
-    document.body.classList.toggle('keyboard-open', shrink > KEYBOARD_THRESHOLD);
+    const shrink = window.innerHeight - window.visualViewport.height;
+    document.body.classList.toggle('keyboard-open', isTyping() && shrink > KEYBOARD_THRESHOLD);
   };
   window.visualViewport.addEventListener('resize', updateKeyboardState);
   window.visualViewport.addEventListener('scroll', updateKeyboardState);
+  document.addEventListener('focusout', () => setTimeout(updateKeyboardState, 50));
 }
 
 // Swipe left/right on the content area to move between tabs. Ignored when the
@@ -261,7 +326,7 @@ const TAB_ORDER = ['summary', 'staff', 'cash', 'bills', 'more'];
   area.addEventListener('touchstart', e => {
     if (e.touches.length !== 1) { tracking = false; return; }
     const t = e.target;
-    tracking = !t.closest('.tbl-wrap')
+    tracking = !t.closest('.tbl-wrap') && !t.closest('.staff-row')
       && !(t.matches('input') && t === document.activeElement)
       && !document.body.classList.contains('keyboard-open');
     x0 = e.touches[0].clientX;
@@ -285,6 +350,15 @@ const TAB_ORDER = ['summary', 'staff', 'cash', 'bills', 'more'];
 })();
 
 // ── First render ──────────────────────────────────────────────────────────────
+
+// Roster: load saved names and fold in anyone already on this shift.
+loadRoster();
+state.staff.forEach(p => rememberName(p.name, p.role));
+
+// Drag a time bar's ends to set In/Out; swipe a row left for its actions.
+initStaffGestures({
+  setTime: (id, field, raw) => store.updateStaff(id, field, raw),
+});
 
 switchTab(state.ui.activeTab || 'summary');
 render(state);

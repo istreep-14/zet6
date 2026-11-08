@@ -67,7 +67,6 @@ export function renderPersonModal(vm) {
         <div class="profile-sub">${hrsStr}h · ${inStr} – ${outStr}</div>
       </div>
     </div>
-    ${pipStripHTML(vm)}
     <div class="kv-grid">
       <div class="kv kv--wide"><div class="k">Takes home</div><div class="v">$${person.final}</div></div>
       <div class="kv"><div class="k">Base</div><div class="v">$${person.base}</div><div class="s">$${person.exact.toFixed(2)} exact</div></div>

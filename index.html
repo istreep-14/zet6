@@ -18,7 +18,7 @@
 <body>
 
 <header class="hdr">
-  <div class="hdr-title">Tip <b>Pool</b></div>
+  <h1 class="hdr-title" id="hdrTitle">Payout</h1>
   <input type="date" class="hdr-date" id="tipDate" onchange="App.setDate(this.value)" aria-label="Shift date">
 </header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
@@ -53,12 +53,10 @@
 
     <div class="staff-note" id="staff-section-summary"></div>
 
-    <div class="staff-grid staff-head" aria-hidden="true">
-      <span>Name</span><span>In</span><span>Out</span><span>Hrs</span><span>Cls</span><span></span>
-    </div>
+    <div class="roster" id="roster"></div>
     <div class="staff-list" id="staffList"></div>
-    <button class="btn btn--dashed btn--block" id="addStaffBtn" onclick="App.addStaff()">+ Add Bartender</button>
-    <p class="staff-legend">Times are 12-hour decimals in 15-min steps — <b>5</b>, <b>10.5</b>, <b>2.75</b>. Blank uses the default. Tap <b>C</b> to force a closer.</p>
+    <button class="btn btn--tonal btn--block" id="addStaffBtn" onclick="App.addStaff()">+ Add Bartender</button>
+    <p class="staff-legend">Drag the ends of a time bar to set <b>In</b> and <b>Out</b> (15-min steps). Faded bars use the default times. <b>Swipe a row left</b> for Closer, Reset and Delete. A red bar end marks a closer.</p>
   </section>
 
   <!-- CASH -->

@@ -63,6 +63,25 @@ export function fmtTimeAbs(tAbs) {
   return h12 + (mn > 0 ? ':' + (mn < 10 ? '0' : '') + mn : '') + (am ? 'a' : 'p');
 }
 
+// Inverse of resolveIn: absolute IN time → the decimal string a person would
+// type. Only 9a–8:45p are expressible as an In under the fixed rule
+// (9–11.75 = AM, 12–12.75 = noon, 1–8.75 = PM); callers clamp to that range.
+export const IN_MIN_ABS = 9;
+export const IN_MAX_ABS = 20.75;
+export function absToInRaw(abs) {
+  const v = abs >= 9 && abs < 13 ? abs : abs - 12;
+  return String(Math.round(v * 4) / 4);
+}
+
+// Absolute OUT time → decimal string that nextAfter() maps back to the same
+// absolute time for any In within the 12h before it. Readings under 1 are
+// written as 12.x (12:30a → '12.5') so they stay human-readable.
+export function absToOutRaw(abs) {
+  let r = ((abs % 12) + 12) % 12;
+  if (r < 1) r += 12;
+  return String(Math.round(r * 4) / 4);
+}
+
 // Overlap of [inAbs, outAbs) with [startAbs, endAbs) in hours.
 export function overlapHours(inAbs, outAbs, startAbs, endAbs) {
   const start = Math.max(inAbs, startAbs);

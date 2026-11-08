@@ -2,7 +2,7 @@
 
 import { DENOMS, escapeHTML, poolValue } from '../util.js';
 import { parseTime } from '../time.js';
-import { previewSmallBillTrades, suggestBreaks, computeTradeUp, distribute } from '../engine.js';
+import { planMakeChange, computeTradeUp, distribute } from '../engine.js';
 import { buildCloseTimeColumn } from '../viewmodel.js';
 import { updatePool, setGlobalDefault } from '../store.js';
 import { pipStripHTML } from './tabs.js';
@@ -38,8 +38,8 @@ export function renderRequirementSummary(req, pool) {
   return `<div class="req">
     <div class="eyebrow">Small bills needed</div>
     ${row('$1', req.minOnes, pool[1] || 0, req.onesShort, 1)}
-    ${row('$5', minFives, pool[5] || 0, req.oneFiveShort, 5)}
-    ${row('$10', minTens, pool[10] || 0, req.oneFiveTenShort, 10)}
+    ${row('$5', minFives, pool[5] || 0, Math.max(0, req.oneFiveShort - req.onesShort), 5)}
+    ${row('$10', minTens, pool[10] || 0, Math.max(0, req.oneFiveTenShort - req.oneFiveShort), 10)}
   </div>`;
 }
 
@@ -49,11 +49,11 @@ function countCell(count) {
   return count > 0 ? `<td class="has">${count}</td>` : '<td class="z">—</td>';
 }
 
-const denomHead = () => DENOMS.map(d => `<th>$${d}</th>`).join('');
-
+// Bill table: one row per person (their envelope), one column per bill size,
+// chump row, then column totals for the whole drawer.
 export function renderDistTableMarkup(people, byPerson, options = {}) {
   const leftover = options.leftover || 0;
-  const caption = options.preview ? '<div class="tbl-cap">After the suggested trades</div>' : '';
+  const remBills = leftover > 0 ? (options.remainderBills || {}) : {};
 
   const rows = people.map(p => {
     const bills = byPerson[p.id] || {};
@@ -62,13 +62,11 @@ export function renderDistTableMarkup(people, byPerson, options = {}) {
       + `<td class="c-tot">$${poolValue(bills)}</td></tr>`;
   }).join('');
 
-  let remRow = '', remBills = {};
-  if (leftover > 0) {
-    remBills = options.remainderBills || {};
-    remRow = `<tr class="row-chump"><td class="c-name">Chump</td>`
+  const remRow = leftover > 0
+    ? `<tr class="row-chump"><td class="c-name">Chump</td>`
       + DENOMS.map(d => (remBills[d] || 0) > 0 ? `<td>${remBills[d]}</td>` : '<td class="z">—</td>').join('')
-      + `<td class="c-tot">$${leftover}</td></tr>`;
-  }
+      + `<td class="c-tot">$${leftover}</td></tr>`
+    : '';
 
   const colTotals = DENOMS.map(d => {
     const t = people.reduce((s, p) => s + ((byPerson[p.id] || {})[d] || 0), 0) + (remBills[d] || 0);
@@ -76,30 +74,28 @@ export function renderDistTableMarkup(people, byPerson, options = {}) {
   }).join('');
   const grand = people.reduce((s, p) => s + poolValue(byPerson[p.id] || {}), 0) + poolValue(remBills);
 
-  return caption + `<div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th class="c-name">Name</th>${denomHead()}<th class="c-tot">Total</th></tr></thead>
-    <tbody>${rows}${remRow}</tbody>
-    <tfoot><tr><td class="c-name">Total</td>${colTotals}<td class="c-tot">$${grand}</td></tr></tfoot>
-  </table></div>`;
+  return `<div class="section-title">${options.preview ? 'After the swap' : 'Envelopes'}</div>
+    <div class="tbl-wrap"><table class="tbl tbl--bills">
+      <thead><tr><th class="c-name">Name</th>${DENOMS.map(d => `<th>$${d}</th>`).join('')}<th class="c-tot">Total</th></tr></thead>
+      <tbody>${rows}${remRow}</tbody>
+      <tfoot><tr><td class="c-name">Drawer</td>${colTotals}<td class="c-tot">$${grand}</td></tr></tfoot>
+    </table></div>`;
 }
 
 // ── Trade cards ───────────────────────────────────────────────────────────────
 
+// Swap preview, one row per bill size (Bill · Now · Swap · After) — four
+// readable columns instead of eight squeezed ones.
 function tradeTableHTML(nowPool, deltas, afterPool) {
-  const deltaCells = DENOMS.map(d => {
+  const rows = DENOMS.filter(d => (nowPool[d] || 0) || (afterPool[d] || 0) || (deltas[d] || 0)).map(d => {
     const v = deltas[d] || 0;
-    return v === 0 ? '<td class="z">—</td>' : `<td class="${v > 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : ''}${v}</td>`;
+    const delta = v === 0 ? '<span class="z">—</span>' : `<span class="${v > 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : '−'}${Math.abs(v)}</span>`;
+    return `<div class="swap-row${v ? ' changed' : ''}"><span class="d">$${d}</span><span>${nowPool[d] || 0}</span>${delta}<span class="a">${afterPool[d] || 0}</span></div>`;
   }).join('');
-  const deltaTotal = DENOMS.reduce((s, d) => s + (deltas[d] || 0) * d, 0);
-
-  return `<div class="tbl-wrap"><table class="tbl">
-    <thead><tr><th class="c-name"></th>${denomHead()}<th class="c-tot">Total</th></tr></thead>
-    <tbody>
-      <tr><td class="c-name muted">Now</td>${DENOMS.map(d => countCell(nowPool[d] || 0)).join('')}<td class="c-tot">$${poolValue(nowPool)}</td></tr>
-      <tr><td class="c-name muted">Swap</td>${deltaCells}<td class="c-tot">${deltaTotal === 0 ? '$0' : (deltaTotal > 0 ? '+$' : '−$') + Math.abs(deltaTotal)}</td></tr>
-      <tr><td class="c-name">After</td>${DENOMS.map(d => countCell(afterPool[d] || 0)).join('')}<td class="c-tot">$${poolValue(afterPool)}</td></tr>
-    </tbody>
-  </table></div>`;
+  return `<div class="swap">
+    <div class="swap-row swap-head"><span>Bill</span><span>Now</span><span>Swap</span><span>After</span></div>
+    ${rows}
+  </div>`;
 }
 
 function renderTradeUpCard(tradeUp, pool) {
@@ -124,7 +120,7 @@ function renderTradeDownCard(preview, pool) {
     <div class="trade-hdr">
       <div class="trade-info">
         <div class="trade-title">Fix: make change</div>
-        <div class="trade-sub">Fewest swaps that make exact change. Apply updates the Cash counts.</div>
+        <div class="trade-sub">Fewest bills to swap for exact change. Apply updates the Cash counts.</div>
       </div>
       <button class="btn btn--sm btn--primary" onclick="App.applyTradeDown()">Apply</button>
     </div>
@@ -155,8 +151,7 @@ const planCache = new WeakMap();
 function breakPlan(vm) {
   if (!planCache.has(vm)) {
     const { people, bills, shares } = vm;
-    planCache.set(vm, suggestBreaks(people, bills, shares.leftover)
-      ?? previewSmallBillTrades(people, bills, shares.leftover));
+    planCache.set(vm, planMakeChange(people, bills, shares.leftover));
   }
   return planCache.get(vm);
 }

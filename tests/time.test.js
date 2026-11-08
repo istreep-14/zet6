@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { parseTime, resolveIn, nextAfter, atOrAfter, fmtTimeAbs, overlapHours } from '../src/time.js';
+import { parseTime, resolveIn, nextAfter, atOrAfter, fmtTimeAbs, overlapHours, absToInRaw, absToOutRaw } from '../src/time.js';
 import { parseWholeNumber } from '../src/util.js';
 
 // parseWholeNumber (carried over from utils.test.js)
@@ -66,5 +66,23 @@ assert.strictEqual(overlapHours(5, 14, 5, 14), 9);
 assert.strictEqual(overlapHours(5, 10, 8, 14), 2);
 assert.strictEqual(overlapHours(5, 8, 8, 14), 0);
 assert.strictEqual(overlapHours(10, 14, 5, 9), 0);
+
+// Slider round-trips: abs → raw string → resolve → same abs
+{
+  [9, 10.5, 11.75, 12, 12.75, 13, 17, 17.25, 20.75].forEach(abs => {
+    assert.strictEqual(resolveIn(parseTime(absToInRaw(abs)).value), abs, 'in ' + abs);
+  });
+  assert.strictEqual(absToInRaw(17), '5');
+  assert.strictEqual(absToInRaw(10.5), '10.5');
+  const inAbs = 17; // 5p
+  [17.25, 20, 23.75, 24, 24.5, 26, 29].forEach(abs => {
+    const raw = absToOutRaw(abs);
+    assert.ok(parseTime(raw).valid, 'valid ' + raw);
+    assert.strictEqual(nextAfter(parseTime(raw).value, inAbs), abs, 'out ' + abs);
+  });
+  assert.strictEqual(absToOutRaw(26), '2');
+  assert.strictEqual(absToOutRaw(24), '12');
+  assert.strictEqual(absToOutRaw(24.5), '12.5');
+}
 
 console.log('time tests passed');
