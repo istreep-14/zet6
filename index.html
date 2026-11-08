@@ -56,7 +56,7 @@
     <div class="roster" id="roster"></div>
     <div class="staff-list" id="staffList"></div>
     <button class="btn btn--tonal btn--block" id="addStaffBtn" onclick="App.addStaff()">+ Add Bartender</button>
-    <p class="staff-legend">Drag the ends of a time bar to set <b>In</b> and <b>Out</b> (15-min steps). Faded bars use the default times. <b>Swipe a row left</b> for Closer, Reset and Delete. A red bar end marks a closer.</p>
+    <p class="staff-legend"><b>Slide a time up or down</b> to change it 15 min at a time, or <b>tap it</b> to type or reset. Faded times use the defaults; a red Out marks a closer. <b>Swipe a row left</b> for Closer, Reset and Delete.</p>
   </section>
 
   <!-- CASH -->
@@ -189,6 +189,21 @@
 </div>
 
 <!-- SHEET: person -->
+<div class="sheet-backdrop" id="timeModal" onclick="App.modalBg(event,'timeModal')">
+  <div class="sheet">
+    <div class="sheet-hdr"><span class="sheet-title" id="timeModalTitle">Shift time</span><button class="sheet-close" onclick="App.closeModal('timeModal')" aria-label="Close"></button></div>
+    <div class="sheet-body" id="timeModalBody"></div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="rosterModal" onclick="App.modalBg(event,'rosterModal')">
+  <div class="sheet sheet--tall">
+    <div class="sheet-hdr"><span class="sheet-title">Quick add</span><button class="sheet-close" onclick="App.closeModal('rosterModal')" aria-label="Close"></button></div>
+    <div class="sheet-body" id="rosterModalBody"></div>
+    <div class="sheet-foot" id="rosterModalFoot"></div>
+  </div>
+</div>
+
 <div class="sheet-backdrop" id="personModal" onclick="App.modalBg(event,'personModal')">
   <div class="sheet">
     <div class="sheet-hdr"><span class="sheet-title" id="personModalLabel">Profile</span><button class="sheet-close" onclick="App.closeModal('personModal')" aria-label="Close"></button></div>

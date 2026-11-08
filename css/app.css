@@ -410,25 +410,90 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
 .staff-note:empty { display: none; }
 .staff-note .warn { color: var(--amber); display: block; }
 
-/* ── Quick-add roster chips ─────────────────────────────────────────────── */
-.roster { display: flex; flex-direction: column; gap: 8px; }
+/* ── Quick add: entry card on the Staff tab ─────────────────────────────── */
 .roster:empty { display: none; }
-.roster-hdr { display: flex; align-items: center; justify-content: space-between; padding: 0 var(--sp-1); }
-.roster-edit { height: 32px; padding: 0 4px; font-size: 15px; font-weight: 600; color: var(--gold); }
-.roster-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.rchip {
-  display: inline-flex; align-items: center; gap: 6px;
-  height: 40px; padding: 0 14px 0 12px;
-  border-radius: 999px;
+.roster-open {
+  width: 100%;
+  display: flex; align-items: center; gap: var(--sp-3);
+  min-height: 64px; padding: 10px 12px 10px 14px;
+  border-radius: var(--r-lg);
   background: var(--surface);
-  font-size: 16px; font-weight: 600;
+  text-align: left;
   transition: transform .1s, background .15s;
 }
-.rchip span { color: var(--gold); font-size: 18px; font-weight: 500; line-height: 1; }
-.rchip:active { transform: scale(.95); background: var(--surface-2); }
-.rchip--edit { padding: 0 12px 0 14px; }
-.rchip--edit span { color: var(--accent); font-size: 13px; font-weight: 700; }
+.roster-open:active { transform: scale(.98); background: var(--surface-2); }
+.ro-avs { display: flex; flex-shrink: 0; }
+.ro-av {
+  width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 700;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.ro-av + .ro-av { margin-left: -6px; }
+.ro-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ro-title { font-size: 17px; font-weight: 600; }
+.ro-sub { font-size: 13px; color: var(--text-2); }
+.ro-chev { color: var(--text-3); font-size: 26px; font-weight: 300; line-height: 1; }
 .roster-hint { font-size: 13px; color: var(--text-3); padding: 0 var(--sp-1); }
+
+/* Role-tinted initials (avatars in the entry card and picker) */
+.av--bartender { background: rgba(255, 159, 10, .2); color: var(--bar); }
+.av--server    { background: rgba(10, 132, 255, .2); color: var(--srv); }
+.av--support   { background: rgba(191, 90, 242, .2); color: var(--sup); }
+
+/* ── Quick add sheet: grid of big square cards, multi-select ───────────── */
+.sheet--tall { height: calc(100dvh - var(--safe-t) - 40px); }
+.sheet-foot { flex-shrink: 0; padding: var(--sp-3) var(--sp-4) calc(var(--sp-3) + var(--safe-b)); box-shadow: inset 0 .5px 0 var(--sep); }
+.sheet-body:has(+ .sheet-foot) { padding-bottom: var(--sp-4); }
+.rsheet-bar { display: flex; align-items: center; justify-content: space-between; min-height: 36px; }
+.rsheet-bar .link-btn { height: 36px; padding: 0 4px; font-size: 16px; font-weight: 600; color: var(--gold); }
+.rsheet-bar .link-btn:disabled { color: var(--text-3); }
+.rsheet-note { font-size: 13px; color: var(--text-2); }
+.rgroup-title { display: flex; align-items: center; gap: 8px; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); margin-top: var(--sp-2); }
+.rgroup-title .dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot--bartender { background: var(--bar); }
+.dot--server { background: var(--srv); }
+.dot--support { background: var(--sup); }
+.rgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 10px; }
+.rcard {
+  position: relative;
+  min-height: 116px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  padding: 10px 8px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: transform .12s, background .15s, box-shadow .15s;
+}
+.rcard:active:not(:disabled) { transform: scale(.95); }
+.rcard-av { width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; font-weight: 700; }
+.rcard-name {
+  max-width: 100%;
+  font-size: 15px; font-weight: 600; line-height: 1.2; text-align: center;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.rcard-sub { font-size: 12px; color: var(--text-3); min-height: 14px; line-height: 14px; }
+.rcard-mark {
+  position: absolute; top: 8px; right: 8px;
+  width: 22px; height: 22px; border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--text-3);
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 800; color: var(--gold-ink);
+}
+.rcard.is-sel { background: var(--gold-bg); box-shadow: inset 0 0 0 2px var(--gold); }
+.rcard.is-sel .rcard-mark { background: var(--gold); box-shadow: none; }
+.rcard.is-sel .rcard-mark::before { content: '✓'; }
+.rcard.is-sel .rcard-sub { color: var(--gold); }
+.rcard.is-on { opacity: .45; }
+.rcard.is-on .rcard-mark { background: var(--text-3); box-shadow: none; }
+.rcard.is-on .rcard-mark::before { content: '✓'; color: var(--surface); }
+.rcard:disabled { opacity: .45; cursor: default; }
+.rcard.is-edit { opacity: 1; }
+.rcard.is-edit .rcard-mark { background: var(--accent); box-shadow: none; color: #fff; }
+.rcard.is-edit .rcard-mark::before { content: '✕'; font-size: 11px; }
+.rcard.is-edit .rcard-sub { color: var(--accent); }
+.roster-empty { padding: var(--sp-6) var(--sp-4); text-align: center; color: var(--text-2); line-height: 1.5; }
 
 /* ── Staff rows: name · time bar · hours, actions behind a swipe ─────────── */
 .staff-list { display: flex; flex-direction: column; background: var(--surface); border-radius: var(--r-lg); overflow: hidden; }
@@ -445,10 +510,10 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(84px, 34%) minmax(0, 1fr) 38px;
+  grid-template-columns: minmax(0, 1fr) auto 44px;
   gap: 10px;
   align-items: center;
-  height: 56px;
+  height: 58px;
   padding: 0 12px 0 var(--sp-4);
   background: var(--surface);
   transition: transform .25s cubic-bezier(.2, .8, .3, 1);
@@ -467,36 +532,71 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
 .staff-row .hrs { text-align: right; font-size: 15px; font-weight: 600; color: var(--text-2); white-space: nowrap; }
 .staff-row.is-err .hrs { color: var(--accent); }
 
-/* Time bar: a pill from In to Out on a shared axis; drag either end */
-.tl { position: relative; height: 40px; touch-action: pan-y; cursor: ew-resize; user-select: none; -webkit-user-select: none; }
-.tl-track { position: absolute; left: 0; right: 0; top: 50%; height: 4px; border-radius: 2px; background: var(--fill-2); transform: translateY(-50%); }
-.tl-bar {
-  position: absolute; top: 6px; bottom: 6px;
-  min-width: 2px;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 11px;
-  border-radius: 999px;
-  background: rgba(245, 200, 66, .24);
-  font-size: 12px; font-weight: 700;
-  white-space: nowrap;
-  transition: background .15s;
+/* Time chips: In and Out are separate; slide up/down to nudge, tap to edit */
+.sr-times { display: flex; gap: 6px; }
+.tchip {
+  position: relative;
+  width: 64px; height: 42px;
+  border-radius: 10px;
+  background: var(--fill-2);
+  color: var(--text-2);
+  font-size: 16px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  touch-action: none;                       /* vertical slide, not page scroll */
+  user-select: none; -webkit-user-select: none;
+  cursor: ns-resize;
+  transition: transform .12s, background .15s, color .15s;
 }
-.tl-bar::before, .tl-bar::after {
-  content: ''; position: absolute; top: 50%;
-  width: 4px; height: 14px; border-radius: 2px;
-  background: var(--gold); transform: translateY(-50%);
+/* tiny up/down ticks hint that the chip slides */
+.tchip::before, .tchip::after {
+  content: ''; position: absolute; left: 50%;
+  width: 10px; height: 2px; border-radius: 1px;
+  background: currentColor; opacity: .28;
+  transform: translateX(-50%);
 }
-.tl-bar::before { left: 3px; }
-.tl-bar::after { right: 3px; }
-.tl-lbl { pointer-events: none; }
-.staff-row.is-default .tl-bar { background: var(--fill); color: var(--text-2); }
-.staff-row.is-default .tl-bar::before, .staff-row.is-default .tl-bar::after { background: var(--text-3); }
-.staff-row.is-closer .tl-bar::after { background: var(--accent); width: 5px; }
-.staff-row.is-err .tl-bar { background: var(--accent-bg); color: var(--accent); }
-.staff-row.is-dragging .tl-bar { background: rgba(245, 200, 66, .4); color: var(--text); }
-.tl-empty { display: none; }
-.tl.is-empty .tl-bar { display: none; }
-.tl.is-empty .tl-empty { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; color: var(--text-3); border-radius: 999px; background: var(--fill-2); }
+.tchip::before { top: 4px; }
+.tchip::after { bottom: 4px; }
+.tchip.is-set { background: var(--fill); color: var(--text); }
+.tchip.is-blank { color: var(--text-3); font-weight: 500; }
+.tchip.is-bad { color: var(--accent); background: var(--accent-bg); }
+.staff-row.is-closer .tchip[data-tf="out"] { color: var(--accent); box-shadow: inset 0 -2px 0 var(--accent); }
+.tchip.is-scrubbing { transform: scale(1.12); background: var(--gold); color: var(--gold-ink); box-shadow: 0 4px 14px rgba(0, 0, 0, .5); z-index: 2; }
+.staff-row.is-closer .tchip.is-scrubbing[data-tf="out"] { color: var(--gold-ink); }
+
+/* ── Time sheet ─────────────────────────────────────────────────────────── */
+.tsheet { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.tcol {
+  display: flex; flex-direction: column; align-items: stretch; gap: 6px;
+  padding: 10px; border-radius: var(--r-md);
+  background: var(--surface-2);
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow .15s;
+}
+.tcol.is-focus { box-shadow: inset 0 0 0 2px var(--gold-bg); }
+.tcol-lbl { text-align: center; font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+.tstep { height: 44px; border-radius: 10px; background: var(--fill-2); display: grid; place-items: center; color: var(--text); }
+.tstep:active { background: var(--fill); }
+.tstep svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.tval {
+  height: 64px; display: grid; place-items: center;
+  font: 700 36px var(--rounded); letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+  touch-action: none; cursor: ns-resize; user-select: none; -webkit-user-select: none;
+  border-radius: 10px;
+  transition: background .15s, color .15s;
+}
+.tcol.is-set .tval { color: var(--text); }
+.tval.is-closer { color: var(--accent) !important; }
+.tval.is-bad { color: var(--accent) !important; }
+.tval.is-scrubbing { background: var(--gold-bg); color: var(--gold) !important; }
+.tinput { height: 44px; text-align: center; font-weight: 600; margin-top: 4px; }
+.treset { height: 36px; font-size: 14px; font-weight: 600; color: var(--gold); }
+.treset:disabled { color: var(--text-3); opacity: 1; }
+.tsum { text-align: center; font-size: 15px; color: var(--text-2); min-height: 20px; }
+.tsum b { color: var(--text); }
+.tsum .closer, .tsum .bad { color: var(--accent); font-weight: 600; }
+.tsheet-hint { font-size: 13px; color: var(--text-3); text-align: center; line-height: 1.45; padding: 0 var(--sp-2); }
 
 .staff-legend { font-size: 13px; color: var(--text-3); text-align: center; padding: 0 var(--sp-4); line-height: 1.5; }
 .staff-legend b { color: var(--text-2); }
@@ -826,7 +926,8 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
   .tbl--bills th, .tbl--bills td { padding-left: 3px; padding-right: 3px; }
   .tbl--bills .c-name { max-width: 86px; padding-left: 12px; }
   .tbl--bills .c-tot { padding-right: 12px; }
-  .sr-main { grid-template-columns: minmax(76px, 32%) minmax(0, 1fr) 36px; gap: 8px; }
+  .sr-main { gap: 8px; }
+  .tchip { width: 58px; font-size: 15px; }
   .bill-row { grid-template-columns: 46px minmax(0, 1fr) 68px; gap: 10px; }
 }
 
@@ -834,7 +935,9 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
 @media (max-width: 374px) {
   :root { --gutter: 12px; --fs-hero: 46px; --fs-title: 26px; }
   .sr-name { font-size: 16px; }
-  .tl-bar { font-size: 11px; padding: 0 9px; }
+  .tchip { width: 54px; font-size: 14px; }
+  .rgrid { gap: 8px; }
+  .rcard-av { width: 40px; height: 40px; font-size: 16px; }
   .role-bar-defs input { width: 46px; }
   .tool { height: 58px; font-size: 15px; }
   .person-pay .v { font-size: 20px; }

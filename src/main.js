@@ -8,7 +8,9 @@ import { buildViewModel } from './viewmodel.js';
 import { switchTab, updateTabIndicators } from './render/tabs.js';
 import {
   renderStaff, invalidateStaffList, staffTabNav,
-  initStaffGestures, closeAllSwipes, toggleRosterEdit,
+  initStaffGestures, closeAllSwipes,
+  openTimeSheet, timeStep, timeInput, timeReset,
+  openRosterSheet, rosterPick, rosterSelectAll, rosterSelected, toggleRosterEdit,
 } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderPools, invalidatePools } from './render/pools.js';
@@ -126,26 +128,37 @@ window.App = {
     const p = store.getState().staff.find(x => x.id === id);
     if (p && rememberName(p.name, p.role)) render(store.getState());
   },
-  quickAdd(name) {
-    const s = store.getState();
-    const roles = rolesOn();
-    const role = roles ? s.ui.staffViewRole : 'bartender';
-    invalidateStaffList();                       // name inputs must show the new value
-    store.mutate(st => {
-      const visible = roles ? st.staff.filter(p => p.role === role) : st.staff;
-      const blank = visible.find(p => !p.name.trim());
-      if (blank) blank.name = name;
-      else st.staff.push({ ...store.newStaff(role), name });
-    }, { immediate: true });
-  },
   forgetName(name) {
     forgetName(name);
     render(store.getState());
   },
-  rosterEdit() {
-    toggleRosterEdit();
-    render(store.getState());
+
+  // Quick-add sheet: pick saved people (cards), add them all at once. Each
+  // fills the next blank row of their role, or gets a new row.
+  openRoster: openRosterSheet,
+  rosterPick,
+  rosterAll: rosterSelectAll,
+  rosterEdit: toggleRosterEdit,
+  rosterAddSelected() {
+    const picks = rosterSelected();
+    if (!picks.length) return;
+    const roles = rolesOn();
+    invalidateStaffList();                       // name inputs must show the new values
+    store.mutate(st => {
+      picks.forEach(({ name, role }) => {
+        const r = roles ? role : 'bartender';
+        const blank = st.staff.find(p => !p.name.trim() && (!roles || p.role === r));
+        if (blank) blank.name = name;
+        else st.staff.push({ ...store.newStaff(r), name });
+      });
+    }, { immediate: true });
+    closeModal('rosterModal');
   },
+
+  // Time sheet (tap a time chip): steppers, typed entry, reset per field
+  timeStep,
+  timeInput,
+  timeReset,
   switchRole(role) {
     invalidateStaffList();
     store.setStaffViewRole(role);
@@ -355,9 +368,10 @@ const TAB_ORDER = ['summary', 'staff', 'cash', 'bills', 'more'];
 loadRoster();
 state.staff.forEach(p => rememberName(p.name, p.role));
 
-// Drag a time bar's ends to set In/Out; swipe a row left for its actions.
+// Slide a time chip up/down (or tap it) to set In/Out; swipe a row left for its actions.
 initStaffGestures({
   setTime: (id, field, raw) => store.updateStaff(id, field, raw),
+  openTime: (id, field) => openTimeSheet(id, field),
 });
 
 switchTab(state.ui.activeTab || 'summary');
