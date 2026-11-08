@@ -1,7 +1,7 @@
 // Regression gate — same scenarios as the v3 engine.test.js, against the
 // ported pure distribute() API.
 import assert from 'node:assert';
-import { distribute, suggestBreaks } from '../src/engine.js';
+import { distribute, suggestBreaks, planMakeChange, getSmallBillRequirements } from '../src/engine.js';
 
 function totalBills(bills) {
   return [100, 50, 20, 10, 5, 1].reduce((sum, d) => sum + (bills[d] || 0) * d, 0);
@@ -141,6 +141,57 @@ function assertDenomSpread(byPerson, ids, denom, maxSpread, label) {
   });
   // already-working drawer → no suggestion
   assert.strictEqual(suggestBreaks(people, plan.pool, 2), null);
+}
+
+// ── planMakeChange: all-big-bill drawer → one consolidated exchange ──
+// 10×$100 7×$50 and no small bills. ≤3 single breaks can't fix it; the old
+// heuristic produced ~20 chained breaks (and 100 × $1). One trade does it.
+{
+  const people = [315, 284, 197, 270, 284].map((final, i) => ({ id: 'p' + i, final }));
+  const bills = { 100: 10, 50: 7, 20: 0, 10: 0, 5: 0, 1: 0 };
+  assert.ok(distribute(people, bills, 0).error, 'drawer should fail as entered');
+  const plan = planMakeChange(people, bills, 0);
+  assert.ok(plan, 'a fix should be found');
+  assert.strictEqual(plan.trades.length, 1);
+  assert.strictEqual(plan.deltas[50], -3, 'trade only the three spare $50s');
+  assert.strictEqual(plan.deltas[100], 0, 'keep every $100');
+  assert.strictEqual(plan.pool[1], 10, 'only the $1s the payouts need');
+  const fixed = distribute(people, plan.pool, 0);
+  assert.strictEqual(fixed.error, '');
+  people.forEach(p => {
+    const v = Object.entries(fixed.byPerson[p.id]).reduce((s, [d, n]) => s + d * n, 0);
+    assert.strictEqual(v, p.final);
+  });
+}
+
+// ── $10s needed depends on where $100s/$50s can actually go ──
+{
+  const tens = (people, bills) => {
+    const r = getSmallBillRequirements(people, bills, 0);
+    return (r.minOneFiveTenValue - r.minOneFiveValue) / 10;
+  };
+  const two = [270, 130].map((final, i) => ({ id: 'p' + i, final }));
+  // 270 = 2×100 + 50 + 20, 130 = 50 + 4×20 — the $50s even out both: no $10s.
+  assert.strictEqual(tens(two, { 100: 2, 50: 2, 20: 5 }), 0);
+  // Same payouts, no $50s — both odd-tens amounts need a $10.
+  assert.strictEqual(tens(two, { 100: 3, 20: 5 }), 2);
+  // Screenshot drawer after the fix: the $100s fill $315, so no $50 can even
+  // it out — 3 × $10 are really needed (the old count said 0).
+  const five = [315, 284, 197, 270, 284].map((final, i) => ({ id: 'p' + i, final }));
+  assert.strictEqual(tens(five, { 100: 10, 50: 4, 20: 5, 10: 3, 5: 2, 1: 10 }), 3);
+}
+
+// ── make-change plan places $50s to avoid $10s ──
+// 140 / 174 / 338 from 3×100 7×50 2×1: $100 of big bills must go. Trade
+// 2 × $50, not a $100 (same cash, keeps the $100s); 3×100 on $338 and
+// 3+2 $50s leave 38 / 24 / 40 — only the $38 needs a $10.
+{
+  const people = [140, 174, 338].map((final, i) => ({ id: 'p' + i, final }));
+  const plan = planMakeChange(people, { 100: 3, 50: 7, 1: 2 }, 0);
+  assert.strictEqual(plan.deltas[100], 0, 'keep the $100s');
+  assert.strictEqual(plan.deltas[50], -2, 'trade two $50s instead');
+  assert.strictEqual(plan.deltas[10], 1);
+  assert.strictEqual(distribute(people, plan.pool, 0).error, '');
 }
 
 console.log('engine distribution tests passed');

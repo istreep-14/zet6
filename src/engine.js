@@ -39,16 +39,48 @@ function buildDistributionSlots(people, leftoverAmount) {
   return slots;
 }
 
+// Least value that must come from $1s/$5s/$10s, given where the drawer's $100s
+// and $50s can actually go. A $50 turns an odd-tens payout ($270 → $220)
+// even, so it saves a $10 — but only if that person has room for it after
+// their $100s, and an odd count of $50s landing on an even-tens payout costs
+// a $10 instead. Exact DP over (person, $100s left, $50s left); $20s are
+// treated as unlimited, same as before. Every $100/$50 must be placed; if
+// they can't be, fall back to the best placement that leaves some over.
+function minSmallValueAfterBigBills(targets, n100, n50) {
+  const memo = new Map();
+  function best(i, h, f, strict) {
+    if (i === targets.length) return strict && (h || f) ? Infinity : 0;
+    const key = i + ',' + h + ',' + f;
+    if (memo.has(key)) return memo.get(key);
+    const t = targets[i];
+    let min = Infinity;
+    for (let a = Math.min(h, Math.floor(t / 100)); a >= 0; a--) {
+      const r100 = t - a * 100;
+      for (let b = Math.min(f, Math.floor(r100 / 50)); b >= 0; b--) {
+        const cost = (r100 - b * 50) % 20 + best(i + 1, h - a, f - b, strict);
+        if (cost < min) min = cost;
+      }
+    }
+    memo.set(key, min);
+    return min;
+  }
+  const exact = best(0, n100, n50, true);
+  if (exact !== Infinity) return exact;
+  memo.clear();
+  return best(0, n100, n50, false);
+}
+
 function getSmallBillRequirementsForSlots(slots, poolIn) {
   const pool = normalizePool(poolIn);
   const targets = slots.map(s => s.orig);
   const oddTenSlots = slots.filter(s => Math.floor(s.orig / 10) % 2 !== 0);
   const fiftyEligibleOddTenSlots = oddTenSlots.filter(s => s.orig >= 50).length;
-  const fiftyCoverage = Math.min(pool[50] || 0, fiftyEligibleOddTenSlots);
   const minOnes = targets.reduce((sum, target) => sum + (target % 5), 0);
   const minOneFiveValue = targets.reduce((sum, target) => sum + (target % 10), 0);
   const minOneFiveTenRaw = targets.reduce((sum, target) => sum + (target % 20), 0);
-  const minOneFiveTenValue = Math.max(minOneFiveValue, minOneFiveTenRaw - fiftyCoverage * 10);
+  const minOneFiveTenValue = Math.max(minOneFiveValue,
+    minSmallValueAfterBigBills(targets, pool[100] || 0, pool[50] || 0));
+  const fiftyCoverage = (minOneFiveTenRaw - minOneFiveTenValue) / 10;
   const availableOnes = pool[1] || 0;
   const availableOneFiveValue = availableOnes + (pool[5] || 0) * 5;
   const availableOneFiveTenValue = availableOneFiveValue + (pool[10] || 0) * 10;
@@ -81,15 +113,7 @@ export function previewSmallBillTrades(people, poolIn, leftoverAmount) {
 
   const adjustedPool = normalizePool(sourcePool);
   const deltas = blankBills();
-  const trades = [];
   const slots = buildDistributionSlots(people, leftoverAmount || 0);
-
-  function describeBundle(bundle) {
-    return DENOMS
-      .filter(d => (bundle[d] || 0) > 0)
-      .map(d => (bundle[d] || 0) + ' x $' + d)
-      .join(' + ');
-  }
 
   function applyBreak(from, bundle) {
     if ((adjustedPool[from] || 0) <= 0) return false;
@@ -101,7 +125,6 @@ export function previewSmallBillTrades(people, poolIn, leftoverAmount) {
       adjustedPool[d] += count;
       deltas[d] += count;
     });
-    trades.push('Break 1 x $' + from + ' into ' + describeBundle(bundle) + '.');
     return true;
   }
 
@@ -145,7 +168,8 @@ export function previewSmallBillTrades(people, poolIn, leftoverAmount) {
       poolAfter: result.poolAfter,
       remainderBills: result.remainderBills || blankBills(),
       deltas: { ...deltas },
-      trades: [...trades],
+      // The step-by-step breaks re-break their own change; report the net swap.
+      trades: [netTrade(deltas)],
       requirementsBefore: getSmallBillRequirementsForSlots(slots, sourcePool),
       requirementsAfter: getSmallBillRequirementsForSlots(slots, adjustedPool),
     };
@@ -186,6 +210,13 @@ export function previewSmallBillTrades(people, poolIn, leftoverAmount) {
   }
 
   return null;
+}
+
+// One consolidated line from a delta map: what leaves the drawer → what comes in.
+function netTrade(deltas) {
+  const give = blankBills(), get = blankBills();
+  DENOMS.forEach(d => { if (deltas[d] < 0) give[d] = -deltas[d]; else get[d] = deltas[d]; });
+  return 'Trade ' + billList(give) + ' ($' + poolValue(give) + ') for ' + billList(get) + '.';
 }
 
 function runPipeline(people, poolIn, leftoverAmount) {
@@ -692,12 +723,179 @@ function describeBreaks(people, start, node, leftover) {
   const trades = [...grouped].map(([m, times]) => {
     const [from, bundle] = BREAKS[m];
     const parts = DENOMS.filter(d => bundle[d]).map(d => bundle[d] * times + ' × $' + d).join(' + ');
-    return 'Break ' + times + ' × $' + from + ' into ' + parts;
+    return 'Break ' + times + ' × $' + from + ' into ' + parts + '.';
   });
   const deltas = blankBills();
   DENOMS.forEach(d => { deltas[d] = node.pool[d] - start[d]; });
   const dist = distribute(people, node.pool, leftover);
   return { trades, deltas, pool: node.pool, byPerson: dist.byPerson, remainderBills: dist.remainderBills };
+}
+
+// ── Exchange plan ─────────────────────────────────────────────────────────────
+// Constructive fix for drawers that are mostly big bills (e.g. 10×$100 7×$50
+// with no small bills): pay everyone from the drawer as far as it goes, then
+// the bills nobody could use are traded as ONE exchange for exactly the small
+// bills the remainders need — "Trade 3 × $50 for 5 × $20 + 3 × $10 + …" —
+// instead of dozens of one-bill breaks. Denominations given and received are
+// disjoint by construction (a residual ≥ d only remains once $d ran out).
+
+function fillGreedy(amount, into) {
+  let rem = amount;
+  DENOMS.forEach(d => { const n = Math.floor(rem / d); into[d] += n; rem -= n * d; });
+}
+
+// $100/$50 placement that strands the least cash (a $50 before a $100), then (same DP idea as
+// minSmallValueAfterBigBills) leaves the least for $1s/$5s/$10s — a $50 goes
+// to the odd-tens payout it evens out, not whoever is first in line.
+function placeBigBills(targets, n100, n50) {
+  const memo = new Map();
+  function best(i, h, f) {
+    // Strand the least cash; at equal cash strand $50s, not a $100.
+    if (i === targets.length) return { cost: (h * 100 + f * 50) * 10000 + h * 1000, picks: [] };
+    const key = i + ',' + h + ',' + f;
+    if (memo.has(key)) return memo.get(key);
+    const t = targets[i];
+    let min = null;
+    for (let a = Math.min(h, Math.floor(t / 100)); a >= 0; a--) {
+      for (let b = Math.min(f, Math.floor((t - a * 100) / 50)); b >= 0; b--) {
+        const rest = best(i + 1, h - a, f - b);
+        const cost = (t - a * 100 - b * 50) % 20 + rest.cost;
+        if (!min || cost < min.cost) min = { cost, picks: [[a, b], ...rest.picks] };
+      }
+    }
+    memo.set(key, min);
+    return min;
+  }
+  return best(0, n100, n50).picks;
+}
+
+// With $100s/$50s placed, everyone's remainder is ideally $20s/$10s/$5s/$1s.
+// Pool those needs, let the drawer's small bills cover them (spare $1s stand
+// in for $5s, etc.), and bring in only the shortfall. Stranded $100s/$50s are
+// what gets traded. Returns null when spare small bills can't be absorbed.
+function exchangeForPlacement(amounts, start, placement) {
+  const need = blankBills();
+  const stranded = { ...start };
+  amounts.forEach((amount, i) => {
+    const [a, b] = placement[i];
+    stranded[100] -= a; stranded[50] -= b;
+    fillGreedy(amount - a * 100 - b * 50, need);
+  });
+  if (need[100] || need[50]) return null;
+  const get = blankBills();
+  let carry = 0;                                  // value of spare smaller bills
+  for (const d of [1, 5, 10, 20]) {
+    const have = start[d];
+    if (have >= need[d]) { carry += (have - need[d]) * d; continue; }
+    let short = need[d] - have;
+    const fromCarry = Math.min(short, Math.floor(carry / d));
+    carry -= fromCarry * d; short -= fromCarry;
+    get[d] = short;
+  }
+  if (carry) return null;
+  const give = blankBills();
+  give[100] = stranded[100]; give[50] = stranded[50];
+  return poolValue(give) === poolValue(get) ? { give, get } : null;
+}
+
+function exchangeFor(order, start, placement) {
+  if (placement) return exchangeForPlacement(order, start, placement);
+  const drawer = { ...start };
+  const give = blankBills();
+  const get = blankBills();
+  order.forEach(amount => {
+    let rem = amount;
+    DENOMS.forEach(d => {
+      const n = Math.min(Math.floor(rem / d), drawer[d]);
+      drawer[d] -= n;
+      rem -= n * d;
+    });
+    if (rem > 0) fillGreedy(rem, get);
+  });
+  DENOMS.forEach(d => {
+    // Same denomination on both sides just means "keep it" — cancel out.
+    const both = Math.min(drawer[d], get[d]);
+    give[d] = drawer[d] - both;
+    get[d] -= both;
+  });
+  // Bills left in the drawer aren't all owed to the trade: keep the largest
+  // ones that the exchange value doesn't need — give only what covers it.
+  const value = poolValue(get);
+  const out = blankBills();
+  let need = value;
+  [...DENOMS].reverse().forEach(d => {          // smallest first
+    const n = Math.min(give[d], Math.floor(need / d));
+    out[d] = n; need -= n * d;
+  });
+  if (need !== 0) DENOMS.forEach(d => { out[d] = give[d]; });
+  return { give: out, get };
+}
+
+function compareScores(a, b) {
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i];
+  return 0;
+}
+function countBills(pool) { return DENOMS.reduce((s, d) => s + (pool[d] || 0), 0); }
+function billList(pool) { return DENOMS.filter(d => pool[d] > 0).map(d => pool[d] + ' × $' + d).join(' + '); }
+
+export function planExchange(people, poolIn, leftoverAmount) {
+  const start = normalizePool(poolIn);
+  const leftover = leftoverAmount || 0;
+  const amounts = people.map(p => p.final || 0).concat(leftover > 0 ? [leftover] : []);
+  if (poolValue(start) !== amounts.reduce((s, a) => s + a, 0)) return null;
+
+  const orders = [
+    amounts,
+    [...amounts].sort((a, b) => b - a),
+    [...amounts].sort((a, b) => a - b),
+  ];
+  const candidates = orders.map(order => [order, null]);
+  candidates.unshift([amounts, placeBigBills(amounts, start[100], start[50])]);
+  let best = null;
+  for (const [order, placement] of candidates) {
+    const plan = exchangeFor(order, start, placement);
+    if (!plan) continue;
+    const { give, get } = plan;
+    if (!countBills(give)) continue;
+    const pool = { ...start };
+    DENOMS.forEach(d => { pool[d] += get[d] - give[d]; });
+    if (DENOMS.some(d => pool[d] < 0)) continue;
+    if (!runPipeline(people, pool, leftover).success) continue;
+    // Least cash to exchange, then fewest $100s traded (break a $50 first),
+    // then fewest bills handed over, then fewest $10s brought in (a $50
+    // placed well beats a stack of $10s), then the smallest drawer.
+    const score = [poolValue(give), give[100], countBills(give), get[10], countBills(pool)];
+    if (!best || compareScores(score, best.score) < 0) {
+      best = { give, get, pool, score };
+    }
+  }
+  if (!best) return null;
+
+  const deltas = blankBills();
+  DENOMS.forEach(d => { deltas[d] = best.pool[d] - start[d]; });
+  const dist = distribute(people, best.pool, leftover);
+  return {
+    trades: [netTrade(deltas)],
+    deltas, pool: best.pool, byPerson: dist.byPerson, remainderBills: dist.remainderBills,
+    score: best.score,
+  };
+}
+
+// Best "make change" plan: the least cash exchanged (then fewest bills), between
+// single-bill breaks (suggestBreaks) and one consolidated exchange; the old
+// small-bill heuristic is the last resort.
+export function planMakeChange(people, poolIn, leftoverAmount) {
+  const start = normalizePool(poolIn);
+  const exchange = planExchange(people, start, leftoverAmount);
+  const breaks = suggestBreaks(people, start, leftoverAmount);
+  if (breaks && exchange) {
+    const out = blankBills();
+    DENOMS.forEach(d => { out[d] = Math.max(0, -breaks.deltas[d]); });
+    const breaksScore = [poolValue(out), out[100], countBills(out), Math.max(0, breaks.deltas[10]), countBills(breaks.pool)];
+    // Breaks win full ties: they keep the bundles bank-standard.
+    return compareScores(exchange.score, breaksScore) < 0 ? exchange : breaks;
+  }
+  return breaks || exchange || previewSmallBillTrades(people, start, leftoverAmount);
 }
 
 // Trade-up plan: convert excess $1s/$5s/$10s into $20s.
