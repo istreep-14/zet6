@@ -328,6 +328,40 @@ if (window.visualViewport) {
   document.addEventListener('focusout', () => setTimeout(updateKeyboardState, 50));
 }
 
+// Home-screen web app: iOS 26 can stop the viewport above the home-indicator
+// strip while still reporting the full env(safe-area-inset-bottom) — the tab
+// bar then pads for a strip it doesn't cover, leaving dead space under it.
+// Measure how far the viewport falls short of the screen bottom and only pad
+// for the part of the inset the viewport actually overlaps.
+(() => {
+  const root = document.documentElement;
+  const standalone = navigator.standalone === true
+    || window.matchMedia?.('(display-mode: standalone)').matches;
+  root.classList.toggle('standalone', !!standalone);
+  if (!standalone) return;
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position:fixed;left:0;bottom:0;visibility:hidden;pointer-events:none;'
+    + 'padding-bottom:env(safe-area-inset-bottom,0px);padding-top:env(safe-area-inset-top,0px)';
+  document.body.appendChild(probe);
+  const fit = () => {
+    if (document.body.classList.contains('keyboard-open')) return;
+    const cs = getComputedStyle(probe);
+    const inset = parseFloat(cs.paddingBottom) || 0;
+    // A top inset means the page already runs under the status bar, so any
+    // shortfall is at the bottom. Without one we can't tell — leave it alone.
+    if (!(parseFloat(cs.paddingTop) > 0)) return;
+    const landscape = window.innerWidth > window.innerHeight;
+    const screenH = landscape
+      ? Math.min(screen.width, screen.height)
+      : Math.max(screen.width, screen.height);
+    const shortfall = Math.max(0, screenH - window.innerHeight);
+    root.style.setProperty('--safe-b', Math.max(0, inset - shortfall) + 'px');
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', () => setTimeout(fit, 300));
+})();
+
 // Swipe left/right on the content area to move between tabs. Ignored when the
 // gesture starts in a sideways-scrolling table, while typing, or when it's
 // mostly vertical (normal scrolling).
