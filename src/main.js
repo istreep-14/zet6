@@ -328,42 +328,6 @@ if (window.visualViewport) {
   document.addEventListener('focusout', () => setTimeout(updateKeyboardState, 50));
 }
 
-// Home-screen web app: iOS 26 can report a viewport shorter than the screen,
-// so anything placed "from the bottom" (bottom: 0, inset: 0, 100dvh) ends up
-// well above the real bottom edge. When that happens, size <body> to the true
-// screen height and let the tab bar / HUD / sheets position inside it.
-(() => {
-  const root = document.documentElement;
-  const standalone = navigator.standalone === true
-    || window.matchMedia?.('(display-mode: standalone)').matches;
-  root.classList.toggle('standalone', !!standalone);
-  if (!standalone) return;
-  const probe = document.createElement('div');
-  probe.style.cssText = 'position:fixed;left:0;top:0;visibility:hidden;pointer-events:none;'
-    + 'padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
-  document.body.appendChild(probe);
-  const fit = () => {
-    if (document.body.classList.contains('keyboard-open')) return;
-    const landscape = window.innerWidth > window.innerHeight;
-    const screenH = landscape
-      ? Math.min(screen.width, screen.height)
-      : Math.max(screen.width, screen.height);
-    const short = screenH - window.innerHeight > 1;
-    root.classList.toggle('fit-screen', short);
-    root.style.setProperty('--app-h', (short ? screenH : window.innerHeight) + 'px');
-    const cs = getComputedStyle(probe);
-    const diag = $('viewportDiag');
-    if (diag) {
-      diag.textContent = `Home-screen view ${window.innerWidth}×${window.innerHeight} · screen ${screenH}`
-        + ` · insets ${parseFloat(cs.paddingTop) || 0}/${parseFloat(cs.paddingBottom) || 0}`
-        + (short ? ' · stretched to screen' : '');
-    }
-  };
-  fit();
-  window.addEventListener('resize', fit);
-  window.addEventListener('orientationchange', () => setTimeout(fit, 300));
-})();
-
 // Swipe left/right on the content area to move between tabs. Ignored when the
 // gesture starts in a sideways-scrolling table, while typing, or when it's
 // mostly vertical (normal scrolling).
