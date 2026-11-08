@@ -192,7 +192,12 @@ body.keyboard-open .content { padding-bottom: var(--sp-6); }
 /* ── Shell: floating glass tab bar ──────────────────────────────────────── */
 /* Home-screen app: no Safari toolbar under the bar, so let the pill sit just
    above the home indicator instead of a full safe-area inset up. */
-html.standalone { --bar-bottom: max(calc(var(--safe-b) - 16px), 8px); }
+html.standalone { --bar-bottom: clamp(8px, calc(var(--safe-b) - 16px), 20px); }
+/* iOS reported a viewport shorter than the screen (see main.js): body takes
+   the real screen height and the bottom-anchored layers position inside it
+   (a fixed body is their containing block) instead of the short viewport. */
+html.fit-screen body { bottom: auto; height: var(--app-h); }
+html.fit-screen .tabbar, html.fit-screen .hud, html.fit-screen .sheet-backdrop { position: absolute; }
 .tabbar {
   position: fixed;
   left: 0; right: 0;
@@ -955,3 +960,7 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Home-screen layout readout (More tab, standalone only) */
+.viewport-diag { font-size: 12px; color: var(--text-3); text-align: center; }
+.viewport-diag:empty { display: none; }
