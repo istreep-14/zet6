@@ -190,6 +190,9 @@ body.keyboard-open .content { padding-bottom: var(--sp-6); }
 @keyframes inLeft  { from { opacity: .4; transform: translateX(-32px); } to { opacity: 1; transform: none; } }
 
 /* ── Shell: floating glass tab bar ──────────────────────────────────────── */
+/* Home-screen app: no Safari toolbar under the bar, so let the pill sit just
+   above the home indicator instead of a full safe-area inset up. */
+html.standalone { --bar-bottom: max(calc(var(--safe-b) - 16px), 8px); }
 .tabbar {
   position: fixed;
   left: 0; right: 0;
