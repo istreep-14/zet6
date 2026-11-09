@@ -473,6 +473,20 @@ function buildBandItems(field, r) {
   return out.join('');
 }
 
+// 3D drum tilt: rows above/below centre slant away (rotateX) and shrink/
+// fade with distance, like the UIDatePicker wheel. delta is in row units.
+function tiltBand(band) {
+  const items = band.querySelectorAll('.band-item');
+  if (!items.length) return;
+  const pos = band.scrollTop / BAND_ITEM_H;
+  items.forEach((it, i) => {
+    const d = i - pos;
+    const ad = Math.min(Math.abs(d), 1.6);
+    it.style.transform = `rotateX(${(-d * 26).toFixed(1)}deg) scale(${(1 - ad * 0.1).toFixed(3)})`;
+    it.style.opacity = (1 - ad * 0.3).toFixed(3);
+  });
+}
+
 function syncBand(field, d, col, bad) {
   const band = col.querySelector(`[data-band="${field}"]`);
   const inner = col.querySelector(`[data-bandinner="${field}"]`);
@@ -493,6 +507,7 @@ function syncBand(field, d, col, bad) {
     const target = idx * BAND_ITEM_H;
     if (Math.abs(band.scrollTop - target) > 0.5) band.scrollTop = target;
   }
+  tiltBand(band);
 }
 
 export function openTimeSheet(id, field) {
@@ -591,6 +606,7 @@ export function bandScroll(field, el) {
   bandTimers[field] = setTimeout(() => { bandScrolling[field] = false; }, 140);
   const items = el.querySelectorAll('.band-item');
   if (!items.length) return;
+  tiltBand(el);
   const idx = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / BAND_ITEM_H)));
   items.forEach((it, i) => it.classList.toggle('is-sel', i === idx));
   timeBand(field, Number(items[idx].dataset.abs));
@@ -618,12 +634,68 @@ export function closeAllSwipes(except) {
   });
 }
 
+// Hold-slide band preview: while scrubbing a tchip, a floating 5-row wheel
+// (-30m / -15m / now / +15m / +30m, 32px rows) appears above/below the chip
+// with the same 3D tilt as the Time-sheet band. No box — just the rows
+// floating in front of the chip. Contents update live as the chip slides.
+let chipBandEl = null;
+
+function ensureChipBand() {
+  if (chipBandEl) return chipBandEl;
+  const el = document.createElement('div');
+  el.id = 'chipBand';
+  el.className = 'chip-band';
+  el.setAttribute('aria-hidden', 'true');
+  el.hidden = true;
+  el.innerHTML = '<div class="chip-band-item chip-band-m2"></div>'
+    + '<div class="chip-band-item chip-band-m1"></div>'
+    + '<div class="chip-band-item chip-band-now"></div>'
+    + '<div class="chip-band-item chip-band-p1"></div>'
+    + '<div class="chip-band-item chip-band-p2"></div>'
+    + '<div class="chip-band-center"></div>';
+  document.body.appendChild(el);
+  chipBandEl = el;
+  return el;
+}
+
+function updateChipBand(curAbs, closer) {
+  const el = ensureChipBand();
+  const [m2, m1, now, p1, p2] = el.children;
+  m2.textContent = fmtWheelTime(curAbs - STEP * 2);
+  m1.textContent = fmtWheelTime(curAbs - STEP);
+  now.textContent = fmtWheelTime(curAbs);
+  p1.textContent = fmtWheelTime(curAbs + STEP);
+  p2.textContent = fmtWheelTime(curAbs + STEP * 2);
+  now.classList.toggle('is-closer', !!closer);
+}
+
+function showChipBand(chipEl, curAbs, closer) {
+  const el = ensureChipBand();
+  const r = chipEl.getBoundingClientRect();
+  const w = 176, h = 160;
+  const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
+  const top = r.top > h + 24 ? r.top - h - 8 : r.bottom + 8;
+  el.style.left = left + 'px';
+  el.style.top = top + 'px';
+  el.hidden = false;
+  updateChipBand(curAbs, closer);
+  requestAnimationFrame(() => el.classList.add('is-show'));
+}
+
+function hideChipBand() {
+  if (!chipBandEl) return;
+  chipBandEl.classList.remove('is-show');
+  chipBandEl.hidden = true;
+}
+
 function beginScrub(id, field, el, y) {
   const d = freshDisplay(id);
   if (!d) return;
   const b = baseTimes(d);
-  scrub = { id, field, el, d, y0: y, start: field === 'in' ? b.inAbs : b.outAbs, last: null };
+  const cur = field === 'in' ? b.inAbs : b.outAbs;
+  scrub = { id, field, el, d, y0: y, start: cur, last: null };
   el.classList.add('is-scrubbing');
+  showChipBand(el, cur, !!d.closer);
 }
 
 function moveScrub(y) {
@@ -634,11 +706,17 @@ function moveScrub(y) {
   scrub.last = t;
   writeAbs(scrub.id, scrub.d, scrub.field, t);
   refreshNow(scrub.id);
+  const d = freshDisplay(scrub.id);
+  if (d) {
+    const cur = scrub.field === 'in' ? (d.inAbs ?? baseTimes(d).inAbs) : (d.outAbs ?? baseTimes(d).outAbs);
+    updateChipBand(cur, !!d.closer);
+  }
 }
 
 function endScrub() {
   if (!scrub) return;
   scrub.el.classList.remove('is-scrubbing');
+  hideChipBand();
   scrub = null;
 }
 

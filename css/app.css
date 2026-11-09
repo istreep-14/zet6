@@ -313,7 +313,8 @@
   .tval.is-scrubbing { background: color-mix(in srgb, var(--color-gold) 15%, transparent); color: var(--color-gold) !important; }
 
   /* Band wheel (time sheet, UIDatePicker .wheels feel): one 15-min band
-     per column, snap-scrolling; the centre row is the selection. */
+     per column, snap-scrolling; the centre row is the selection.
+     Rows curve in 3D (top/bottom slant away like a drum) via JS tilt. */
   .band {
     position: relative;
     height: 120px;
@@ -324,9 +325,11 @@
     background: var(--color-fill);
     touch-action: pan-y;
     -webkit-overflow-scrolling: touch;
+    perspective: 520px;
+    perspective-origin: 50% 50%;
   }
   .band::-webkit-scrollbar { display: none; }
-  .band-inner { padding: 40px 0; }   /* 1 row top/bottom so first/last can centre */
+  .band-inner { padding: 40px 0; transform-style: preserve-3d; }   /* 1 row top/bottom so first/last can centre */
   .band-item {
     height: 40px;
     display: grid; place-items: center;
@@ -337,8 +340,14 @@
     user-select: none; -webkit-user-select: none;
     cursor: pointer;
     transition: color .1s;
+    transform-origin: 50% 50%;
+    backface-visibility: hidden;
+    will-change: transform, opacity;
   }
   .band-item.is-sel { color: var(--color-ink); }
+  @media (prefers-reduced-motion: reduce) {
+    .band-item { transform: none !important; opacity: 1 !important; }
+  }
   .band-center {
     position: absolute; left: 0; right: 0; top: 50%;
     transform: translateY(-50%);
@@ -354,6 +363,48 @@
   .band-fade-t { top: 0; background: linear-gradient(to bottom, var(--color-raised), transparent); }
   .band-fade-b { bottom: 0; background: linear-gradient(to top, var(--color-raised), transparent); }
   .tcol.is-bad .band { opacity: .5; }
+
+  /* Hold-slide preview: floating 5-row wheel (32px rows) in front of a
+     scrubbing tchip — no box, just the rows + centre mark. */
+  .chip-band {
+    position: fixed;
+    width: 176px; height: 160px;
+    background: transparent;
+    z-index: 90;
+    pointer-events: none;
+    user-select: none; -webkit-user-select: none;
+    perspective: 520px;
+    opacity: 0; transform: scale(.94);
+    transition: opacity .12s ease, transform .12s ease;
+    text-shadow: 0 1px 10px rgb(0 0 0 / .85), 0 0 2px rgb(0 0 0 / .8);
+  }
+  .chip-band[hidden] { display: none; }
+  .chip-band.is-show { opacity: 1; transform: scale(1); }
+  .chip-band-item {
+    height: 32px;
+    display: grid; place-items: center;
+    font-size: 15px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-3);
+    backface-visibility: hidden;
+  }
+  .chip-band-m2 { transform-origin: 50% 100%; transform: rotateX(44deg) scale(.84); opacity: .35; }
+  .chip-band-m1 { transform-origin: 50% 100%; transform: rotateX(22deg) scale(.92); opacity: .62; }
+  .chip-band-now { color: var(--color-ink); }
+  .chip-band-now.is-closer { color: var(--color-red); }
+  .chip-band-p1 { transform-origin: 50% 0%; transform: rotateX(-22deg) scale(.92); opacity: .62; }
+  .chip-band-p2 { transform-origin: 50% 0%; transform: rotateX(-44deg) scale(.84); opacity: .35; }
+  .chip-band-center {
+    position: absolute; left: 0; right: 0; top: 50%;
+    transform: translateY(-50%);
+    height: 32px; pointer-events: none;
+    border-top: 1px solid var(--color-sep);
+    border-bottom: 1px solid var(--color-sep);
+    background: color-mix(in srgb, var(--color-gold) 12%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .chip-band-m2, .chip-band-m1, .chip-band-p1, .chip-band-p2 { transform: none; opacity: .7; }
+  }
 
   /* ── Settings switch ──────────────────────────────────────────────────── */
   .switch { position: relative; flex-shrink: 0; width: 51px; height: 31px; border-radius: 999px; background: var(--color-fill); transition: background .25s; }
