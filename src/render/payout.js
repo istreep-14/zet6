@@ -1,9 +1,10 @@
-// Payout tab — the answer, and the envelopes in one place:
+// Payout tab — the answer:
 //   tally (total · rate · hours)
 //   → a fix card when the drawer can't make exact change (with Apply)
-//   → one row per person: name + shift, hours, pay, and the bills that go in
-//     their envelope; chump, total, and what comes out of the drawer
+//   → one row per person: name + shift (subtle), pay + hours stacked;
+//     chump, total
 //   → how the split was worked out → pools (multi-pool) → tools.
+// Envelope bills live in the tap-a-person sheet (sheets.js).
 
 import { DENOMS, fmtHrs, fmtMoney, payoutOrder, poolValue } from '../util.js';
 import { fmtTimeAbs, timeParts } from '../time.js';
@@ -11,7 +12,7 @@ import { planMakeChange, computeTradeUp, distribute } from '../engine.js';
 import { updatePool } from '../store.js';
 import { html, cx, mount } from '../ui/html.js';
 import { icon } from '../ui/icons.js';
-import { Card, Button, Avatar, Alert, Empty, Label, Money, BillTags, Denom, ROLE_DOT, SEP } from '../ui/kit.js';
+import { Card, Button, Avatar, Alert, Empty, Label, Money, Denom, ROLE_DOT, SEP } from '../ui/kit.js';
 import { invalidateTips } from './tips.js';
 
 const $ = id => document.getElementById(id);
@@ -103,13 +104,13 @@ function tallyHTML(vm) {
   </div>`;
 }
 
-// Shift read like a calendar event: "5–11:45PM", "5PM–2AM".
+// Shift read like a calendar event: "5–11:45PM", "5PM–2AM" (subtle line).
 function shiftHTML(inAbs, outAbs) {
   const a = timeParts(inAbs), b = timeParts(outAbs);
   const t = x => x.h + (x.m ? ':' + x.m : '');
   const ap = x => x.ap ? html`<small class="ml-px text-[8.5px] font-semibold tracking-wide">${x.ap.toUpperCase()}M</small>` : '';
   const text = a.ap === b.ap ? html`${t(a)}–${t(b)}${ap(b)}` : html`${t(a)}${ap(a)}–${t(b)}${ap(b)}`;
-  return html`<span class="min-w-0 truncate text-[13px] text-ink-2" aria-label="${fmtTimeAbs(inAbs)} to ${fmtTimeAbs(outAbs)}">${text}</span>`;
+  return html`<span class="min-w-0 truncate text-[12px] text-ink-3" aria-label="${fmtTimeAbs(inAbs)} to ${fmtTimeAbs(outAbs)}">${text}</span>`;
 }
 
 // Hours: decimals only when needed; whole hours in a --hi-wide slot so the
@@ -122,21 +123,20 @@ function hrsHTML(h) {
 
 const ROW = 'col-span-full grid grid-cols-subgrid items-center px-4 max-[374px]:px-3';
 
-function personRowHTML(p, bills, extra) {
-  return html`<button class="${cx(ROW, SEP, 'min-h-12 py-2 text-left transition active:bg-raised')}" onclick="App.personModal('${p.id}')">
+function personRowHTML(p, extra) {
+  return html`<button class="${cx(ROW, SEP, 'min-h-14 py-2.5 text-left transition active:bg-raised')}" onclick="App.personModal('${p.id}')">
     <span class="flex min-w-0 items-center gap-2.5">
-      ${Avatar(p.name, p.role, 'sm')}
-      <span class="flex min-w-0 flex-col gap-1">
-        <span class="flex min-w-0 items-baseline gap-2">
-          <span class="max-w-full shrink-0 truncate text-[18px] font-semibold max-[374px]:text-[17px]">${p.name}</span>
-          ${shiftHTML(p.inAbs, p.outAbs)}
-        </span>
-        ${bills && BillTags(bills)}
-        ${extra && html`<span class="truncate text-[12px] text-ink-3">${extra}</span>`}
+      ${Avatar(p.name, p.role)}
+      <span class="flex min-w-0 flex-col gap-0.5">
+        <span class="truncate text-[17px] font-semibold leading-tight max-[374px]:text-[16px]">${p.name}</span>
+        <span class="flex min-w-0 items-center">${shiftHTML(p.inAbs, p.outAbs)}</span>
+        ${extra && html`<span class="truncate text-[11px] text-ink-3">${extra}</span>`}
       </span>
     </span>
-    ${hrsHTML(p.shiftHours ?? p.hours)}
-    ${Money(p.final, cx('text-right font-rounded text-[19px] font-bold max-[374px]:text-[16px]', !(p.final > 0) && 'text-ink-3'))}
+    <span class="flex flex-col items-end gap-0.5">
+      ${Money(p.final, cx('font-rounded text-[21px] font-bold leading-none tracking-tight max-[374px]:text-[19px]', !(p.final > 0) && 'text-ink-3'))}
+      <span class="text-[12px] font-medium text-ink-2">${hrsHTML(p.shiftHours ?? p.hours)}</span>
+    </span>
   </button>`;
 }
 
@@ -156,34 +156,27 @@ function keyHTML(people) {
     : '';
 }
 
-// The payout table: one grid that rows, chump, total and drawer join with subgrid.
+// The payout table: one grid that rows, chump and total join with subgrid.
 function tableHTML(vm, extraFor) {
   const s = vm.shares;
   const ordered = payoutOrder(s.perPerson);
   const grand = s.perPerson.reduce((t, p) => t + p.final, 0) + s.leftover;
-  const ok = vm.dist && !distErrorText(vm);
-  const byPerson = ok ? vm.dist.byPerson : {};
   const intW = Math.max(...[...ordered.map(p => p.shiftHours ?? p.hours), s.totalHours].map(h => String(Math.floor(h)).length));
 
-  const drawer = {};
-  if (ok) {
-    DENOMS.forEach(d => {
-      drawer[d] = vm.people.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + ((vm.dist.remainderBills || {})[d] || 0);
-    });
-  }
-
-  return html`${Card({ flush: true, class: 'grid grid-cols-[minmax(0,1fr)_auto_auto] gap-x-3.5 max-[374px]:gap-x-2.5', style: `--hi:${intW}ch` },
+  return html`${Card({ flush: true, class: 'grid grid-cols-[minmax(0,1fr)_auto] gap-x-3.5 max-[374px]:gap-x-2.5', style: `--hi:${intW}ch` },
     html`<div class="${cx(ROW, 'h-10 items-baseline pt-3 text-[12px] font-semibold text-ink-2')}">
-      <span class="text-[16px] text-ink">${ok ? 'Payouts & envelopes' : 'Payouts'}</span><span>Hrs</span><span class="text-right">Pay</span>
+      <span class="text-[16px] text-ink">Payouts</span><span class="text-right">Pay</span>
     </div>
-    ${ordered.map(p => personRowHTML(p, ok && p.final > 0 ? byPerson[p.id] : null, extraFor(p)))}
-    ${s.leftover > 0 && html`<div class="${cx(ROW, SEP, 'py-2 text-[13px] text-ink-2')}">
-      <span class="flex flex-wrap items-center gap-2">Chump · stays in the drawer ${ok && BillTags(vm.dist.remainderBills)}</span><span></span>${Money(s.leftover, 'text-right font-semibold')}
+    ${ordered.map(p => personRowHTML(p, extraFor(p)))}
+    ${s.leftover > 0 && html`<div class="${cx(ROW, SEP, 'py-2.5 text-[13px] text-ink-2')}">
+      <span>Chump · stays in the drawer</span>${Money(s.leftover, 'text-right font-semibold')}
     </div>`}
-    <div class="${cx(ROW, 'min-h-12 bg-raised py-2 font-semibold')}">
-      <span class="flex flex-col gap-1">Total${ok && html`<span class="flex flex-wrap items-center gap-1.5 text-[12px] font-medium text-ink-2">from the drawer ${BillTags(drawer)}</span>`}</span>
-      ${hrsHTML(s.totalHours)}
-      ${Money(grand, 'text-right font-rounded text-[17px] font-bold text-gold')}
+    <div class="${cx(ROW, 'min-h-14 bg-raised py-2.5 font-semibold')}">
+      <span>Total</span>
+      <span class="flex flex-col items-end gap-0.5">
+        ${Money(grand, 'font-rounded text-[19px] font-bold leading-none tracking-tight text-gold')}
+        <span class="text-[12px] font-medium text-ink-2">${hrsHTML(s.totalHours)}</span>
+      </span>
     </div>`)}
   ${keyHTML(ordered)}`;
 }
