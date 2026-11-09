@@ -105,10 +105,8 @@ window.App = {
   addStaff() {
     store.addStaff(rolesOn() ? store.getState().ui.staffViewRole : 'bartender');
   },
-  delStaff: store.removeStaff,
   staffField: store.updateStaff,
   staffTab: staffTabNav,
-  toggleCloser: store.toggleCloserOverride,
 
   // Swipe-revealed row actions (Closer / Reset / Delete)
   rowAction(kind, id) {

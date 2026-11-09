@@ -127,4 +127,23 @@ Small-bill requirements (`getSmallBillRequirements`, used by preflight, the Bill
 
 ## CSS / design system
 
-One stylesheet: `css/app.css` (tokens at the top). iOS-style dark grouped look: black background, flat `--surface` cards with no outlines, hairline-separated grouped lists, a floating glass pill tab bar (`position: fixed`, `bottom: --bar-bottom` = max(safe-area inset, 12px)) over a `height: 100dvh` flex `<body>` — keep it that way: a `position: fixed` body makes the iOS home-screen app draw only a shortened viewport, cutting the bar off. In the home-screen app iOS can report a viewport shorter than the screen (black strip below); `main.js` then adds `html.fill-screen`, sizing `<html>` and `<body>` to the real screen height (`--app-h`) with the tab bar / HUD / sheets `position: absolute` inside, and keeps the window scrolled to 0 (`?pwa` forces this for desktop testing). Page zoom is locked (viewport meta, `touch-action: manipulation`, gesture events blocked)), a large per-tab title in the header (`#hdrTitle`, set in `switchTab`), and sentence-case labels. Gold is reserved for active and primary elements; amounts are white, rate is green, closers and errors are red, and role colors are `--bar` / `--srv` / `--sup`. System fonts only, with tabular numerals (no monospace) and `--rounded` for big numbers. Sized for 375–440pt iPhones (iPhone Air = 420×912pt) with safe-area insets; `max-width: 400px` and `374px` blocks tighten the staff grid for smaller phones. Inputs are ≥16px to stop iOS focus-zoom, and tap targets are about 44–48pt.
+One stylesheet: `css/app.css` (tokens at the top).
+
+- **Look:** iOS-style dark grouped UI — black background, flat `--surface` cards with no outlines, hairline-separated grouped lists, a large per-tab title in the header (`#hdrTitle`, set in `switchTab`), sentence-case labels.
+- **Colour roles:** gold is reserved for active and primary elements; amounts are white, rate is green, closers and errors are red; role colours are `--bar` / `--srv` / `--sup` (also the `.av--{role}` initials and `.dot--{role}` dots).
+- **Type:** system fonts only, tabular numerals (no monospace), `--rounded` for big numbers. Inputs are ≥16px so iOS doesn't zoom on focus.
+- **Sizing:** built for 375–440pt iPhones (iPhone Air = 420×912pt) with safe-area insets; `max-width: 400px` and `374px` blocks tighten things for smaller phones. Tap targets are about 44–48pt.
+
+### Page shell & tab bar (fragile — read before touching)
+
+- `<body>` is a `height: 100dvh` flex column (header · `.content` scroller). The tab bar is a floating glass pill: `position: fixed`, `bottom: --bar-bottom` = max(safe-area inset, 12px). `.content` pads its bottom by `--dock` so nothing hides behind the bar or the HUD.
+- **Don't make `<body>` `position: fixed`.** In the iOS home-screen app that ties the page to a shortened viewport and the bar gets cut off.
+- **Home-screen fill (`main.js`):** iOS can report a viewport shorter than the screen (e.g. 844 of 912pt), leaving a black strip below the page. When detected, `html.fill-screen` sizes `<html>` and `<body>` to the real screen height (`--app-h`), the tab bar / HUD / sheets switch to `position: absolute` inside that box, and the window is kept scrolled to 0. Add `?pwa` to the URL to force this in a desktop browser.
+- **Zoom is locked:** viewport meta (`maximum-scale=1, user-scalable=no`), `html { touch-action: manipulation }`, and iOS `gesture*` events blocked in `main.js`. A zoomed page shifts the fixed bar.
+- Verify layout changes on a real phone **from the home screen** (delete and re-add the icon to pick up new code) — desktop emulation doesn't reproduce the iOS viewport quirks.
+
+---
+
+## Keeping docs current
+
+When a UI change lands, update the matching bullet in **UI notes** above (and the CSS section if it touches the shell). README.md is the user-facing overview; keep it in step with features, not implementation details.
