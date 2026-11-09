@@ -11,9 +11,10 @@ import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
 import { switchTab, updateTabIndicators, normalizeTab, renderSubtabs, subsFor, activeSub } from './render/tabs.js';
 import { renderStaff, openStaffEditor, openTimeEditor, openRosterSheet, rosterSelected } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
-import { renderTips, invalidateTips } from './render/tips.js';
+import { renderTips, invalidateTips, openPoolSheet } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
-import { renderSummary } from './render/summary.js';
+import { refreshSticky } from './ui/sticky.js';
+import { renderSummary, openPoolSummary } from './render/summary.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
   renderSheets, openPerson, openBonus, adjustBonus, resetBonuses,
@@ -43,6 +44,7 @@ let lastVm = buildViewModel(state);
 
 function render(s) {
   setClock24(s.settings.clock24);
+  document.documentElement.dataset.size = s.settings.size || 'm';
   lastVm = buildViewModel(s);
   renderStaff(lastVm);
   renderTips(lastVm);
@@ -56,6 +58,7 @@ function render(s) {
     people: s.staff.filter(p => p.name.trim()).length,
   });
   renderSubtabs(lastVm);
+  refreshSticky();
   const list = sessions.list(), cur = sessions.currentId();
   renderDrawer(lastVm, list, cur);
   renderShiftPanel(lastVm, list, cur);
@@ -181,6 +184,7 @@ window.App = {
   personModal: id => openPerson(lastVm, id),
 
   // settings
+  setSize: size => store.setSize(size),
   toggleSetting(key) {
     const s = store.getState();
     if (key === 'multiPool' && s.pools.length > 1) return;
@@ -248,7 +252,9 @@ window.App = {
   supportDefault: value => store.setSupportDefault(value.trim()),
 
   // pools
-  addPool: store.addPool,
+  addPool() { const id = store.addPool(); if (store.getState().pools.length > 1) openPoolSheet(id); },
+  openPool: id => openPoolSheet(id),
+  openPoolSummary: id => openPoolSummary(id),
   removePool: store.removePool,
   selectPool: store.selectPool,
   poolMode: store.setPoolEntryMode,

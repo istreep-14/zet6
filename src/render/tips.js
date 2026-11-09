@@ -1,7 +1,7 @@
-// Tips tab (Preact) — one pool's card at a time. A normal night is one pool;
-// its Net total / Count bills choice is the tab's swipeable sub-tab header.
-// With several pools, the header lists the pools (swipe between them) and
-// each card has its own entry mode, time window, roles and cash.
+// Tips tab (Preact). One pool: its card right on the page (Net total / Count
+// bills seg, entry, shared-by chips, support). Several pools: a stacked card
+// per pool (name, window, who shares it, total) — tap one to open it in a
+// sheet with the full editor; "+ Add pool" opens the new pool's sheet.
 //
 // Inputs show the stored raw strings; Preact diffs each render, so typing
 // keeps focus and the totals update around it.
@@ -9,14 +9,14 @@
 import { DENOMS, parseWholeNumber, fmtHrs, fmtMoney } from '../util.js';
 import { fmtTimeAbs, overlapHours } from '../time.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, INPUT } from '../ui/pkit.js';
-import { activeSub } from './tabs.js';
+import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, INPUT, ROLE_DOT } from '../ui/pkit.js';
+import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
 
 const fmtAmt = v => String(parseFloat((v ?? 0).toFixed(2)));
 const SUB = 'flex flex-col gap-2.5';
-const EYEBROW = 'text-[14px] font-medium text-ink-2';
+const EYEBROW = 'text-[0.875rem] font-medium text-ink-2';
 
 function windowSub(pool, vmPool) {
   const start = pool.window.start.trim();
@@ -50,7 +50,7 @@ function SupportBox({ pool, vm, vmPool }) {
   return html`<div class="flex flex-col gap-3 rounded-2xl bg-sup/8 p-4 ring-1 ring-sup/20">
     <div class="flex items-baseline justify-between gap-2">
       <span class=${EYEBROW}>Support tip-out</span>
-      <span class="text-right text-[13px] font-medium text-sup">${cut}</span>
+      <span class="text-right text-[0.8125rem] font-medium text-sup">${cut}</span>
     </div>
     <div class="flex gap-3">
       <${Field} label="Percent" inputmode="decimal" placeholder=${pctPh} value=${cfg.pct ?? ''}
@@ -62,7 +62,7 @@ function SupportBox({ pool, vm, vmPool }) {
       ? supStaff.map(p => {
         const auto = vmPool ? overlapHours(p.inAbs, p.outAbs, vmPool.startAbs, vmPool.endAbs) : 0;
         const part = sPool?.participants.find(x => x.id === p.id);
-        return html`<div key=${p.id} class="grid grid-cols-[minmax(0,1fr)_64px_14px_72px] items-center gap-2 text-[15px]">
+        return html`<div key=${p.id} class="grid grid-cols-[minmax(0,1fr)_4rem_0.875rem_4.5rem] items-center gap-2 text-[0.9375rem]">
           <span class="truncate">${p.name}</span>
           <input class=${cx(INPUT, 'h-10 text-center font-semibold')} inputmode="decimal" placeholder=${fmtHrs(auto)}
             aria-label=${p.name + ' hours'} value=${cfg.hours?.[p.id] ?? ''} onInput=${e => App.poolSupportHours(pool.id, p.id, e.target.value)} />
@@ -70,7 +70,7 @@ function SupportBox({ pool, vm, vmPool }) {
           <span class="text-right font-semibold tabular-nums">${part ? '$' + fmtAmt(part.raw) : '—'}</span>
         </div>`;
       })
-      : html`<div class="text-[14px] text-ink-3">No support staff named yet.</div>`}
+      : html`<div class="text-[0.875rem] text-ink-3">No support staff named yet.</div>`}
   </div>`;
 }
 
@@ -78,33 +78,33 @@ function BillRow({ pool, d }) {
   const v = pool.cash.billCounts[d] ?? '';
   const parsed = parseWholeNumber(v);
   const sub = parsed.valid ? parsed.value * d : 0;
-  const step = 'grid size-[42px] shrink-0 place-items-center rounded-full text-[22px] text-ink-2 active:bg-high active:text-ink';
-  return html`<div class="grid grid-cols-[56px_minmax(0,1fr)_76px] items-center gap-3 py-2 max-[400px]:grid-cols-[50px_minmax(0,1fr)_64px] max-[400px]:gap-2.5">
+  const step = 'grid size-[2.625rem] shrink-0 place-items-center rounded-full text-[1.375rem] text-ink-2 active:bg-high active:text-ink';
+  return html`<div class="grid grid-cols-[3.5rem_minmax(0,1fr)_4.75rem] items-center gap-3 py-2 max-[25rem]:grid-cols-[3.125rem_minmax(0,1fr)_4rem] max-[25rem]:gap-2.5">
     <${Denom} d=${d} />
     <div class="flex items-center rounded-full bg-fill focus-within:ring-2 focus-within:ring-gold">
       <button class=${step} onClick=${() => App.billStep(pool.id, String(d), -1)} aria-label=${'One fewer $' + d} tabindex="-1">−</button>
-      <input class="h-[42px] w-full min-w-0 bg-transparent text-center text-[20px] font-semibold text-ink outline-none placeholder:text-ink-3"
+      <input class="h-[2.625rem] w-full min-w-0 bg-transparent text-center text-[1.25rem] font-semibold text-ink outline-none placeholder:text-ink-3"
         type="number" min="0" step="1" placeholder="0" inputmode="numeric" enterkeyhint="next" data-bill=${d}
         aria-label=${'$' + d + ' bills'} value=${v} onInput=${e => App.poolBill(pool.id, String(d), e.target.value)}
         onKeyDown=${e => App.billKey(e, pool.id)} />
       <button class=${step} onClick=${() => App.billStep(pool.id, String(d), 1)} aria-label=${'One more $' + d} tabindex="-1">+</button>
     </div>
-    <span class=${cx('text-right text-[18px] font-semibold tabular-nums', !parsed.valid ? 'text-red' : sub > 0 ? 'text-ink' : 'text-ink-3')}>
+    <span class=${cx('text-right text-[1.125rem] font-semibold tabular-nums', !parsed.valid ? 'text-red' : sub > 0 ? 'text-ink' : 'text-ink-3')}>
       ${!parsed.valid ? '!' : sub > 0 ? fmtMoney(sub) : '—'}</span>
   </div>`;
 }
 
 function NetTotal({ pool }) {
   return html`<div class="relative">
-    <span class="pointer-events-none absolute left-[18px] top-1/2 -translate-y-1/2 font-rounded text-[32px] font-semibold text-ink-3">$</span>
-    <input class=${cx(INPUT, 'h-[84px] rounded-2xl pl-12 font-rounded text-[42px] font-bold tracking-tight')}
+    <span class="pointer-events-none absolute left-[1.125rem] top-1/2 -translate-y-1/2 font-rounded text-[2rem] font-semibold text-ink-3">$</span>
+    <input class=${cx(INPUT, 'h-[5.25rem] rounded-2xl pl-12 font-rounded text-[2.625rem] font-bold tracking-tight')}
       type="number" min="0" step="1" placeholder="0" inputmode="numeric" aria-label="Net total"
       value=${pool.cash.netTotal} onInput=${e => App.poolNet(pool.id, e.target.value)} />
   </div>`;
 }
 
 // What a card shows depends on the session's complexity:
-//   single pool             → no label, window or mode seg (the header has it)
+//   single pool             → no label or window
 //   roles off + single pool → no "Shared by" chips either (everyone shares)
 function PoolCard({ pool, vm }) {
   const single = vm.state.pools.length === 1;
@@ -116,14 +116,14 @@ function PoolCard({ pool, vm }) {
   return html`<${Card} flush data-pid=${pool.id}>
     <div class="flex w-full items-center gap-3 px-4 pb-3 pt-4">
       <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span class="truncate text-[17px] font-semibold">${single ? 'Tonight’s tips' : pool.label}</span>
-        <span class="text-[14px] text-ink-2">${windowSub(pool, vmPool)}</span>
+        <span class="truncate text-[1.0625rem] font-semibold">${single ? 'Tonight’s tips' : pool.label}</span>
+        <span class="text-[0.875rem] text-ink-2">${windowSub(pool, vmPool)}</span>
       </span>
-      <span class=${cx('font-rounded text-[30px] font-bold tracking-tight tabular-nums', !total && 'text-ink-3')}>${fmtMoney(total)}</span>
+      <span class=${cx('font-rounded text-[1.875rem] font-bold tracking-tight tabular-nums', !total && 'text-ink-3')}>${fmtMoney(total)}</span>
     </div>
     <div class="flex flex-col gap-5 px-4 pb-4 pt-1">
       <div class=${SUB}>
-        ${!single && html`<${Seg} items=${[{ value: 'nettotal', label: 'Net total' }, { value: 'perbill', label: 'Count bills' }]}
+        ${html`<${Seg} items=${[{ value: 'nettotal', label: 'Net total' }, { value: 'perbill', label: 'Count bills' }]}
           value=${mode} onChange=${v => App.poolMode(pool.id, v)} />`}
         ${mode === 'perbill'
           ? html`<div class="flex flex-col divide-y divide-sep">${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} d=${d} />`)}</div>`
@@ -139,7 +139,7 @@ function PoolCard({ pool, vm }) {
           </div>
         </div>
         <${Field} label="Label" value=${pool.label} onInput=${e => App.poolLabel(pool.id, e.target.value)} />
-        <${Button} variant="danger" size="sm" class="self-start" onClick=${() => App.removePool(pool.id)}>Remove pool<//>`}
+        <${Button} variant="danger" size="sm" class="self-start" onClick=${() => { closeSheet('sheet-pool'); App.removePool(pool.id); }}>Remove pool<//>`}
     </div>
   <//>`;
 }
@@ -150,29 +150,67 @@ function Suggested({ vm }) {
   if (!vm.bills || vm.totalCash <= 0) return null;
   const notes = { 20: 'fill', 10: 'min', 5: 'min', 1: 'min' };
   return html`<${Card}>
-    <div class="mb-1 text-[14px] font-medium text-ink-2">Suggested bills for ${fmtMoney(vm.totalCash)}</div>
-    <div class="divide-y divide-sep">${[20, 10, 5, 1].filter(d => vm.bills[d]).map(d => html`<div key=${d} class="grid grid-cols-[56px_1fr_auto] items-center gap-3 py-2.5">
-      <${Denom} d=${d} /><span class="text-[15px] text-ink-2">× ${vm.bills[d]} <small class="ml-1 text-[13px] text-ink-3">${notes[d]}</small></span>
-      <span class="text-[17px] font-semibold tabular-nums">${fmtMoney(vm.bills[d] * d)}</span></div>`)}</div>
+    <div class="mb-1 text-[0.875rem] font-medium text-ink-2">Suggested bills for ${fmtMoney(vm.totalCash)}</div>
+    <div class="divide-y divide-sep">${[20, 10, 5, 1].filter(d => vm.bills[d]).map(d => html`<div key=${d} class="grid grid-cols-[3.5rem_1fr_auto] items-center gap-3 py-2.5">
+      <${Denom} d=${d} /><span class="text-[0.9375rem] text-ink-2">× ${vm.bills[d]} <small class="ml-1 text-[0.8125rem] text-ink-3">${notes[d]}</small></span>
+      <span class="text-[1.0625rem] font-semibold tabular-nums">${fmtMoney(vm.bills[d] * d)}</span></div>`)}</div>
   <//>`;
+}
+
+// Several pools: one compact card per pool → its sheet.
+function PoolTile({ pool, vm, i }) {
+  const vmPool = vm.pools.find(p => p.id === pool.id);
+  const total = vmPool ? vmPool.total : 0;
+  const who = [pool.roles?.bartender && 'bartender', pool.roles?.server && 'server', pool.includeSupport && 'support'].filter(Boolean);
+  return html`<button class="flex min-h-16 w-full items-center gap-3 rounded-card bg-surface py-3 pl-4 pr-3 text-left transition active:scale-[.98] active:bg-raised"
+    onClick=${() => App.openPool(pool.id)}>
+    <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span class="truncate text-[1.0625rem] font-semibold">${pool.label}</span>
+      <span class="flex items-center gap-2 text-[0.875rem] text-ink-2">${windowSub(pool, vmPool)}
+        ${vm.state.settings.allRoles && html`<span class="flex items-center gap-1">${who.map(r => html`<span key=${r} class=${cx('size-1.5 rounded-full', ROLE_DOT[r])}></span>`)}</span>`}
+        <span class="text-ink-3">· ${pool.cash.entryMode === 'perbill' ? 'bills' : 'net'}</span></span>
+    </span>
+    <span class=${cx('font-rounded text-[1.5rem] font-bold tracking-tight tabular-nums', !total && 'text-ink-3')}>${fmtMoney(total)}</span>
+    <${Icon} name="chevR" class="size-5 text-ink-3" />
+  </button>`;
 }
 
 function Tips({ vm }) {
   const state = vm.state;
-  const sel = activeSub('tips', state);
   const err = vm.inputError && /total|count|window|support/i.test(vm.blocked) ? vm.blocked : '';
-  const pools = state.pools.length === 1 ? state.pools : state.pools.filter(p => p.id === sel);
+  const single = state.pools.length === 1;
   return html`<div class="flex flex-col gap-3">
     ${err && html`<${Alert}>${err}<//>`}
-    ${pools.map(pool => html`<${PoolCard} key=${pool.id} pool=${pool} vm=${vm} />`)}
-    ${(state.settings.multiPool || state.pools.length > 1) && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
+    ${single
+      ? html`<${PoolCard} pool=${state.pools[0]} vm=${vm} />`
+      : state.pools.map((pool, i) => html`<${PoolTile} key=${pool.id} pool=${pool} vm=${vm} i=${i} />`)}
+    ${(state.settings.multiPool || !single) && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
     <${Suggested} vm=${vm} />
   </div>`;
 }
 
+// The pool sheet (several pools): the full editor card for one pool.
+let sheetPool = null;
+let lastVm = null;
+onSheetClose('sheet-pool', () => { sheetPool = null; });
+export function openPoolSheet(id) {
+  sheetPool = id;
+  openSheet('sheet-pool');
+  if (lastVm) renderPoolSheet(lastVm);
+}
+function renderPoolSheet(vm) {
+  if (!sheetPool || !isOpen('sheet-pool')) return;
+  const pool = vm.state.pools.find(p => p.id === sheetPool);
+  if (!pool || vm.state.pools.length < 2) { closeSheet('sheet-pool'); return; }
+  setSheetTitle('sheet-pool', pool.label || 'Pool');
+  render(html`<${PoolCard} key=${pool.id} pool=${pool} vm=${vm} />`, sheetBody('sheet-pool'));
+}
+
 export function renderTips(vm) {
+  lastVm = vm;
   const root = $('tips-root');
   if (root) render(html`<${Tips} vm=${vm} />`, root);
+  renderPoolSheet(vm);
 }
 
 // Kept for callers from before the Preact port: Preact always shows the

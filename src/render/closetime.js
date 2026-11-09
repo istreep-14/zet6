@@ -53,7 +53,7 @@ function Table({ vm, times, cols, pool, nowIdx }) {
   const people = vm.shares.perPerson;
   const now = i => i === nowIdx && 'bg-gold/15';
   const td = 'whitespace-nowrap px-1.5 py-3 text-center tabular-nums';
-  const name = 'sticky left-0 z-[1] max-w-[100px] truncate bg-raised py-3 pl-3.5 pr-2 text-left font-semibold';
+  const name = 'sticky left-0 z-[1] max-w-[6.25rem] truncate bg-raised py-3 pl-3.5 pr-2 text-left font-semibold';
   const dash = i => html`<td key=${i} class=${cx(td, 'text-ink-3', now(i))}>—</td>`;
 
   const avail15 = (pool[1] || 0) + (pool[5] || 0) * 5;
@@ -67,10 +67,10 @@ function Table({ vm, times, cols, pool, nowIdx }) {
     })}</tr>`;
 
   return html`<div class="overflow-x-auto rounded-card bg-raised" ...${pinch}>
-    <table class="w-full border-collapse text-[15px]">
+    <table class="w-full border-collapse text-[0.9375rem]">
       <thead><tr>
-        <th class=${cx(name, 'text-[12px] font-medium text-ink-2')}>Close</th>
-        ${times.map((t, i) => html`<th key=${t} class=${cx(td, 'min-w-[60px] cursor-pointer font-semibold', i === nowIdx ? 'bg-gold/15 text-gold' : 'text-ink')}
+        <th class=${cx(name, 'text-[0.75rem] font-medium text-ink-2')}>Close</th>
+        ${times.map((t, i) => html`<th key=${t} class=${cx(td, 'min-w-[3.75rem] cursor-pointer font-semibold', i === nowIdx ? 'bg-gold/15 text-gold' : 'text-ink')}
           onClick=${() => App.selectCloseTime(t)}>${fmtCloseTime(t)}</th>`)}
       </tr></thead>
       <tbody>
@@ -85,7 +85,7 @@ function Table({ vm, times, cols, pool, nowIdx }) {
           <td class=${name}>Chump</td>
           ${cols.map((c, i) => c?.shares.leftover ? html`<td key=${i} class=${cx(td, now(i))}>$${c.shares.leftover}</td>` : dash(i))}
         </tr>
-        <tr class="border-t border-sep"><td colspan=${times.length + 1} class="px-3.5 pb-1.5 pt-4 text-[13px] font-semibold text-ink-2">Small bills needed</td></tr>
+        <tr class="border-t border-sep"><td colspan=${times.length + 1} class="px-3.5 pb-1.5 pt-4 text-[0.8125rem] font-semibold text-ink-2">Small bills needed</td></tr>
         ${reqRow('$1s', c => ({ ok: c.req.minOnes <= (pool[1] || 0), val: c.req.minOnes }))}
         ${reqRow('$1+5', c => ({ ok: c.req.minOneFiveValue <= avail15, val: '$' + c.req.minOneFiveValue }))}
         ${reqRow('$1+5+10', c => ({ ok: c.req.minOneFiveTenValue <= avail1510, val: '$' + c.req.minOneFiveTenValue }))}
@@ -106,7 +106,7 @@ function CloseTime({ vm }) {
   const cols = times.map(t => buildCloseTimeColumn(vm.state, t, vm.bills));
   const nowIdx = times.findIndex(t => Math.abs(t - ctCenter) < 0.01);
   return html`<${LiveStrip} vm=${vm} />
-    <p class="text-[14px] leading-snug text-ink-3">Tap a time to make it the close. Pinch the table to widen or narrow the range.</p>
+    <p class="text-[0.875rem] leading-snug text-ink-3">Tap a time to make it the close. Pinch the table to widen or narrow the range.</p>
     <${Table} vm=${vm} times=${times} cols=${cols} pool=${vm.bills} nowIdx=${nowIdx} />`;
 }
 

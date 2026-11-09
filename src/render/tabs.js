@@ -17,25 +17,14 @@ const TITLES = { summary: 'Summary', staff: 'Staff', tips: 'Tips', payout: 'Payo
 //   tips   → Net total · Count bills                  (one pool: entry mode)
 //            one header per pool                       (several pools)
 //   payout → Bills · Working (Pools when several)
-//   summary has none
+//   summary → Total · <each pool> with several pools (ui.sub.summary)
 
-export function subsFor(tab, state) {
-  if (tab === 'staff') {
-    return state.settings.allRoles
-      ? [{ v: 'all', label: 'Everyone' }, { v: 'bartender', label: 'Bar' }, { v: 'server', label: 'Servers' }, { v: 'support', label: 'Support' }]
-      : [];
-  }
-  if (tab === 'tips') {
-    return state.pools.length > 1
-      ? state.pools.map((p, i) => ({ v: p.id, label: p.label.trim() || 'Pool ' + (i + 1) }))
-      : [{ v: 'nettotal', label: 'Net total' }, { v: 'perbill', label: 'Count bills' }];
-  }
-  if (tab === 'payout') {
-    return [{ v: 'bills', label: 'Bills' },
-      { v: 'working', label: state.pools.length > 1 ? 'Pools' : 'Working' }];
-  }
-  return [];
-}
+// No sub-tabs: every tab is one page (Staff stacks a table per role, Tips
+// lists pools as cards that open in a sheet, Payout shows bills then the
+// working, Summary opens a pool's table from its column header). The
+// machinery below stays inert (empty list → nothing rendered, swipes fall
+// through to the side panels).
+export function subsFor() { return []; }
 
 export function activeSub(tab, state) {
   const subs = subsFor(tab, state);
@@ -61,7 +50,7 @@ function Subtabs({ tab, vm, short }) {
   if (!subs.length) return null;
   const cur = activeSub(tab, vm.state);
   return html`<div class="subtabs-row" role="tablist">${subs.map(x => html`<button key=${x.v} class="subtab" role="tab"
-    aria-selected=${String(x.v === cur)} onClick=${() => App.sub(tab, x.v)}><span class="truncate">${x.label}</span><${SubAside} tab=${tab} v=${x.v} vm=${vm} short=${short} /></button>`)}</div>`;
+    aria-selected=${String(x.v === cur)} onClick=${() => App.sub(tab, x.v)}><span>${x.label}</span><${SubAside} tab=${tab} v=${x.v} vm=${vm} short=${short} /></button>`)}</div>`;
 }
 
 export function renderSubtabs(vm) {
@@ -127,8 +116,8 @@ export function updateTabIndicators(vm) {
 }
 
 const S = ({ k, v, cls }) => html`<span class="flex min-w-0 flex-col items-center gap-0.5 leading-tight">
-  <span class="text-[12px] font-medium text-ink-2">${k}</span>
-  <span class=${cx('font-rounded text-[18px] font-semibold tabular-nums', cls)}>${v}</span></span>`;
+  <span class="text-[0.75rem] font-medium text-ink-2">${k}</span>
+  <span class=${cx('font-rounded text-[1.125rem] font-semibold tabular-nums', cls)}>${v}</span></span>`;
 
 function Stats({ shares }) {
   return html`<${S} k="Rate" v=${'$' + shares.rate.toFixed(2)} cls="text-green" />
@@ -139,11 +128,11 @@ function Stats({ shares }) {
 // HUD: live numbers once the pipeline computes, the blocking reason otherwise.
 // Hidden on a pristine session.
 function Hud({ vm, total, short }) {
-  const msg = t => html`<span class=${cx('truncate text-[14px] font-medium', vm.blocked || short ? 'text-red' : 'text-ink-2')}>${t}</span>`;
+  const msg = t => html`<span class=${cx('truncate text-[0.875rem] font-medium', vm.blocked || short ? 'text-red' : 'text-ink-2')}>${t}</span>`;
   return html`<span class="flex min-w-0 flex-1 items-center justify-around gap-2">
       ${vm.shares && total > 0 && !vm.blocked ? html`<${Stats} shares=${vm.shares} />${short && msg('bills short')}` : msg(vm.blocked || 'Enter cash to calculate')}
     </span>
-    <span class="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-ink-2"><${Icon} name="chevR" class="size-[18px]" /></span>`;
+    <span class="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-ink-2"><${Icon} name="chevR" class="size-[1.125rem]" /></span>`;
 }
 
 function updateHud(vm, named, total, short) {

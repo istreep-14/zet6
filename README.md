@@ -18,7 +18,7 @@ The tab bar has three tabs, in the order you use them:
 
 Tap the bottom tabs to move around: **Summary** (the shift at a glance — total, rate, and what everyone takes home), **Staff**, **Tips** and **Payout** (the cash side). Inside a tab, swipe left or right to move between its sub-tabs — e.g. Payout's **Bills** (envelopes and any bill swaps) and **Working** (how the split was worked out).
 
-The menu button — or a swipe in from the left edge — opens the **sessions panel**: every saved shift (tap one to switch, Edit to rename or delete), **New session**, and app settings (servers & support, multiple pools, 24-hour time, import). The date in the header — or a swipe in from the right edge — opens **this shift's panel**: name, a calendar to set the date, default shift times, closer bonus, close-time what-if, export and delete.
+The menu button — or a swipe in from the left edge — opens the **sessions panel**: every saved shift (tap one to switch, Edit to rename or delete), **New session**, and app settings (servers & support, multiple pools, 24-hour time, display size Small / Medium / Large, import). The date in the header — or a swipe in from the right edge — opens **this shift's panel**: name, a calendar to set the date, default shift times, closer bonus, close-time what-if, export and delete.
 
 ### Staff
 

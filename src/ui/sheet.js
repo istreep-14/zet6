@@ -13,6 +13,8 @@ export const SHEETS = {
   'sheet-person': { title: 'Payout' },
   'sheet-bonus': { title: 'Closer bonus & chump' },
   'sheet-close': { title: 'Close-time what-if' },
+  'sheet-pool': { title: 'Pool', tall: true },
+  'sheet-poolsum': { title: 'Pool' },
 };
 
 const closeHooks = {};

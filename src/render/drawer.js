@@ -6,7 +6,7 @@
 
 import { fmtMoney } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Button, Label, SwitchRow, ListRow, SEP } from '../ui/pkit.js';
+import { cx, Icon, Card, Button, Label, Seg, SwitchRow, ListRow, SEP } from '../ui/pkit.js';
 import { todayISO } from '../sessions.js';
 import { isPanelOpen, onPanel } from '../ui/panels.js';
 
@@ -48,8 +48,8 @@ function DateTile({ iso, active }) {
   const wk = d ? new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(d) : '—';
   return html`<span class=${cx('flex size-12 shrink-0 flex-col items-center justify-center rounded-2xl leading-none',
     active ? 'bg-gold text-gold-ink' : 'bg-white/8 text-ink')}>
-    <span class=${cx('text-[10px] font-bold uppercase tracking-[.08em]', active ? 'text-gold-ink/70' : 'text-ink-3')}>${wk}</span>
-    <span class="mt-0.5 font-rounded text-[20px] font-bold tabular-nums">${d ? d.getDate() : '?'}</span>
+    <span class=${cx('text-[0.625rem] font-bold uppercase tracking-[.08em]', active ? 'text-gold-ink/70' : 'text-ink-3')}>${wk}</span>
+    <span class="mt-0.5 font-rounded text-[1.25rem] font-bold tabular-nums">${d ? d.getDate() : '?'}</span>
   </span>`;
 }
 
@@ -63,20 +63,20 @@ function SessionRow({ e, active }) {
   const main = html`<span class="flex min-w-0 flex-1 items-center gap-3">
       <${DateTile} iso=${e.date} active=${active} />
       <span class="min-w-0 flex-1">
-        <span class="flex items-center gap-1.5 text-[17px] font-semibold"><span class="truncate">${title}</span>${active && html`<span class="size-1.5 shrink-0 rounded-full bg-gold"></span>`}</span>
-        <span class="mt-0.5 block truncate text-[13px] text-ink-2">${sub}</span>
+        <span class="flex items-center gap-1.5 text-[1.0625rem] font-semibold"><span class="truncate">${title}</span>${active && html`<span class="size-1.5 shrink-0 rounded-full bg-gold"></span>`}</span>
+        <span class="mt-0.5 block truncate text-[0.8125rem] text-ink-2">${sub}</span>
       </span>
     </span>`;
-  const rowCls = cx('flex min-h-[68px] w-full items-center gap-3 px-3 text-left transition', SEP, active && 'bg-gold/[.07]');
+  const rowCls = cx('flex min-h-[4.25rem] w-full items-center gap-3 px-3 text-left transition', SEP, active && 'bg-gold/[.07]');
   if (editing) {
     return html`<div class=${rowCls}>${main}
       <span class="flex shrink-0 gap-1.5">
-        <button class=${cx(iconBtn, 'bg-fill text-ink-2 active:bg-high')} onClick=${() => App.renameSession(e.id)} aria-label="Rename"><${Icon} name="pencil" class="size-[17px]" /></button>
-        <button class=${cx(iconBtn, 'bg-red/15 text-red active:bg-red/25')} onClick=${() => App.deleteSession(e.id)} aria-label="Delete"><${Icon} name="trash" class="size-[17px]" /></button>
+        <button class=${cx(iconBtn, 'bg-fill text-ink-2 active:bg-high')} onClick=${() => App.renameSession(e.id)} aria-label="Rename"><${Icon} name="pencil" class="size-[1.0625rem]" /></button>
+        <button class=${cx(iconBtn, 'bg-red/15 text-red active:bg-red/25')} onClick=${() => App.deleteSession(e.id)} aria-label="Delete"><${Icon} name="trash" class="size-[1.0625rem]" /></button>
       </span></div>`;
   }
   return html`<button class=${cx(rowCls, 'active:bg-raised')} onClick=${() => App.switchSession(e.id)} aria-current=${active ? 'true' : 'false'}>${main}
-    <span class=${cx('shrink-0 font-rounded text-[18px] font-bold tabular-nums', e.total > 0 ? (active ? 'text-gold' : 'text-ink') : 'text-ink-3')}>${e.total > 0 ? fmtMoney(e.total) : '—'}</span>
+    <span class=${cx('shrink-0 font-rounded text-[1.125rem] font-bold tabular-nums', e.total > 0 ? (active ? 'text-gold' : 'text-ink') : 'text-ink-3')}>${e.total > 0 ? fmtMoney(e.total) : '—'}</span>
   </button>`;
 }
 
@@ -100,7 +100,7 @@ function Drawer({ vm, sessions, currentId }) {
 
     <${Label} aside=${(rows.length > 1 || editing) && html`<button class="font-semibold text-gold" onClick=${() => App.drawerEdit()}>${editing ? 'Done' : 'Edit'}</button>`}>Sessions<//>
     <${Card} flush>${rows.map(e => html`<${SessionRow} key=${e.id} e=${e} active=${e.id === currentId} />`)}<//>
-    ${editing && html`<p class="px-1 text-[13px] leading-snug text-ink-3">Deleting a session can’t be undone. Export it first to keep a copy.</p>`}
+    ${editing && html`<p class="px-1 text-[0.8125rem] leading-snug text-ink-3">Deleting a session can’t be undone. Export it first to keep a copy.</p>`}
 
     <${Label}>App settings<//>
     <${Card} flush>
@@ -108,13 +108,18 @@ function Drawer({ vm, sessions, currentId }) {
       <${SwitchRow} on=${s.settings.multiPool || extraPools} disabled=${extraPools} onClick=${toggle('multiPool')} label="Multiple pools"
         hint=${extraPools ? `On while ${s.pools.length} pools exist — remove extras to turn off` : 'Split tips by time window (e.g. lunch / dinner)'} />
       <${SwitchRow} on=${s.settings.clock24} onClick=${toggle('clock24')} label="24-hour time" hint="Show 17:00 instead of 5:00p" />
+      <div class="flex flex-col gap-2 border-t border-sep px-4 py-3">
+        <span class="font-semibold">Display size</span>
+        <${Seg} value=${s.settings.size || 'm'} onChange=${v => App.setSize(v)}
+          items=${[{ value: 's', label: 'Small' }, { value: 'm', label: 'Medium' }, { value: 'l', label: 'Large' }]} />
+      </div>
     <//>
 
     <${Card} flush>
       <${ListRow} icon="upload" chevron=${false} onClick=${() => App.triggerImport()}>Import a session (.json)<//>
       <${ListRow} icon="sliders" onClick=${() => App.panel('right')}>This shift’s settings<//>
     <//>
-    <p class="px-1 pt-1 text-center text-[13px] leading-snug text-ink-3">Shared by every session. Swipe in from the right edge for this shift’s date, times and tools.</p>`;
+    <p class="px-1 pt-1 text-center text-[0.8125rem] leading-snug text-ink-3">Shared by every session. Swipe in from the right edge for this shift’s date, times and tools.</p>`;
 }
 
 // sessions: [{ id, name, date, total, people }], currentId. The current

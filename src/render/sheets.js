@@ -7,7 +7,7 @@ import { fmtTimeAbs } from '../time.js';
 import { setBonuses, clearBonuses } from '../store.js';
 import { html, render } from '../ui/preact.js';
 import {
-  cx, staffIndex, Button, Stepper, Avatar, Badge, Stat, Field, Label, Money, Denom, LiveStrip, SEP,
+  cx, Button, Stepper, Badge, Stat, Field, Label, Money, Denom, LiveStrip, SEP,
 } from '../ui/pkit.js';
 import { closeSheet, isOpen, openSheet, sheetBody, onSheetClose } from '../ui/sheet.js';
 
@@ -29,16 +29,15 @@ function Person({ vm, p }) {
   const hasBills = bills && DENOMS.some(d => (bills[d] || 0) > 0);
   return html`
     <div class="flex items-center gap-3.5 py-1">
-      <${Avatar} name=${p.name} index=${staffIndex(vm.state, p.id)} size="xl" />
       <div class="min-w-0">
-        <div class="flex flex-wrap items-center gap-2 text-[24px] font-bold tracking-tight">${p.name}
+        <div class="flex flex-wrap items-center gap-2 text-[1.5rem] font-bold tracking-tight">${p.name}
           ${p.closer && html`<${Badge} tone="red">closer<//>`}<${Badge} tone=${p.role}>${p.role}<//></div>
-        <div class="mt-0.5 text-[15px] text-ink-2">${fmtHrs(p.shiftHours ?? p.hours)}h · ${inStr} – ${outStr}</div>
+        <div class="mt-0.5 text-[0.9375rem] text-ink-2">${fmtHrs(p.shiftHours ?? p.hours)}h · ${inStr} – ${outStr}</div>
       </div>
     </div>
     <div class="flex items-center justify-between rounded-2xl bg-raised px-4 py-3.5">
-      <span class="text-[17px] font-semibold">Takes home</span>
-      <${Money} value=${p.final} class="font-rounded text-[38px] font-bold tracking-tight text-gold" />
+      <span class="text-[1.0625rem] font-semibold">Takes home</span>
+      <${Money} value=${p.final} class="font-rounded text-[2.375rem] font-bold tracking-tight text-gold" />
     </div>
     <div class="grid grid-cols-2 gap-2">
       <${Stat} label="Base" value=${'$' + p.base} sub=${'$' + p.exact.toFixed(2) + ' exact'} />
@@ -49,8 +48,8 @@ function Person({ vm, p }) {
     <${Label}>Envelope<//>
     ${hasBills
       ? html`<div class="grid grid-cols-3 gap-1.5">${DENOMS.map(d => html`<div key=${d} class=${cx('flex items-center justify-between rounded-xl bg-raised px-3 py-2.5', !bills[d] && 'opacity-40')}>
-          <${Denom} d=${d} /><span class="font-rounded text-[22px] font-bold tabular-nums">${bills[d] || '—'}</span></div>`)}</div>`
-      : html`<div class="px-1 text-[14px] text-ink-3">No bill split yet.</div>`}
+          <${Denom} d=${d} /><span class="font-rounded text-[1.375rem] font-bold tabular-nums">${bills[d] || '—'}</span></div>`)}</div>`
+      : html`<div class="px-1 text-[0.875rem] text-ink-3">No bill split yet.</div>`}
     <${Label}>Shift<//>
     <div class="flex gap-3">
       <${Field} label="In" value=${raw?.in ?? ''} placeholder=${inStr} inputmode="decimal" onChange=${e => App.staffField(p.id, 'in', e.target.value)} />
@@ -92,16 +91,16 @@ function Bonus({ vm }) {
     <div class="overflow-hidden rounded-card bg-raised">
       ${s.perPerson.map(p => html`<div key=${p.id} class=${cx('grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-2.5', SEP)}>
         <div class="min-w-0">
-          <div class="flex min-w-0 items-center gap-1.5 text-[17px] font-semibold"><span class="truncate">${p.name}</span>${p.closer && html`<${Badge} tone="red">closer<//>`}</div>
-          <div class="mt-0.5 text-[13px] text-ink-3">$${p.exact.toFixed(2)} → $${p.base}</div>
+          <div class="flex min-w-0 items-center gap-1.5 text-[1.0625rem] font-semibold"><span class="truncate">${p.name}</span>${p.closer && html`<${Badge} tone="red">closer<//>`}</div>
+          <div class="mt-0.5 text-[0.8125rem] text-ink-3">$${p.exact.toFixed(2)} → $${p.base}</div>
         </div>
         <${Stepper} value=${p.bonus > 0 ? '+' + p.bonus : '0'} on=${p.bonus > 0}
           onDec=${() => App.remBonus(p.id, -1)} onInc=${() => App.remBonus(p.id, 1)}
           decDisabled=${!(p.bonus > 0)} incDisabled=${!(leftover > 0)} />
-        <span class="min-w-14 text-right font-rounded text-[22px] font-bold tracking-tight">$${p.final}</span>
+        <span class="min-w-14 text-right font-rounded text-[1.375rem] font-bold tracking-tight">$${p.final}</span>
       </div>`)}
     </div>
-    <div class="flex flex-col gap-2.5 rounded-2xl bg-raised p-4 text-[15px]">
+    <div class="flex flex-col gap-2.5 rounded-2xl bg-raised p-4 text-[0.9375rem]">
       ${sum('Rounded-down shares', fmtMoney(floored))}
       ${sum('Remainder', fmtMoney(remainder))}
       ${sum('Given as bonus', bonusSum > 0 ? fmtMoney(bonusSum) : '—')}

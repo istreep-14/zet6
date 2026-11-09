@@ -67,7 +67,7 @@ function Calendar({ selected, sessionDates }) {
     const v = iso(d);
     const sel = v === selected;
     cells.push(html`<button key=${v} class=${cx(
-      'relative mx-auto grid size-10 place-items-center rounded-full font-rounded text-[16px] font-semibold tabular-nums transition active:scale-90',
+      'relative mx-auto grid size-10 place-items-center rounded-full font-rounded text-[1rem] font-semibold tabular-nums transition active:scale-90',
       sel ? 'bg-gold text-gold-ink' : v === today ? 'text-gold ring-1 ring-inset ring-gold/60' : 'text-ink active:bg-high',
     )} onClick=${() => App.setDate(v)} aria-label=${v} aria-pressed=${String(sel)}>${d}${
       !sel && sessionDates.has(v) && html`<i class="absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full bg-ink-2"></i>`}</button>`);
@@ -75,12 +75,12 @@ function Calendar({ selected, sessionDates }) {
 
   return html`<${Card} class="flex flex-col gap-1 !px-3 !py-3">
     <div class="flex items-center gap-0.5 pb-1 pl-2">
-      <span class="min-w-0 flex-1 truncate whitespace-nowrap text-[16px] font-bold">${title}</span>
-      <button class="h-8 shrink-0 rounded-full bg-fill px-2.5 text-[13px] font-semibold text-ink active:bg-high" onClick=${() => calendarStep(0)}>Today</button>
+      <span class="min-w-0 flex-1 truncate whitespace-nowrap text-[1rem] font-bold">${title}</span>
+      <button class="h-8 shrink-0 rounded-full bg-fill px-2.5 text-[0.8125rem] font-semibold text-ink active:bg-high" onClick=${() => calendarStep(0)}>Today</button>
       <button class=${nav} onClick=${() => calendarStep(-1)} aria-label="Previous month"><${Icon} name="chevR" class="size-5 rotate-180" /></button>
       <button class=${nav} onClick=${() => calendarStep(1)} aria-label="Next month"><${Icon} name="chevR" class="size-5" /></button>
     </div>
-    <div class="grid grid-cols-7 text-center text-[11px] font-bold uppercase tracking-wider text-ink-3">
+    <div class="grid grid-cols-7 text-center text-[0.6875rem] font-bold uppercase tracking-wider text-ink-3">
       ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => html`<span key=${i} class="py-1">${d}</span>`)}
     </div>
     <div class="grid grid-cols-7 gap-y-1">${cells}</div>
@@ -95,7 +95,7 @@ function ShiftPanel({ vm, sessions, currentId }) {
   const entry = sessions.find(e => e.id === currentId) || {};
   const sessionDates = new Set(sessions.filter(e => e.id !== currentId).map(e => e.date));
   const ROLE_NAME = { bartender: 'Bar', server: 'Server', support: 'Support' };
-  const note = 'text-[13px] leading-snug text-ink-3';
+  const note = 'text-[0.8125rem] leading-snug text-ink-3';
 
   return html`
     <${Field} label="Session name" value=${entry.name || ''} placeholder="e.g. Brunch, Private party" maxlength="40" enterkeyhint="done"
@@ -113,11 +113,11 @@ function ShiftPanel({ vm, sessions, currentId }) {
       <p class=${note}>Fills any blank In/Out. Blank Outs inherit the close time, which also decides the auto closers. Type 5, 10.5, 2 …</p>
     <//>
     ${s.settings.allRoles && html`<${Card} class="flex flex-col gap-3">
-      <div class="text-[14px] font-medium text-ink-2">Per role</div>
-      <div class="grid grid-cols-[72px_1fr_1fr] items-center gap-x-3 gap-y-2.5">
-        <span></span><span class="text-center text-[13px] font-medium text-ink-2">In</span><span class="text-center text-[13px] font-medium text-ink-2">Out</span>
+      <div class="text-[0.875rem] font-medium text-ink-2">Per role</div>
+      <div class="grid grid-cols-[4.5rem_1fr_1fr] items-center gap-x-3 gap-y-2.5">
+        <span></span><span class="text-center text-[0.8125rem] font-medium text-ink-2">In</span><span class="text-center text-[0.8125rem] font-medium text-ink-2">Out</span>
         ${['bartender', 'server', 'support'].map(r => html`
-          <span key=${r + 'l'} class=${cx('text-[15px] font-semibold', ROLE_TEXT[r])}>${ROLE_NAME[r]}</span>
+          <span key=${r + 'l'} class=${cx('text-[0.9375rem] font-semibold', ROLE_TEXT[r])}>${ROLE_NAME[r]}</span>
           ${['in', 'out'].map(f => html`<input key=${r + f} class=${cx(INPUT, 'text-center font-semibold')} inputmode="decimal" placeholder="—"
             value=${d.byRole[r][f] ?? ''} onInput=${e => App.roleDefault(r, f, e.target.value)} aria-label=${r + ' ' + f} />`)}`)}
       </div>

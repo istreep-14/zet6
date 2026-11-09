@@ -57,7 +57,7 @@ export function initialState() {
     overrides: { bonuses: {} },
     // Simple mode by default: one staff list, one pool. allRoles exposes the
     // server/support split; multiPool exposes add-pool / windows / labels.
-    settings: { allRoles: false, multiPool: false, clock24: false },
+    settings: { allRoles: false, multiPool: false, clock24: false, size: 'm' },
     ui: { activeTab: 'summary', staffViewRole: 'bartender', selectedPool: pool.id, sub: {} },
   };
   return state;
@@ -207,8 +207,16 @@ export function normalizeSettings(state) {
     allRoles: typeof s.allRoles === 'boolean' ? s.allRoles : usesRoles,
     multiPool: typeof s.multiPool === 'boolean' ? s.multiPool : state.pools.length > 1,
     clock24: typeof s.clock24 === 'boolean' ? s.clock24 : false,
+    size: SIZES.includes(s.size) ? s.size : 'm',
   };
   return state;
+}
+
+// Display size: s / m / l → root font size 12 / 13.5 / 16px (css/app.css).
+export const SIZES = ['s', 'm', 'l'];
+export function setSize(size) {
+  if (!SIZES.includes(size)) return;
+  mutate(s => { s.settings.size = size; }, { immediate: true });
 }
 
 export function setSetting(key, value) {
