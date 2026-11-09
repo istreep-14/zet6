@@ -11,7 +11,7 @@ import { fmtTimeAbs } from '../time.js';
 import { planMakeChange, computeTradeUp, distribute } from '../engine.js';
 import { updatePool } from '../store.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, Row, Sentinel, zebra } from '../ui/pkit.js';
+import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra } from '../ui/pkit.js';
 import { invalidateTips } from './tips.js';
 
 const $ = id => document.getElementById(id);
@@ -88,43 +88,15 @@ function Envelopes({ vm, byPerson, remBills, note }) {
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
   const cols = DENOMS.filter(d => colTotal(d) > 0);
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
-
-  const V = 'border-l border-sep';
-  const nameTd = 'truncate py-2.5 pl-3 pr-1 text-left';
-  const payTd = cx(V, 'py-2.5 pl-0.5 pr-3 text-right');
-  const Bill = ({ n }) => html`<td class=${cx(V, 'px-0 py-2.5 text-center font-rounded', n > 0 ? 'font-bold' : 'text-ink-3/40')}>${n > 0 ? n : '–'}</td>`;
-
-  return html`<${Section} title="Envelopes" aside=${note}><${Card} flush>
-    <${Sentinel} />
-    <table class="w-full table-fixed border-collapse whitespace-nowrap text-[0.9375rem] tabular-nums max-[23.375rem]:text-[0.8125rem]">
-      <colgroup><col class="w-[28%]" />${cols.map(d => html`<col key=${d} />`)}<col class="w-[20%]" /></colgroup>
-      <thead class="thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--color-sep)] [&_th]:transition-[padding] data-[stuck]:[&_th]:py-0.5"><tr class="text-[0.6875rem] font-semibold uppercase tracking-wide text-ink-3">
-        <th class=${cx(nameTd, 'py-1.5 font-semibold')}>Name</th>
-        ${cols.map(d => html`<th key=${d} class=${cx(V, 'bill-col py-1.5 text-center text-[0.6875rem] normal-case tracking-tight')} data-d=${d}>${d}</th>`)}
-        <th class=${cx(payTd, 'py-1.5 font-semibold')}>Pay</th>
-      </tr></thead>
-      <tbody>
-        ${ordered.map((p, i) => {
-          const b = byPerson[p.id] || {};
-          return html`<tr key=${p.id} class=${cx('cursor-pointer transition active:bg-raised', zebra(i))} onClick=${() => App.personModal(p.id)}>
-            <td class=${cx(nameTd, 'font-semibold')}>${p.name}</td>
-            ${cols.map(d => html`<${Bill} key=${d} n=${b[d] || 0} />`)}
-            <td class=${payTd}><${Money} value=${p.final} class=${cx('font-rounded font-bold', !(p.final > 0) && 'text-ink-3')} /></td>
-          </tr>`;
-        })}
-        ${s.leftover > 0 && html`<tr class=${cx('text-ink-2', zebra(ordered.length))}>
-          <td class=${nameTd}>Chump</td>
-          ${cols.map(d => html`<${Bill} key=${d} n=${rem[d] || 0} />`)}
-          <td class=${payTd}><${Money} value=${s.leftover} class="font-semibold" /></td>
-        </tr>`}
-      </tbody>
-      <tfoot><tr class="border-t border-white/15 bg-raised">
-        <td class=${cx(nameTd, 'text-[0.6875rem] font-bold uppercase tracking-wider text-ink-2')}>Total</td>
-        ${cols.map(d => html`<td key=${d} class=${cx(V, 'bill-col px-0 py-2.5 text-center')} data-d=${d}>${colTotal(d)}</td>`)}
-        <td class=${payTd}><${Money} value=${grand} class="font-rounded text-[0.875rem] font-bold text-gold" /></td>
-      </tr></tfoot>
-    </table>
-  <//><//>`;
+  const n = v => v > 0 ? html`<span class="font-rounded font-bold">${v}</span>` : html`<span class="text-ink-3/40">–</span>`;
+  return html`<${Section} title="Envelopes" aside=${note}><${Table} fixed
+    cols=${[{ label: 'Name', w: 'w-[28%]' }, ...cols.map(d => ({ head: html`<span class="bill-col rounded-md px-1.5 py-0.5 normal-case tracking-tight" data-d=${d}>${d}</span>` })), { label: 'Pay', align: 'right', w: 'w-[20%]' }]}
+    rows=${[
+      ...ordered.map(p => ({ key: p.id, onClick: () => App.personModal(p.id),
+        cells: [p.name, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), html`<${Money} value=${p.final} class=${cx('font-rounded font-bold', !(p.final > 0) && 'text-ink-3')} />`] })),
+      ...(s.leftover > 0 ? [{ key: 'chump', tone: 'muted', cells: ['Chump', ...cols.map(d => n(rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
+    ]}
+    foot=${['Total', ...cols.map(d => html`<span class="bill-col rounded-md px-1.5 py-0.5" data-d=${d}>${colTotal(d)}</span>`), html`<${Money} value=${grand} class="font-rounded text-gold" />`]} /><//>`;
 }
 
 // ── Status: exact change, or the fix card ────────────────────────────────────
@@ -137,37 +109,25 @@ function ExactChange({ vm }) {
 function SmallBills({ req, pool }) {
   const minFives = Math.max(0, (req.minOneFiveValue - req.minOnes) / 5);
   const minTens = Math.max(0, (req.minOneFiveTenValue - req.minOneFiveValue) / 10);
-  const Row = ({ d, need, have, short }) => html`<div class="grid grid-cols-[3.5rem_1fr_1fr_auto] items-center gap-2 py-2 text-[0.9375rem]">
-    <${Denom} d=${d} /><span class="text-ink-2">need ${Math.ceil(need)}</span><span class="text-ink-2">have ${have}</span>
-    <span class="justify-self-end">${short > 0
-      ? html`<span class="rounded-full bg-red/15 px-2.5 py-0.5 text-[0.8125rem] font-semibold text-red">short ${Math.ceil(short / d)}</span>`
-      : html`<span class="rounded-full bg-green/15 px-2.5 py-0.5 text-[0.8125rem] font-semibold text-green">${have < Math.ceil(need) ? '✓ via smaller' : '✓ ok'}</span>`}</span>
-  </div>`;
-  return html`<div class="rounded-2xl bg-black/20 px-3.5 py-1.5">
-    <div class="pt-1.5 text-[0.8125rem] font-semibold text-ink-2">Small bills needed</div>
-    <div class="divide-y divide-sep">
-      <${Row} d=${1} need=${req.minOnes} have=${pool[1] || 0} short=${req.onesShort} />
-      <${Row} d=${5} need=${minFives} have=${pool[5] || 0} short=${Math.max(0, req.oneFiveShort - req.onesShort)} />
-      <${Row} d=${10} need=${minTens} have=${pool[10] || 0} short=${Math.max(0, req.oneFiveTenShort - req.oneFiveShort)} />
-    </div>
-  </div>`;
+  const row = (d, need, have, short) => ({ key: d, cells: [html`<${Denom} d=${d} />`, Math.ceil(need), have, short > 0
+    ? html`<span class="font-semibold text-red">short ${Math.ceil(short / d)}</span>`
+    : html`<span class="font-semibold text-green">${have < Math.ceil(need) ? '✓ via smaller' : '✓'}</span>`] });
+  return html`<${Table} cols=${[{ label: 'Small bills' }, { label: 'Need' }, { label: 'Have' }, { label: '', align: 'right' }]} rows=${[
+    row(1, req.minOnes, pool[1] || 0, req.onesShort),
+    row(5, minFives, pool[5] || 0, Math.max(0, req.oneFiveShort - req.onesShort)),
+    row(10, minTens, pool[10] || 0, Math.max(0, req.oneFiveTenShort - req.oneFiveShort)),
+  ]} />`;
 }
 
-// Swap preview, one row per bill size: Bill · Now · Swap · After.
 function SwapTable({ now, deltas, after }) {
-  const rows = DENOMS.filter(d => (now[d] || 0) || (after[d] || 0) || (deltas[d] || 0));
-  return html`<div class="rounded-2xl bg-black/20 px-3.5 py-1">
-    <div class="grid grid-cols-[1.1fr_1fr_1fr_1fr] pb-1 pt-2 text-center text-[0.8125rem] font-medium text-ink-2"><span class="text-left">Bill</span><span>Now</span><span>Swap</span><span>After</span></div>
-    <div class="divide-y divide-sep">${rows.map(d => {
+  const ds = DENOMS.filter(d => (now[d] || 0) || (after[d] || 0) || (deltas[d] || 0));
+  return html`<${Table} cols=${[{ label: 'Bill' }, { label: 'Now' }, { label: 'Swap' }, { label: 'After' }]}
+    rows=${ds.map(d => {
       const v = deltas[d] || 0;
-      return html`<div key=${d} class="grid grid-cols-[1.1fr_1fr_1fr_1fr] items-center py-2 text-center text-[1.0625rem] font-semibold tabular-nums">
-        <span class="text-left"><${Denom} d=${d} /></span>
-        <span class="text-ink-2">${now[d] || 0}</span>
-        <span class=${v > 0 ? 'text-green' : v < 0 ? 'text-red' : 'text-ink-3'}>${v === 0 ? '—' : (v > 0 ? '+' : '−') + Math.abs(v)}</span>
-        <span class=${v ? 'text-gold' : ''}>${after[d] || 0}</span>
-      </div>`;
-    })}</div>
-  </div>`;
+      return { key: d, cells: [html`<${Denom} d=${d} />`, html`<span class="text-ink-2">${now[d] || 0}</span>`,
+        html`<span class=${cx('font-semibold', v > 0 ? 'text-green' : v < 0 ? 'text-red' : 'text-ink-3')}>${v === 0 ? '—' : (v > 0 ? '+' : '−') + Math.abs(v)}</span>`,
+        html`<span class=${cx('font-semibold', v && 'text-gold')}>${after[d] || 0}</span>`] };
+    })} />`;
 }
 
 function FixCard({ vm, errMsg, plan }) {
@@ -262,9 +222,9 @@ function Worksheet({ vm }) {
 }
 
 function PoolsList({ vm }) {
-  return html`<${Section} title="Pools"><${Card} flush>${vm.shares.perPool.map(p => html`<${Row} key=${p.id} title=${p.label}
+  return html`<${Section} title="Pools"><${List}>${vm.shares.perPool.map(p => html`<${Item} key=${p.id} title=${p.label}
     sub=${`${fmtTimeAbs(p.startAbs)}–${fmtTimeAbs(p.endAbs)} · ${fmtHrs(p.tippedHours)}h${p.tippedHours > 0 ? ' · $' + p.rate.toFixed(2) + '/hr' : ''}${p.support?.cut > 0 ? ' · −' + fmtMoney(p.support.cut) + ' support' : ''}`}
-    trail=${html`<span class="font-rounded text-[1.375rem] font-bold tracking-tight">${fmtMoney(p.total)}</span>`} />`)}<//><//>`;
+    value=${fmtMoney(p.total)} />`)}<//><//>`;
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────

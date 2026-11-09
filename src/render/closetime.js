@@ -6,7 +6,7 @@ import { parseTime } from '../time.js';
 import { buildCloseTimeColumn } from '../viewmodel.js';
 import { setGlobalDefault } from '../store.js';
 import { html, render } from '../ui/preact.js';
-import { cx, LiveStrip } from '../ui/pkit.js';
+import { cx, LiveStrip, Table } from '../ui/pkit.js';
 import { openSheet, isOpen, sheetBody } from '../ui/sheet.js';
 
 let vmRef = null;
@@ -49,49 +49,29 @@ const pinch = {
   onTouchEnd: () => { d0 = 0; },
 };
 
-function Table({ vm, times, cols, pool, nowIdx }) {
+function CloseTable({ vm, times, cols, pool, nowIdx }) {
   const people = vm.shares.perPerson;
-  const now = i => i === nowIdx && 'bg-gold/15';
-  const td = 'whitespace-nowrap px-1.5 py-3 text-center tabular-nums';
-  const name = 'sticky left-0 z-[1] max-w-[6.25rem] truncate bg-raised py-3 pl-3.5 pr-2 text-left font-semibold';
-  const dash = i => html`<td key=${i} class=${cx(td, 'text-ink-3', now(i))}>—</td>`;
-
+  const dash = html`<span class="text-ink-3">—</span>`;
   const avail15 = (pool[1] || 0) + (pool[5] || 0) * 5;
   const avail1510 = avail15 + (pool[10] || 0) * 10;
-  const reqRow = (label, get) => html`<tr class="border-t border-sep">
-    <td class=${cx(name, 'font-normal text-ink-2')}>${label}</td>
-    ${cols.map((c, i) => {
-      if (!c) return dash(i);
-      const { ok, val } = get(c);
-      return html`<td key=${i} class=${cx(td, ok ? 'text-green' : 'font-bold text-red', now(i))}>${val}</td>`;
-    })}</tr>`;
-
-  return html`<div class="overflow-x-auto rounded-card bg-raised" ...${pinch}>
-    <table class="w-full border-collapse text-[0.9375rem]">
-      <thead><tr>
-        <th class=${cx(name, 'text-[0.75rem] font-medium text-ink-2')}>Close</th>
-        ${times.map((t, i) => html`<th key=${t} class=${cx(td, 'min-w-[3.75rem] cursor-pointer font-semibold', i === nowIdx ? 'bg-gold/15 text-gold' : 'text-ink')}
-          onClick=${() => App.selectCloseTime(t)}>${fmtCloseTime(t)}</th>`)}
-      </tr></thead>
-      <tbody>
-        ${people.map(person => html`<tr key=${person.id} class="border-t border-sep">
-          <td class=${name}>${person.name}</td>
-          ${cols.map((col, i) => {
-            const p = col?.shares.perPerson.find(x => x.id === person.id);
-            if (!p || p.final <= 0) return dash(i);
-            return html`<td key=${i} class=${cx(td, p.closer && 'font-bold text-red', now(i))}>$${p.final}</td>`;
-          })}</tr>`)}
-        <tr class="border-t border-sep text-ink-2">
-          <td class=${name}>Chump</td>
-          ${cols.map((c, i) => c?.shares.leftover ? html`<td key=${i} class=${cx(td, now(i))}>$${c.shares.leftover}</td>` : dash(i))}
-        </tr>
-        <tr class="border-t border-sep"><td colspan=${times.length + 1} class="px-3.5 pb-1.5 pt-4 text-[0.8125rem] font-semibold text-ink-2">Small bills needed</td></tr>
-        ${reqRow('$1s', c => ({ ok: c.req.minOnes <= (pool[1] || 0), val: c.req.minOnes }))}
-        ${reqRow('$1+5', c => ({ ok: c.req.minOneFiveValue <= avail15, val: '$' + c.req.minOneFiveValue }))}
-        ${reqRow('$1+5+10', c => ({ ok: c.req.minOneFiveTenValue <= avail1510, val: '$' + c.req.minOneFiveTenValue }))}
-      </tbody>
-    </table>
-  </div>`;
+  const req = (label, get) => ({ key: label, tone: 'muted', cells: [label, ...cols.map(c => {
+    if (!c) return dash;
+    const { ok, val } = get(c);
+    return html`<span class=${ok ? 'text-green' : 'font-bold text-red'}>${val}</span>`;
+  })] });
+  return html`<div ...${pinch}><${Table} scroll stickyFirst
+    cols=${[{ label: 'Close' }, ...times.map((t, i) => ({ head: fmtCloseTime(t), hl: i === nowIdx, onHead: () => App.selectCloseTime(t) }))]}
+    rows=${[
+      ...people.map(person => ({ key: person.id, cells: [person.name, ...cols.map(col => {
+        const p = col?.shares.perPerson.find(x => x.id === person.id);
+        return !p || p.final <= 0 ? dash : html`<span class=${p.closer ? 'font-bold text-red' : ''}>$${p.final}</span>`;
+      })] })),
+      { key: 'chump', tone: 'muted', cells: ['Chump', ...cols.map(c => c?.shares.leftover ? '$' + c.shares.leftover : dash)] },
+      { section: 'Small bills needed' },
+      req('$1s', c => ({ ok: c.req.minOnes <= (pool[1] || 0), val: c.req.minOnes })),
+      req('$1+5', c => ({ ok: c.req.minOneFiveValue <= avail15, val: '$' + c.req.minOneFiveValue })),
+      req('$1+5+10', c => ({ ok: c.req.minOneFiveTenValue <= avail1510, val: '$' + c.req.minOneFiveTenValue })),
+    ]} /></div>`;
 }
 
 function CloseTime({ vm }) {
@@ -107,7 +87,7 @@ function CloseTime({ vm }) {
   const nowIdx = times.findIndex(t => Math.abs(t - ctCenter) < 0.01);
   return html`<${LiveStrip} vm=${vm} />
     <p class="text-[0.875rem] leading-snug text-ink-3">Tap a time to make it the close. Pinch the table to widen or narrow the range.</p>
-    <${Table} vm=${vm} times=${times} cols=${cols} pool=${vm.bills} nowIdx=${nowIdx} />`;
+    <${CloseTable} vm=${vm} times=${times} cols=${cols} pool=${vm.bills} nowIdx=${nowIdx} />`;
 }
 
 export function renderCloseTime(vm) {

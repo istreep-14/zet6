@@ -7,7 +7,7 @@
 // Re-rendered with every app render while open; Preact keeps input focus.
 
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Field, Label, ListRow, INPUT, ROLE_TEXT } from '../ui/pkit.js';
+import { cx, Icon, Card, Field, Label, ListRow, List, INPUT, ROLE_TEXT } from '../ui/pkit.js';
 import { todayISO } from '../sessions.js';
 import { isPanelOpen, onPanel } from '../ui/panels.js';
 
@@ -129,13 +129,13 @@ function ShiftPanel({ vm, sessions, currentId }) {
     <//>`}
 
     <${Label}>Tools<//>
-    <${Card} flush>
+    <${List}>
       <${ListRow} icon="gift" onClick=${() => App.openBonus()}>Closer bonus & chump<//>
       <${ListRow} icon="sliders" onClick=${() => App.openCloseTime()}>Close-time what-if<//>
     <//>
 
     <${Label}>This session<//>
-    <${Card} flush>
+    <${List}>
       <${ListRow} icon="download" chevron=${false} onClick=${() => App.exportSession()}>Export JSON<//>
       <${ListRow} icon="trash" tone="danger" chevron=${false} onClick=${() => App.deleteSession(currentId)}>Delete session<//>
     <//>`;

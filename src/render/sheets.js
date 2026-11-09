@@ -7,7 +7,7 @@ import { fmtTimeAbs } from '../time.js';
 import { setBonuses, clearBonuses } from '../store.js';
 import { html, render } from '../ui/preact.js';
 import {
-  cx, Button, Stepper, Badge, Stat, Field, Label, Money, Denom, LiveStrip, SEP,
+  cx, Button, Stepper, Badge, Stat, Field, Label, Money, Denom, LiveStrip, List, Item,
 } from '../ui/pkit.js';
 import { closeSheet, isOpen, openSheet, sheetBody, onSheetClose } from '../ui/sheet.js';
 
@@ -81,31 +81,27 @@ function Bonus({ vm }) {
   const bonusSum = s.perPerson.reduce((t, p) => t + p.bonus, 0);
   const leftover = remainder - bonusSum;
   const manual = s.bonusMode === 'manual';
-  const sum = (k, v, cls = '') => html`<div class="flex justify-between text-ink-2"><span>${k}</span><span class=${cx('font-semibold text-ink', cls)}>${v}</span></div>`;
 
   return html`<${LiveStrip} vm=${vm} />
     <div class="flex items-center justify-between gap-2 rounded-2xl bg-raised px-4 py-3.5 font-semibold">
       <span>$${remainder} left after rounding down</span>
       ${manual ? html`<${Badge} tone="amber">manual<//>` : html`<${Badge} tone="green">auto · closers<//>`}
     </div>
-    <div class="overflow-hidden rounded-card bg-raised">
-      ${s.perPerson.map(p => html`<div key=${p.id} class=${cx('grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 px-4 py-2.5', SEP)}>
-        <div class="min-w-0">
-          <div class="flex min-w-0 items-center gap-1.5 text-[1.0625rem] font-semibold"><span class="truncate">${p.name}</span>${p.closer && html`<${Badge} tone="red">closer<//>`}</div>
-          <div class="mt-0.5 text-[0.8125rem] text-ink-3">$${p.exact.toFixed(2)} → $${p.base}</div>
-        </div>
-        <${Stepper} value=${p.bonus > 0 ? '+' + p.bonus : '0'} on=${p.bonus > 0}
+    <${List}>
+      ${s.perPerson.map(p => html`<${Item} key=${p.id} chevron=${false}
+        title=${html`<span class="truncate">${p.name}</span>${p.closer && html`<${Badge} tone="red">closer<//>`}`}
+        sub=${'$' + p.exact.toFixed(2) + ' → $' + p.base}
+        trail=${html`<${Stepper} value=${p.bonus > 0 ? '+' + p.bonus : '0'} on=${p.bonus > 0}
           onDec=${() => App.remBonus(p.id, -1)} onInc=${() => App.remBonus(p.id, 1)}
-          decDisabled=${!(p.bonus > 0)} incDisabled=${!(leftover > 0)} />
-        <span class="min-w-14 text-right font-rounded text-[1.375rem] font-bold tracking-tight">$${p.final}</span>
-      </div>`)}
-    </div>
-    <div class="flex flex-col gap-2.5 rounded-2xl bg-raised p-4 text-[0.9375rem]">
-      ${sum('Rounded-down shares', fmtMoney(floored))}
-      ${sum('Remainder', fmtMoney(remainder))}
-      ${sum('Given as bonus', bonusSum > 0 ? fmtMoney(bonusSum) : '—')}
-      ${sum('Chump (stays in drawer)', leftover > 0 ? fmtMoney(leftover) : '—', 'text-gold')}
-    </div>
+          decDisabled=${!(p.bonus > 0)} incDisabled=${!(leftover > 0)} />`}
+        value=${'$' + p.final} valueTone="min-w-14 text-right" />`)}
+    <//>
+    <${List}>
+      <${Item} title="Rounded-down shares" chevron=${false} value=${fmtMoney(floored)} valueTone="text-[1.0625rem]" />
+      <${Item} title="Remainder" chevron=${false} value=${fmtMoney(remainder)} valueTone="text-[1.0625rem]" />
+      <${Item} title="Given as bonus" chevron=${false} value=${bonusSum > 0 ? fmtMoney(bonusSum) : '—'} valueTone="text-[1.0625rem]" />
+      <${Item} title="Chump" sub="Stays in the drawer" chevron=${false} value=${leftover > 0 ? fmtMoney(leftover) : '—'} valueTone="text-[1.0625rem] text-gold" />
+    <//>
     ${manual && html`<${Button} block onClick=${() => App.resetRemBonuses()}>↺ Reset to auto (closers split)<//>`}`;
 }
 

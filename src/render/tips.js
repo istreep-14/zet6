@@ -9,7 +9,7 @@
 import { DENOMS, parseWholeNumber, fmtHrs, fmtMoney } from '../util.js';
 import { fmtTimeAbs, overlapHours } from '../time.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, INPUT, ROLE_DOT } from '../ui/pkit.js';
+import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, INPUT, ROLE_DOT } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
@@ -158,21 +158,15 @@ function Suggested({ vm }) {
 }
 
 // Several pools: one compact card per pool → its sheet.
-function PoolTile({ pool, vm, i }) {
+function PoolTile({ pool, vm }) {
   const vmPool = vm.pools.find(p => p.id === pool.id);
   const total = vmPool ? vmPool.total : 0;
   const who = [pool.roles?.bartender && 'bartender', pool.roles?.server && 'server', pool.includeSupport && 'support'].filter(Boolean);
-  return html`<button class="flex min-h-16 w-full items-center gap-3 rounded-card bg-surface py-3 pl-4 pr-3 text-left transition active:scale-[.98] active:bg-raised"
-    onClick=${() => App.openPool(pool.id)}>
-    <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span class="truncate text-[1.0625rem] font-semibold">${pool.label}</span>
-      <span class="flex items-center gap-2 text-[0.875rem] text-ink-2">${windowSub(pool, vmPool)}
-        ${vm.state.settings.allRoles && html`<span class="flex items-center gap-1">${who.map(r => html`<span key=${r} class=${cx('size-1.5 rounded-full', ROLE_DOT[r])}></span>`)}</span>`}
-        <span class="text-ink-3">· ${pool.cash.entryMode === 'perbill' ? 'bills' : 'net'}</span></span>
-    </span>
-    <span class=${cx('font-rounded text-[1.5rem] font-bold tracking-tight tabular-nums', !total && 'text-ink-3')}>${fmtMoney(total)}</span>
-    <${Icon} name="chevR" class="size-5 text-ink-3" />
-  </button>`;
+  return html`<${Item} onClick=${() => App.openPool(pool.id)} title=${pool.label}
+    sub=${html`<span class="flex items-center gap-2">${windowSub(pool, vmPool)}
+      ${vm.state.settings.allRoles && html`<span class="flex items-center gap-1">${who.map(r => html`<span key=${r} class=${cx('size-1.5 rounded-full', ROLE_DOT[r])}></span>`)}</span>`}
+      <span class="text-ink-3">· ${pool.cash.entryMode === 'perbill' ? 'bills' : 'net'}</span></span>`}
+    value=${fmtMoney(total)} valueTone=${!total ? 'text-ink-3' : ''} />`;
 }
 
 function Tips({ vm }) {
@@ -183,7 +177,7 @@ function Tips({ vm }) {
     ${err && html`<${Alert}>${err}<//>`}
     ${single
       ? html`<${PoolCard} pool=${state.pools[0]} vm=${vm} />`
-      : state.pools.map((pool, i) => html`<${PoolTile} key=${pool.id} pool=${pool} vm=${vm} i=${i} />`)}
+      : html`<${List}>${state.pools.map(pool => html`<${PoolTile} key=${pool.id} pool=${pool} vm=${vm} />`)}<//>`}
     ${(state.settings.multiPool || !single) && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
     <${Suggested} vm=${vm} />
   </div>`;

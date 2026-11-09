@@ -6,7 +6,7 @@
 
 import { fmtMoney } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Button, Label, Seg, SwitchRow, ListRow, SEP } from '../ui/pkit.js';
+import { cx, Icon, Button, Label, Seg, SwitchRow, ListRow, List, Item } from '../ui/pkit.js';
 import { todayISO } from '../sessions.js';
 import { isPanelOpen, onPanel } from '../ui/panels.js';
 
@@ -60,24 +60,17 @@ function SessionRow({ e, active }) {
     e.people ? `${e.people} ${e.people === 1 ? 'person' : 'people'}` : 'No staff yet',
   ].filter(Boolean).join(' · ');
   const iconBtn = 'grid size-10 place-items-center rounded-full';
-  const main = html`<span class="flex min-w-0 flex-1 items-center gap-3">
-      <${DateTile} iso=${e.date} active=${active} />
-      <span class="min-w-0 flex-1">
-        <span class="flex items-center gap-1.5 text-[1.0625rem] font-semibold"><span class="truncate">${title}</span>${active && html`<span class="size-1.5 shrink-0 rounded-full bg-gold"></span>`}</span>
-        <span class="mt-0.5 block truncate text-[0.8125rem] text-ink-2">${sub}</span>
-      </span>
-    </span>`;
-  const rowCls = cx('flex min-h-[4.25rem] w-full items-center gap-3 px-3 text-left transition', SEP, active && 'bg-gold/[.07]');
+  const t = html`<span class="truncate">${title}</span>${active && html`<span class="size-1.5 shrink-0 rounded-full bg-gold"></span>`}`;
+  const lead = html`<${DateTile} iso=${e.date} active=${active} />`;
   if (editing) {
-    return html`<div class=${rowCls}>${main}
-      <span class="flex shrink-0 gap-1.5">
+    return html`<${Item} lead=${lead} title=${t} sub=${sub} tone=${active ? 'active' : ''} trail=${html`<span class="flex shrink-0 gap-1.5">
         <button class=${cx(iconBtn, 'bg-fill text-ink-2 active:bg-high')} onClick=${() => App.renameSession(e.id)} aria-label="Rename"><${Icon} name="pencil" class="size-[1.0625rem]" /></button>
         <button class=${cx(iconBtn, 'bg-red/15 text-red active:bg-red/25')} onClick=${() => App.deleteSession(e.id)} aria-label="Delete"><${Icon} name="trash" class="size-[1.0625rem]" /></button>
-      </span></div>`;
+      </span>`} />`;
   }
-  return html`<button class=${cx(rowCls, 'active:bg-raised')} onClick=${() => App.switchSession(e.id)} aria-current=${active ? 'true' : 'false'}>${main}
-    <span class=${cx('shrink-0 font-rounded text-[1.125rem] font-bold tabular-nums', e.total > 0 ? (active ? 'text-gold' : 'text-ink') : 'text-ink-3')}>${e.total > 0 ? fmtMoney(e.total) : '—'}</span>
-  </button>`;
+  return html`<${Item} lead=${lead} title=${t} sub=${sub} tone=${active ? 'active' : ''} chevron=${false}
+    onClick=${() => App.switchSession(e.id)} aria-current=${active ? 'true' : 'false'}
+    value=${e.total > 0 ? fmtMoney(e.total) : '—'} valueTone=${cx('text-[1.125rem]', e.total > 0 ? (active ? 'text-gold' : 'text-ink') : 'text-ink-3')} />`;
 }
 
 function Drawer({ vm, sessions, currentId }) {
@@ -99,23 +92,22 @@ function Drawer({ vm, sessions, currentId }) {
     <${Button} variant="primary" block icon="plus" onClick=${() => App.newSession()}>New session<//>
 
     <${Label} aside=${(rows.length > 1 || editing) && html`<button class="font-semibold text-gold" onClick=${() => App.drawerEdit()}>${editing ? 'Done' : 'Edit'}</button>`}>Sessions<//>
-    <${Card} flush>${rows.map(e => html`<${SessionRow} key=${e.id} e=${e} active=${e.id === currentId} />`)}<//>
+    <${List}>${rows.map(e => html`<${SessionRow} key=${e.id} e=${e} active=${e.id === currentId} />`)}<//>
     ${editing && html`<p class="px-1 text-[0.8125rem] leading-snug text-ink-3">Deleting a session can’t be undone. Export it first to keep a copy.</p>`}
 
     <${Label}>App settings<//>
-    <${Card} flush>
+    <${List}>
       <${SwitchRow} on=${s.settings.allRoles} onClick=${toggle('allRoles')} label="Servers & support" hint="Role sections, support tip-out, who-shares chips" />
       <${SwitchRow} on=${s.settings.multiPool || extraPools} disabled=${extraPools} onClick=${toggle('multiPool')} label="Multiple pools"
         hint=${extraPools ? `On while ${s.pools.length} pools exist — remove extras to turn off` : 'Split tips by time window (e.g. lunch / dinner)'} />
       <${SwitchRow} on=${s.settings.clock24} onClick=${toggle('clock24')} label="24-hour time" hint="Show 17:00 instead of 5:00p" />
-      <div class="flex flex-col gap-2 border-t border-sep px-4 py-3">
-        <span class="font-semibold">Display size</span>
+      <${Item} title="Display size" chevron=${false}>
         <${Seg} value=${s.settings.size || 'm'} onChange=${v => App.setSize(v)}
           items=${[{ value: 's', label: 'Small' }, { value: 'm', label: 'Medium' }, { value: 'l', label: 'Large' }]} />
-      </div>
+      <//>
     <//>
 
-    <${Card} flush>
+    <${List}>
       <${ListRow} icon="upload" chevron=${false} onClick=${() => App.triggerImport()}>Import a session (.json)<//>
       <${ListRow} icon="sliders" onClick=${() => App.panel('right')}>This shift’s settings<//>
     <//>

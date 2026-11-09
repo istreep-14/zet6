@@ -1,27 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Full-bleed square: iOS/Android apply their own corner mask. Glyph sits
-       inside the central 80% safe zone so "maskable" crops never clip it. -->
+  <!-- TipPool: one gold pool split three ways. Full-bleed square (iOS /
+       Android round the corners); the mark sits inside the central 80% so
+       maskable crops never clip it. Colours match the slate theme. -->
   <defs>
-    <radialGradient id="bg" cx="50%" cy="28%" r="80%">
-      <stop offset="0" stop-color="#22202a"/>
-      <stop offset="1" stop-color="#0b0b10"/>
-    </radialGradient>
-    <linearGradient id="coin" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#ffd966"/>
-      <stop offset="1" stop-color="#e9b52c"/>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b2e37"/>
+      <stop offset="1" stop-color="#16181d"/>
     </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="46%" r="42%">
+      <stop offset="0" stop-color="#ffd23f" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#ffd23f" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="g0" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset="1" stop-color="#f5c02f"/></linearGradient><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd25a"/><stop offset="1" stop-color="#e9a91a"/></linearGradient><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffcf4d"/><stop offset="1" stop-color="#dc9a12"/></linearGradient>
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
-  <!-- three bills fanning into a pool -->
-  <g transform="translate(256 262)">
-    <rect x="-118" y="-72" width="236" height="144" rx="18" fill="#2a2834" transform="rotate(-14)"/>
-    <rect x="-118" y="-72" width="236" height="144" rx="18" fill="#34313f" transform="rotate(-5)"/>
-    <rect x="-118" y="-72" width="236" height="144" rx="18" fill="url(#coin)" transform="rotate(5)"/>
-    <g transform="rotate(5)">
-      <rect x="-98" y="-52" width="196" height="104" rx="10" fill="none" stroke="#0b0b10" stroke-opacity=".22" stroke-width="5"/>
-      <circle r="38" fill="#0b0b10" fill-opacity=".14"/>
-      <text x="0" y="22" text-anchor="middle" font-family="-apple-system, 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif"
-            font-weight="800" font-size="72" fill="#14120a">$</text>
-    </g>
+  <rect width="512" height="512" fill="url(#glow)"/>
+  <g transform="translate(256 256)">
+    <path d="M7.8,-4.5 L7.8,-152.5 A148,148 0 0 1 136.0,69.5 Z" fill="url(#g0)"/><path d="M0.0,9.0 L128.2,83.0 A148,148 0 0 1 -128.2,83.0 Z" fill="url(#g1)"/><path d="M-7.8,-4.5 L-136.0,69.5 A148,148 0 0 1 -7.8,-152.5 Z" fill="url(#g2)"/>
+    <circle r="62" fill="#1d1f25"/>
+    <circle r="62" fill="none" stroke="#ffd23f" stroke-opacity=".25" stroke-width="3"/>
+    <text x="0" y="25" text-anchor="middle" font-family="-apple-system, 'SF Pro Rounded', 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="76" fill="#ffd23f">$</text>
   </g>
 </svg>

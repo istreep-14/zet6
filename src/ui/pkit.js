@@ -134,20 +134,14 @@ export function Field({ label, class: cls = '', inputClass = '', ...input }) {
 export const SEP = 'border-t border-sep first:border-t-0';
 
 export function SwitchRow({ on, disabled, onClick, label, hint }) {
-  return html`<button class=${cx('switch-row flex min-h-16 w-full items-center gap-4 px-4 py-2.5 text-left disabled:opacity-60', SEP)}
-    role="switch" aria-checked=${String(!!on)} disabled=${disabled} onClick=${onClick}>
-    <span class="flex flex-1 flex-col gap-0.5 text-[1.0625rem]">${label}${hint && html`<small class="text-[0.8125rem] leading-snug text-ink-2">${hint}</small>`}</span>
-    <span class="switch"></span>
-  </button>`;
+  return html`<${Item} class="switch-row" role="switch" aria-checked=${String(!!on)} disabled=${disabled} onClick=${onClick}
+    title=${label} sub=${hint} chevron=${false} trail=${html`<span class="switch"></span>`} />`;
 }
 
+// Kept for older call sites: an Item with an icon tile and a plain title.
 export function ListRow({ onClick, icon, tone = '', chevron = true, aside, children }) {
-  return html`<button class=${cx('flex min-h-[3.375rem] w-full items-center gap-3 px-4 text-left text-[1.0625rem] transition active:bg-raised', SEP, tone === 'danger' && 'text-red')} onClick=${onClick}>
-    ${icon && html`<span class=${cx('grid size-8 place-items-center rounded-lg', tone === 'danger' ? 'bg-red/15' : 'bg-white/8 text-ink')}><${Icon} name=${icon} class="size-[1.125rem]" /></span>`}
-    <span class="flex-1">${children}</span>
-    ${aside && html`<span class="text-[0.9375rem] text-ink-2">${aside}</span>`}
-    ${chevron && html`<${Icon} name="chevR" class="size-4 text-ink-3" />`}
-  </button>`;
+  return html`<${Item} icon=${icon} tone=${tone} chevron=${chevron} onClick=${onClick} title=${children}
+    trail=${aside && html`<span class="text-[0.9375rem] text-ink-2">${aside}</span>`} />`;
 }
 
 export function Stepper({ value, onDec, onInc, decDisabled = false, incDisabled = false, on = false }) {
@@ -219,19 +213,71 @@ export function Section({ title, aside, class: cls = '', children }) {
   </section>`;
 }
 
-// One list row: lead (avatar / icon) · title over sub · trail · chevron.
-// A button when it has onClick. Put rows inside <${Card} flush>.
-export function Row({ lead, title, sub, trail, onClick, chevron, class: cls = '' }) {
+// ── The two list / table designs ─────────────────────────────────────────────
+// 1. LIST — comfortable, multi-line items (sessions, pools, tools, settings,
+//    quick add, bonus rows): <${List}> holding <${Item}>s. Items are filled
+//    tiles 3px apart (fills, not hairlines); the group's outer corners are the
+//    card radius, inner corners small. One Item:
+//      lead (anything) or icon (tile) · title over sub · trail / value · ›
+//    `value` = the big right-hand number; `tone`: 'active' (gold wash) or
+//    'danger'; children render under the title row (e.g. edit buttons).
+// 2. TABLE — compact data (envelopes, close-time, swaps, small bills, and the
+//    Summary / Staff grids which use the same tokens): <${Table}> below.
+export function List({ class: cls = '', children }) {
+  return html`<div class=${cx('list-group flex flex-col gap-[3px]', cls)}>${children}</div>`;
+}
+
+export function Item({ lead, icon, title, sub, trail, value, valueTone = '', chevron, onClick, tone = '', disabled, class: cls = '', children, ...rest }) {
   const Tag = onClick ? 'button' : 'div';
-  return html`<${Tag} class=${cx('flex min-h-[3.75rem] w-full items-center gap-3 px-4 py-2.5 text-left', SEP, onClick && 'transition active:bg-raised', cls)} onClick=${onClick}>
-    ${lead}
-    <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span class="flex min-w-0 items-center gap-1.5 text-[1.0625rem] font-semibold leading-tight">${title}</span>
-      ${sub && html`<span class="truncate text-[0.875rem] text-ink-2">${sub}</span>`}
+  return html`<${Tag} class=${cx('li-tile flex min-h-[3.75rem] w-full flex-col justify-center gap-2 px-4 py-2.5 text-left disabled:opacity-60',
+      tone === 'active' ? 'bg-[color-mix(in_srgb,var(--color-gold)_9%,var(--color-surface))]' : 'bg-surface',
+      onClick && 'transition active:brightness-125', cls)} onClick=${onClick} disabled=${disabled} ...${rest}>
+    <span class="flex w-full items-center gap-3">
+      ${icon ? html`<span class=${cx('grid size-8 shrink-0 place-items-center rounded-lg', tone === 'danger' ? 'bg-red/15 text-red' : 'bg-white/8 text-ink')}><${Icon} name=${icon} class="size-[1.125rem]" /></span>` : lead}
+      <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span class=${cx('flex min-w-0 items-center gap-1.5 text-[1.0625rem] font-semibold leading-tight', tone === 'danger' && 'text-red')}>${title}</span>
+        ${sub && html`<span class="line-clamp-2 text-[0.875rem] leading-snug text-ink-2">${sub}</span>`}
+      </span>
+      ${trail}
+      ${value != null && value !== false && html`<span class=${cx('shrink-0 font-rounded text-[1.375rem] font-bold tracking-tight tabular-nums', valueTone)}>${value}</span>`}
+      ${(chevron ?? !!onClick) && html`<${Icon} name="chevR" class="size-4 shrink-0 text-ink-3" />`}
     </span>
-    ${trail}
-    ${(chevron ?? !!onClick) && html`<${Icon} name="chevR" class="size-4 text-ink-3" />`}
+    ${children}
   <//>`;
+}
+// Older name.
+export const Row = Item;
+
+// Compact table. cols: [{ label, align: 'left'|'center'|'right', w, head
+// (custom header node), onHead, hl (highlight column) }]; rows: [{ key,
+// cells: [...], onClick, tone: 'muted' } | { section: 'Label' }]; foot:
+// cells for the total row. First column = the label column (left, bold,
+// truncates; `stickyFirst` pins it when the table scrolls sideways). Zebra
+// rows, a sticky header that shrinks while stuck (ui/sticky.js), total row on
+// a raised fill. `fixed` = table-fixed (widths from cols[].w).
+export const T_HEAD = 'text-[0.6875rem] font-bold uppercase tracking-[.08em] text-ink-3';
+export const TOTAL_FILL = 'bg-[color-mix(in_srgb,var(--color-raised)_60%,var(--color-surface))]';
+export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, scroll = false, class: cls = '', ...rest }) {
+  const align = c => ({ left: 'text-left', right: 'text-right' }[c.align] || 'text-center');
+  const first = cx('pl-3.5 pr-2 text-left', stickyFirst && 'sticky left-0 z-[1] bg-inherit');
+  const cell = (c, i) => cx('px-1.5 tabular-nums', i === 0 ? first : align(c), i === cols.length - 1 && i > 0 && 'pr-3.5', c.hl && 'bg-gold/15');
+  const table = html`<table class=${cx('w-full border-collapse whitespace-nowrap text-[0.9375rem]', fixed && 'table-fixed')}>
+      ${fixed && html`<colgroup>${cols.map((c, i) => html`<col key=${i} class=${c.w || ''} />`)}</colgroup>`}
+      <thead class="thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--color-sep)]"><tr>
+        ${cols.map((c, i) => html`<th key=${i} class=${cx(cell(c, i), T_HEAD, 'h-9 font-bold transition-[height] group-data-[stuck]:h-7', c.onHead && 'cursor-pointer', c.hl && 'text-gold')}
+          onClick=${c.onHead}>${c.head ?? c.label}</th>`)}
+      </tr></thead>
+      <tbody>${rows.map((r, n) => r.section
+        ? html`<tr key=${'s' + n} class="bg-surface"><td colspan=${cols.length} class="px-3.5 pb-1 pt-3 text-[0.75rem] font-semibold uppercase tracking-[.06em] text-ink-3">${r.section}</td></tr>`
+        : html`<tr key=${r.key ?? n} class=${cx(zebra(n), r.onClick && 'cursor-pointer transition active:bg-raised', r.tone === 'muted' && 'text-ink-2')} onClick=${r.onClick}>
+            ${r.cells.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-11', i === 0 && 'max-w-[7rem] truncate font-semibold')}>${v}</td>`)}
+          </tr>`)}</tbody>
+      ${foot && html`<tfoot><tr class=${cx('border-t border-white/12 font-bold', TOTAL_FILL)}>
+        ${foot.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-12')}>${v}</td>`)}
+      </tr></tfoot>`}
+    </table>`;
+  return html`<${Card} flush class=${cls} ...${rest}><${Sentinel} />${scroll
+    ? html`<div class="overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">${table}</div>` : table}<//>`;
 }
 
 // Status card: ok (green) / error (red) / warn (amber). Tappable with onClick;

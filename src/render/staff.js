@@ -17,7 +17,7 @@ import { fmtHrs } from '../util.js';
 import { parseTime, fmtTimeAbs, fmtClockShort, resolveIn, nextAfter, absToInRaw, absToOutRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { getRoster } from '../roster.js';
 import { html, render, useState, useRef, useLayoutEffect } from '../ui/preact.js';
-import { cx, Clock, Icon, Card, Button, Alert, Seg, SwitchRow, Section, INPUT, ROLE_DOT, ROLE_PLURAL, TABLE_HEAD, THEAD, Sentinel, zebra } from '../ui/pkit.js';
+import { cx, Clock, Icon, Card, Button, Alert, Seg, SwitchRow, List, Item, Section, INPUT, ROLE_DOT, ROLE_PLURAL, TABLE_HEAD, THEAD, Sentinel, zebra } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, sheetFoot, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 import { activeSub } from './tabs.js';
 
@@ -98,15 +98,9 @@ function QuickAdd({ vm }) {
   const onShift = onShiftSet(vm.state);
   const avail = all.filter(r => !onShift.has(r.name.toLowerCase()));
   const show = (avail.length ? avail : all).slice(0, 3);
-  return html`<button class="flex min-h-16 w-full items-center gap-3 rounded-card bg-surface py-2.5 pl-3.5 pr-3 text-left transition active:scale-[.98] active:bg-raised"
-    onClick=${() => App.openRoster()}>
-    <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-gold/15 text-gold"><${Icon} name="plus" class="size-5" /></span>
-    <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span class="text-[1.0625rem] font-semibold">Quick add</span>
-      <span class="truncate text-[0.8125rem] text-ink-2">${avail.length ? show.map(r => r.name).join(', ') + (avail.length > show.length ? ` +${avail.length - show.length}` : '') : 'Everyone saved is on this shift'}</span>
-    </span>
-    <${Icon} name="chevR" class="size-5 text-ink-3" />
-  </button>`;
+  return html`<${List}><${Item} onClick=${() => App.openRoster()} title="Quick add"
+    lead=${html`<span class="grid size-10 shrink-0 place-items-center rounded-xl bg-gold/15 text-gold"><${Icon} name="plus" class="size-5" /></span>`}
+    sub=${avail.length ? show.map(r => r.name).join(', ') + (avail.length > show.length ? ` +${avail.length - show.length}` : '') : 'Everyone saved is on this shift'} /><//>`;
 }
 
 let rosterSel = new Set();      // lowercased names picked in the sheet
@@ -422,10 +416,10 @@ function Editor({ vm, p }) {
       <span class="text-[0.9375rem] text-ink-2">${t.hrs != null ? fmtHrs(t.hrs) + ' hours' : 'Check the times'}</span>
       ${share && html`<span class="text-[0.9375rem] text-ink-2">takes home <b class="font-rounded text-[1.25rem] text-gold">$${share.final}</b></span>`}
     </div>
-    <div class="overflow-hidden rounded-card bg-raised">
+    <${List}>
       <${SwitchRow} on=${t.forced} onClick=${() => App.toggleCloser(p.id)} label="Closer"
         hint=${t.forced ? 'Forced — shares the closer bonus' : t.closer ? 'Auto: out at the close time' : 'Shares the dollars left after rounding'} />
-    </div>
+    <//>
     <div class="flex gap-2">
       <${Button} class="flex-1" disabled=${!t.inSet && !t.outSet} onClick=${() => { set('in', ''); set('out', ''); }}>Reset times<//>
       <${Button} variant="danger" class="flex-1" icon="trash" onClick=${() => { App.removePerson(p.id); }}>Remove<//>

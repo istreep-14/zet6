@@ -12,7 +12,7 @@
 
 import { fmtHrs, payoutOrder } from '../util.js';
 import { html, render, useRef, useLayoutEffect } from '../ui/preact.js';
-import { cx, Icon, Alert, Money, Clock, Blocked, Card, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL } from '../ui/pkit.js';
+import { cx, Icon, Alert, List, Item, Money, Clock, Blocked, Card, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL } from '../ui/pkit.js';
 import { StaffTime, DefaultTime } from './staff.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
@@ -377,11 +377,10 @@ function renderPoolSheet(vm) {
 }
 
 function Tools() {
-  const tool = 'flex h-12 items-center justify-center gap-2.5 rounded-card bg-surface text-[1rem] font-semibold transition active:scale-[.97] active:bg-raised';
-  return html`<div class="grid grid-cols-2 gap-2">
-    <button class=${tool} onClick=${() => App.openCloseTime()}><${Icon} name="clock" class="size-5 text-ink-2" />Close time</button>
-    <button class=${tool} onClick=${() => App.openBonus()}><${Icon} name="gift" class="size-5 text-ink-2" />Bonus</button>
-  </div>`;
+  return html`<${List}>
+    <${Item} icon="clock" title="Close-time what-if" sub="Payouts at other close times" onClick=${() => App.openCloseTime()} />
+    <${Item} icon="gift" title="Closer bonus & chump" sub="Who gets the dollars left after rounding" onClick=${() => App.openBonus()} />
+  <//>`;
 }
 
 function Summary({ vm, name }) {
