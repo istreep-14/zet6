@@ -694,13 +694,19 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
 .tally-rate small { font-size: 13px; font-weight: 500; color: var(--text-2); margin-left: 1px; }
 .tally-sub { font-size: 14px; color: var(--text-2); margin-top: 2px; white-space: nowrap; }
 
-/* Payout table: name · shift · hrs · pay — one grid for head, rows and foot */
-.ptable { --pcols: minmax(0, 1fr) auto 40px 54px; }
+/* Payout table: one grid shared by head, rows and foot (subgrid). The name
+   column takes the free width; Hrs (over the shift) and Pay stay as narrow as
+   their content. */
+.ptable {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  column-gap: 14px;
+}
 .phead, .prow-p, .pfoot {
+  grid-column: 1 / -1;
   position: relative;
   display: grid;
-  grid-template-columns: var(--pcols);
-  column-gap: 10px;
+  grid-template-columns: subgrid;
   align-items: center;
   width: 100%;
   padding: 0 var(--sp-4);
@@ -708,33 +714,38 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
   font-size: 16px;
   line-height: 1.25;
 }
-.phead { height: 40px; align-items: baseline; padding-top: 13px; font-size: 12px; font-weight: 600; color: var(--text-2); }
+.phead { height: 38px; align-items: baseline; padding-top: 12px; font-size: 12px; font-weight: 600; color: var(--text-2); }
 .phead span:first-child { font-size: 16px; color: var(--text); }
-.phead span:nth-child(n+3), .phrs, .ppay { text-align: right; white-space: nowrap; }
-.prow-p { min-height: 46px; padding-top: 7px; padding-bottom: 7px; transition: background .15s; }
-.prow-p::before { content: ''; position: absolute; top: 0; left: var(--sp-4); right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
+.phead span:last-child, .ppay { text-align: right; white-space: nowrap; }
+.prow-p { min-height: 48px; padding-top: 6px; padding-bottom: 6px; transition: background .15s; }
+.prow-p::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
 .prow-p:active { background: var(--surface-2); }
-.pname-col { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.pname { display: flex; align-items: center; gap: 6px; min-width: 0; font-weight: 600; color: var(--text); }
-.pname-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Name cell: role-tinted initials, then the name (+ per-pool line) */
+.pname-col { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.pav { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+.pname-txt { min-width: 0; display: flex; flex-direction: column; gap: 0; }
+/* Name and shift on one line; the shift gives way first, then the name */
+.pname-line { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.pname { flex-shrink: 0; max-width: 100%; font-size: 18px; font-weight: 600; letter-spacing: .005em; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ptime--pools { font-size: 12px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Shift: in · arrow · out in fixed slots so the arrows line up down the column */
-.pshift { --tw: 43px; display: grid; grid-template-columns: var(--tw) 14px var(--tw); align-items: baseline; font-size: 13px; color: var(--text-2); white-space: nowrap; }
-.pshift > span:first-child { text-align: right; }
-.parr { text-align: center; color: var(--text-3); }
-
-/* Role edge (only when several roles are paid) */
-.prow-p[data-role]::after { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 0 2px 2px 0; }
-.prow-p[data-role="bartender"]::after { background: var(--bar); }
-.prow-p[data-role="server"]::after { background: var(--srv); }
-.prow-p[data-role="support"]::after { background: var(--sup); }
+/* Shift after the name, calendar style: "5–11:45PM" with small AM/PM */
+.pshift { min-width: 0; font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pshift small { font-size: 8.5px; font-weight: 600; letter-spacing: .02em; margin-left: 1px; }
 .pkey-roles { display: inline-flex; align-items: center; gap: 4px; }
-.pkey-roles i { width: 3px; height: 10px; border-radius: 2px; margin-left: 4px; }
+.pkey-roles i { width: 7px; height: 7px; border-radius: 50%; margin-left: 4px; }
 .pkey-roles i[data-role="bartender"] { background: var(--bar); }
 .pkey-roles i[data-role="server"] { background: var(--srv); }
 .pkey-roles i[data-role="support"] { background: var(--sup); }
-.phrs { font-weight: 500; color: var(--text); }
-.ppay { font: 700 18px var(--rounded); letter-spacing: -.01em; color: var(--text); }
+/* Hours cell: "8.25 hr". Whole hours sit in a --hi-wide slot,
+   right-aligned, so the ones digits line up down the column. */
+.phrs { display: flex; flex-direction: column; min-width: 0; }
+.phrs-v { display: grid; grid-template-columns: var(--hi, 1ch) auto; justify-content: start; font-weight: 500; color: var(--text); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.phrs-v > span:first-child { text-align: right; }
+/* Units: smaller, same colour as the number, a little space from it */
+.phrs-v small { font-size: 12px; margin-left: 3px; }
+.ppay small { font-size: 13px; margin-right: 2px; vertical-align: 1px; }
+.pfoot .ppay small { font-size: 12px; }
+.ppay { font: 700 19px var(--rounded); letter-spacing: -.01em; color: var(--text); }
 .prow-p.is-zero .ppay { color: var(--text-3); }
 
 /* Worksheet: tap to see the split worked out step by step */
@@ -768,14 +779,13 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
 .ws-res em { font-style: normal; color: var(--accent); margin-left: 2px; font-size: 12px; }
 
 /* Chump: one small line */
-.pchump { position: relative; display: flex; justify-content: space-between; padding: 7px var(--sp-4); font-size: 13px; color: var(--text-2); }
-.pchump::before { content: ''; position: absolute; top: 0; left: var(--sp-4); right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
+.pchump { grid-column: 1 / -1; position: relative; display: flex; justify-content: space-between; padding: 7px var(--sp-4); font-size: 13px; color: var(--text-2); }
+.pchump::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: var(--sep); transform: scaleY(.5); }
 .pchump span:last-child { font-weight: 600; }
 
 .pfoot { height: 48px; background: var(--surface-2); font-weight: 600; }
 .pfoot .ppay { color: var(--gold); font-size: 16px; }
 
-.pdot { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); display: inline-block; }
 .pkey { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; margin-top: -6px; font-size: 12px; color: var(--text-3); }
 
 .avatar {
@@ -1057,13 +1067,15 @@ body.keyboard-open .hud { bottom: var(--sp-2); }
   .rcard-av { width: 40px; height: 40px; font-size: 16px; }
   .role-bar-defs input { width: 46px; }
   .tool { height: 58px; font-size: 15px; }
-  .ptable { --pcols: minmax(0, 1fr) auto 32px 48px; }
+  .ptable { column-gap: 10px; }
   .pfoot .ppay { font-size: 15px; }
-  .phead, .prow-p, .pfoot { column-gap: 7px; padding-left: 12px; padding-right: 12px; font-size: 15px; }
-  .pshift { --tw: 37px; grid-template-columns: var(--tw) 10px var(--tw); font-size: 12px; }
+  .phead, .prow-p, .pfoot { padding-left: 12px; padding-right: 12px; font-size: 15px; }
+  .pav { width: 24px; height: 24px; font-size: 10px; }
+  .pname-col { gap: 8px; }
+  .pname { font-size: 17px; }
   .tool { gap: 8px; padding: 0 12px; }
   .tool svg { padding: 7px; }
-  .ppay { font-size: 16px; }
+  .ppay { font-size: 15px; }
   .ws-rows { font-size: 12px; padding: 2px 8px; }
   .ws-row > span + span { padding-left: 5px; }
   .hdr-date { padding: 0 8px; font-size: 14px; }

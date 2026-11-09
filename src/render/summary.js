@@ -4,7 +4,7 @@
 // Multi-pool adds a Pools list and a per-pool line under each name.
 
 import { escapeHTML, fmtHrs, fmtMoney, payoutOrder } from '../util.js';
-import { fmtTimeAbs } from '../time.js';
+import { fmtTimeAbs, timeParts } from '../time.js';
 import { distErrorText } from './dist.js';
 
 const $ = id => document.getElementById(id);
@@ -92,18 +92,42 @@ const payNum = n => Math.round(n).toLocaleString('en-US');
 const cents = n => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 
-// Row = name (red dot = closer; role-coloured left edge when several roles are paid) ·
-// shift window · hrs · pay. `extra` = optional per-pool split (multi-pool).
-function personRowHTML(p, showRole, dp, extra = '') {
-  const closer = p.closer ? '<span class="pdot" title="Closer" aria-label="Closer"></span>' : '';
-  return `<button class="prow-p${p.final > 0 ? '' : ' is-zero'}"${showRole ? ` data-role="${p.role}"` : ''} onclick="App.personModal('${p.id}')">
+const initials = name => name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
+
+// Shift after the name, read like a calendar event: "5–11:45PM",
+// "5PM–2AM". Minutes only when off the hour; AM/PM once when both ends share
+// it. 24-hour mode: "17:00–02:00".
+function shiftHTML(inAbs, outAbs) {
+  const a = timeParts(inAbs), b = timeParts(outAbs);
+  const t = x => x.h + (x.m ? ':' + x.m : '');
+  const ap = x => x.ap ? `<small>${x.ap.toUpperCase()}M</small>` : '';
+  const text = a.ap === b.ap ? `${t(a)}–${t(b)}${ap(b)}` : `${t(a)}${ap(a)}–${t(b)}${ap(b)}`;
+  return `<span class="pshift" aria-label="${fmtTimeAbs(inAbs)} to ${fmtTimeAbs(outAbs)}">${text}</span>`;
+}
+
+// Hours with decimals only when needed (9 / 8.25 / 5.5) and a small "hr".
+// The whole hours sit in a fixed-width slot (--hi) so the ones digits line up.
+function hrsHTML(h) {
+  const [w, f] = fmtHrs(h).split('.');
+  return `<span class="phrs-v"><span>${w}</span><span>${f ? '.' + f : ''}<small>hr</small></span></span>`;
+}
+
+// Whole dollars with a small "$" in front.
+const payHTML = n => `<small>$</small>${payNum(n)}`;
+
+// Row = role-tinted initials · name + shift on one line · hours · pay.
+// `extra` = optional per-pool split (multi-pool).
+function personRowHTML(p, extra = '') {
+  return `<button class="prow-p${p.final > 0 ? '' : ' is-zero'}" onclick="App.personModal('${p.id}')">
     <span class="pname-col">
-      <span class="pname"><span class="pname-t">${escapeHTML(p.name)}</span>${closer}</span>
-      ${extra ? `<span class="ptime--pools">${extra}</span>` : ''}
+      <span class="pav av--${p.role}" aria-hidden="true">${escapeHTML(initials(p.name))}</span>
+      <span class="pname-txt">
+        <span class="pname-line"><span class="pname">${escapeHTML(p.name)}</span>${shiftHTML(p.inAbs, p.outAbs)}</span>
+        ${extra ? `<span class="ptime--pools">${extra}</span>` : ''}
+      </span>
     </span>
-    <span class="pshift"><span>${fmtTimeAbs(p.inAbs)}</span><span class="parr" aria-label="to">→</span><span>${fmtTimeAbs(p.outAbs)}</span></span>
-    <span class="phrs">${(p.shiftHours ?? p.hours).toFixed(dp)}</span>
-    <span class="ppay">${payNum(p.final)}</span>
+    <span class="phrs">${hrsHTML(p.shiftHours ?? p.hours)}</span>
+    <span class="ppay">${payHTML(p.final)}</span>
   </button>`;
 }
 
@@ -113,16 +137,13 @@ function chumpRowHTML(s) {
     : '';
 }
 
-// Key line under the table: what the dot means and what bonus is folded in.
+// Key line under the table: what bonus is folded in, and the role colours.
 function keyHTML(people, showRole) {
   const parts = [];
   const bonuses = people.filter(p => p.bonus > 0);
-  if (people.some(p => p.closer)) {
-    const same = bonuses.length && bonuses.every(p => p.closer && p.bonus === bonuses[0].bonus);
-    parts.push('<span class="pdot"></span> closer' + (same ? ` · pay includes +${fmtMoney(bonuses[0].bonus)} bonus` : ''));
-    if (!same && bonuses.length) parts.push('pay includes bonuses');
-  } else if (bonuses.length) {
-    parts.push('pay includes bonuses');
+  if (bonuses.length) {
+    const same = bonuses.every(p => p.closer && p.bonus === bonuses[0].bonus);
+    parts.push(same ? `closer pay includes +${fmtMoney(bonuses[0].bonus)} bonus` : 'pay includes bonuses');
   }
   if (showRole) {
     parts.push('<span class="pkey-roles"><i data-role="bartender"></i>bar <i data-role="server"></i>srv <i data-role="support"></i>sup</span>');
@@ -188,11 +209,13 @@ function payoutsHTML(vm, extraFor = () => '') {
   const grand = s.perPerson.reduce((t, p) => t + p.final, 0) + s.leftover;
   const dp = hoursDecimals([...ordered.map(p => p.shiftHours ?? p.hours), ...ordered.map(p => p.hours), s.totalHours]);
 
-  return `<div class="card card--flush ptable">
-      <div class="phead"><span>Payouts</span><span>Shift</span><span>Hrs</span><span>Pay</span></div>
-      ${ordered.map(p => personRowHTML(p, showRole, dp, extraFor(p))).join('')}
+  const intW = Math.max(...[...ordered.map(p => p.shiftHours ?? p.hours), s.totalHours]
+    .map(h => String(Math.floor(h)).length));
+  return `<div class="card card--flush ptable" style="--hi:${intW}ch">
+      <div class="phead"><span>Payouts</span><span>Hrs</span><span>Pay</span></div>
+      ${ordered.map(p => personRowHTML(p, extraFor(p))).join('')}
       ${chumpRowHTML(s)}
-      <div class="pfoot"><span>Total</span><span></span><span class="phrs">${s.totalHours.toFixed(dp)}</span><span class="ppay">${fmtMoney(grand)}</span></div>
+      <div class="pfoot"><span>Total</span><span class="phrs">${hrsHTML(s.totalHours)}</span><span class="ppay">${payHTML(grand)}</span></div>
     </div>${keyHTML(ordered, showRole)}${worksheetHTML(vm, ordered, dp)}`;
 }
 

@@ -68,6 +68,18 @@ export function fmtTimeAbs(tAbs) {
   return h12 + ':' + mm + (hr < 12 ? 'a' : 'p');
 }
 
+// Same reading as fmtTimeAbs, split so the hour can be set large and the
+// minutes / a-p small: { h: '5', m: '' | '30', ap: 'a' | 'p' | '' }.
+// On-the-hour times drop the minutes; 24-hour mode keeps them and has no ap.
+export function timeParts(tAbs) {
+  let h = ((tAbs % 24) + 24) % 24;
+  let hr = Math.floor(h), mn = Math.round((h - hr) * 60);
+  if (mn === 60) { hr = (hr + 1) % 24; mn = 0; }
+  const mm = (mn < 10 ? '0' : '') + mn;
+  if (clock24) return { h: (hr < 10 ? '0' : '') + hr, m: mm, ap: '' };
+  return { h: String(hr % 12 || 12), m: mn ? mm : '', ap: hr < 12 ? 'a' : 'p' };
+}
+
 // Inverse of resolveIn: absolute IN time → the decimal string a person would
 // type. Only 9a–8:45p are expressible as an In under the fixed rule
 // (9–11.75 = AM, 12–12.75 = noon, 1–8.75 = PM); callers clamp to that range.
