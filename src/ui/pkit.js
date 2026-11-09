@@ -1,13 +1,25 @@
-// Component kit for Preact views — same look as ui/kit.js (which still serves
-// the string-template views until they're migrated). Props in, markup out;
-// click handlers are plain functions: <${Button} onClick=${() => App.tab('tips')}>.
+// Component kit (Preact + htm) — every repeated piece of UI is one component
+// here, styled with Tailwind classes (theme tokens live in index.html's
+// @theme block). Props in, markup out; click handlers are plain functions:
+// <${Button} onClick=${() => App.tab('tips')}>Tips<//>.
 
 import { html } from './preact.js';
-import { cx } from './html.js';
 import { PATHS } from './icons.js';
-import { ROLE_TINT, ROLE_DOT, ROLE_TEXT, initials } from './kit.js';
 
-export { cx, ROLE_TINT, ROLE_DOT, ROLE_TEXT };
+// Class list builder: cx('a', cond && 'b', ['c', 'd']) → "a b c d".
+export const cx = (...xs) => xs.flat(Infinity).filter(Boolean).join(' ');
+
+export const ROLE_TINT = {
+  bartender: 'bg-bar/20 text-bar',
+  server: 'bg-srv/20 text-srv',
+  support: 'bg-sup/20 text-sup',
+};
+export const ROLE_DOT = { bartender: 'bg-bar', server: 'bg-srv', support: 'bg-sup' };
+export const ROLE_TEXT = { bartender: 'text-bar', server: 'text-srv', support: 'text-sup' };
+export const ROLE_PLURAL = { bartender: 'Bartenders', server: 'Servers', support: 'Support' };
+
+export const initials = name =>
+  String(name).split(/\s+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
 
 export function Icon({ name, class: cls = 'size-5' }) {
   return html`<svg class=${cx(cls, 'shrink-0')} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
@@ -172,4 +184,22 @@ export function LiveStrip({ vm }) {
   const money = n => '$' + Number(n).toLocaleString('en-US');
   return html`<div class="flex justify-around rounded-2xl bg-raised px-2 py-3">
     ${S('Rate', '$' + sh.rate.toFixed(2), 'text-green')}${S('Pool', money(sh.totalCash))}${S('Chump', sh.leftover > 0 ? money(sh.leftover) : '—', 'text-ink-2')}</div>`;
+}
+
+// Bottom-sheet shell: backdrop + sliding sheet with a title and close button;
+// the body (and optional footer) are filled by each sheet's own render.
+export function SheetShell({ id, title, tall = false, foot = false }) {
+  const backdrop = e => { if (e.target === e.currentTarget) App.closeSheet(id); };
+  return html`<div class="sheet-backdrop" id=${id} onClick=${backdrop}>
+    <div class=${cx('sheet', tall && 'sheet--tall')} role="dialog" aria-labelledby=${id + '-title'}>
+      <div class="flex shrink-0 items-center gap-2 py-1.5 pl-5 pr-2.5">
+        <span class="flex-1 truncate text-[24px] font-extrabold tracking-[-.03em]" id=${id + '-title'}>${title}</span>
+        <button class="grid size-12 place-items-center" onClick=${() => App.closeSheet(id)} aria-label="Close">
+          <span class="grid size-8 place-items-center rounded-full bg-fill text-ink-2"><${Icon} name="x" class="size-4" /></span>
+        </button>
+      </div>
+      <div class="sheet-body" id=${id + '-body'}></div>
+      ${foot && html`<div class="sheet-foot" id=${id + '-foot'}></div>`}
+    </div>
+  </div>`;
 }

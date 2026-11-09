@@ -1,6 +1,5 @@
-// Line icons (24×24, stroke = currentColor). icon('clock', 'size-5').
-
-import { raw } from './html.js';
+// Line icon paths (24×24, stroke = currentColor), drawn by pkit's
+// <${Icon} name="clock" class="size-5" />.
 
 export const PATHS = {
   dollar: '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>',
@@ -27,7 +26,3 @@ export const PATHS = {
   pencil: '<path d="M17 3l4 4L8 20H4v-4L17 3z"/>',
   sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
 };
-
-export function icon(name, cls = 'size-5') {
-  return raw(`<svg class="${cls} shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PATHS[name] || ''}</svg>`);
-}

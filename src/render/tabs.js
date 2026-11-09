@@ -2,9 +2,8 @@
 // (rate / pool / chump while editing Staff & Tips).
 
 import { poolValue, fmtMoney, fmtMoneyShort } from '../util.js';
-import { cx } from '../ui/html.js';
 import { html, render } from '../ui/preact.js';
-import { Icon } from '../ui/pkit.js';
+import { cx, Icon } from '../ui/pkit.js';
 
 const $ = id => document.getElementById(id);
 
@@ -97,12 +96,9 @@ export function switchTab(name, opts = {}) {
   $('pipHud')?.classList.toggle('is-off', name === 'payout' || name === 'summary');
   requestAnimationFrame(() => { $('mainContent').scrollTop = 0; });
 
-  // Focus synchronously — still inside the click gesture chain (iOS Safari).
-  if (name === 'staff' && !opts.swipe) {
-    for (const inp of document.querySelectorAll('#staffList [data-field="name"]')) {
-      if (!inp.value.trim()) { inp.focus(); break; }
-    }
-  }
+  // Nobody on shift yet: focus the add field (synchronously, inside the tap,
+  // so iOS raises the keyboard).
+  if (name === 'staff' && !opts.swipe && !document.querySelector('[data-staff-row]')) $('staffAdd')?.focus();
 }
 
 // True when the computed distribution can't actually pay everyone out.

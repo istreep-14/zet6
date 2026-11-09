@@ -1,13 +1,13 @@
 // Bottom sheets: mount every shell once, open / close by id, and let modules
 // hook "closed" to drop their per-sheet state.
 
-import { SheetShell } from './kit.js';
+import { html, render } from './preact.js';
+import { SheetShell } from './pkit.js';
 
 const $ = id => document.getElementById(id);
 
 export const SHEETS = {
-  'sheet-time': { title: 'Shift time' },
-  'sheet-roster': { title: 'Quick add', tall: true, foot: true },
+  'sheet-staff': { title: 'Person' },
   'sheet-person': { title: 'Payout' },
   'sheet-bonus': { title: 'Closer bonus & chump' },
   'sheet-close': { title: 'Close-time what-if' },
@@ -15,10 +15,9 @@ export const SHEETS = {
 
 const closeHooks = {};
 
+// Rendered once; sheet bodies are then rendered into by their own modules.
 export function mountSheets(host) {
-  host.innerHTML = Object.entries(SHEETS)
-    .map(([id, o]) => String(SheetShell({ id, ...o })))
-    .join('');
+  render(Object.entries(SHEETS).map(([id, o]) => html`<${SheetShell} key=${id} id=${id} ...${o} />`), host);
 }
 
 export const closeAllSheets = () => Object.keys(SHEETS).forEach(id => closeSheet(id));
@@ -45,9 +44,4 @@ export function closeSheet(id) {
 
 export function onSheetClose(id, fn) {
   closeHooks[id] = fn;
-}
-
-// Backdrop tap (outside the sheet) closes it.
-export function sheetBackdrop(e, id) {
-  if (e.target === $(id)) closeSheet(id);
 }

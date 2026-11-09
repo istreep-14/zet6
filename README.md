@@ -12,7 +12,7 @@ The tab bar has three tabs, in the order you use them:
 
 | Tab | What it's for |
 |---|---|
-| **Staff** | Who worked. Quick add saved people, set In/Out times, mark closers. With roles on, bartenders, servers and support each get their own section and default times. |
+| **Staff** | Who worked. Type a name (or tap a saved one) to add them; tap a person to set their In/Out times, make them a closer or remove them. With roles on, bartenders, servers and support each get their own section and default times. |
 | **Tips** | The tips: type one net total, or count each bill size with −/+ steppers. |
 | **Payout** | The answer: total pool and rate, then each person's shift, hours, pay **and the bills for their envelope**. If the drawer can't make exact change, a fix card shows the fewest swaps and **Apply** updates the cash count. **Show the working** explains the maths; Close time and Bonus tools sit below. |
 
@@ -22,13 +22,10 @@ The menu button — or a swipe in from the left edge — opens the **sessions pa
 
 ### Staff
 
-- **Quick add** opens a grid of everyone you've entered before. Tap people (or **Select all**), then **Add**. Names are remembered on this device, even after starting a new session. **Edit** removes saved names.
-- Each person has an **In** chip and an **Out** chip:
-  - **Slide a chip up or down** to change it 15 minutes at a time (up = later).
-  - **Tap a chip** to open the time sheet: scroll the band (4:00 PM, 4:15 PM…), ▲/▼ steppers, type a time, or reset to the default.
-- Times are typed as decimal 12-hour clock: `5` = 5:00, `10.5` = 10:30, `2` = 2:00 (am or pm worked out from the shift). Quarter hours only (`.25`, `.5`, `.75`).
+- **Saved names** appear as chips under the add box — tap one to add them. Names are remembered on this device, even after starting a new session. **Edit** removes saved names.
+- **Tap a person** to edit them: their In and Out times (±15 minutes, or tap a half-hour time; **Use default** resets), make them a **closer**, or **remove** them.
+- Default times are typed as decimal 12-hour clock in this shift's panel: `5` = 5:00, `10.5` = 10:30, `2` = 2:00 (am or pm worked out from the shift). Quarter hours only (`.25`, `.5`, `.75`).
 - Faded times use the default for that role. A red Out time marks a closer.
-- **Swipe a row left** for Closer, Reset and Delete.
 
 ### How the split works
 

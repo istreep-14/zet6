@@ -7,14 +7,9 @@ import * as persist from './persist.js';
 import * as sessions from './sessions.js';
 import { buildViewModel } from './viewmodel.js';
 import { setClock24 } from './time.js';
-import { mountSheets, closeSheet, closeAllSheets, sheetBackdrop } from './ui/sheet.js';
+import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
 import { switchTab, updateTabIndicators, normalizeTab, renderSubtabs, subsFor, activeSub } from './render/tabs.js';
-import {
-  renderStaff, invalidateStaffList, staffTabNav,
-  initStaffGestures, closeAllSwipes,
-  openTimeSheet, timeStep, timeInput, timeBand, bandPick, bandScroll, timeReset,
-  openRosterSheet, rosterPick, rosterSelectAll, rosterSelected, toggleRosterEdit,
-} from './render/staff.js';
+import { renderStaff, openStaffEditor } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderTips, invalidateTips } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
@@ -93,8 +88,6 @@ function activate(next, { keepPanel = false } = {}) {
   next.ui.activeTab = normalizeTab(next.ui.activeTab);
   closeAllSheets();
   store.replaceState(next);
-  invalidateStaffList();
-  invalidateTips();
   next.staff.forEach(p => rememberName(p.name, p.role));
   switchTab(next.ui.activeTab);
   syncHdrDate();
@@ -168,7 +161,6 @@ window.App = {
 
   // sheets
   closeSheet,
-  sheetBg: sheetBackdrop,
   openBonus: fromPanel(() => openBonus(lastVm)),
   openCloseTime: fromPanel(() => openCloseTime(lastVm)),
   // Default times live in the shift panel now.
@@ -189,31 +181,35 @@ window.App = {
   toggleSetting(key) {
     const s = store.getState();
     if (key === 'multiPool' && s.pools.length > 1) return;
-    invalidateStaffList();
-    invalidateTips();
     store.setSetting(key, !s.settings[key]);
   },
 
   // staff
-  addStaff(role) {
-    const id = store.addStaff(rolesOn() ? role : 'bartender');
-    // Renders synchronously, so focus while still inside the tap (iOS keyboard).
-    document.querySelector(`[data-sid="${id}"] [data-field="name"]`)?.focus();
+  // Add a named person: fills a blank row of that role first (fresh sessions
+  // start with blank rows), else a new row. Remembered for next shift.
+  addPerson(name, role = 'bartender') {
+    const n = String(name || '').trim();
+    if (!n) return;
+    const r = rolesOn() ? role : 'bartender';
+    store.mutate(st => {
+      const blank = st.staff.find(p => !p.name.trim() && p.role === r);
+      if (blank) blank.name = n;
+      else st.staff.push({ ...store.newStaff(r), name: n });
+    }, { immediate: true });
+    rememberName(n, r);
   },
-  staffField: store.updateStaff,
-  staffTab: staffTabNav,
-
-  // Swipe-revealed row actions (Closer / Reset / Delete)
-  rowAction(kind, id) {
-    closeAllSwipes();
-    if (kind === 'closer') store.toggleCloserOverride(id);
-    else if (kind === 'delete') store.removeStaff(id);
-    else if (kind === 'reset') {
-      store.mutate(s => {
-        const p = s.staff.find(x => x.id === id);
-        if (p) { p.in = ''; p.out = ''; }
-      }, { immediate: true });
-    }
+  editStaff: id => openStaffEditor(id),
+  // immediate = picker / button edits (render now); typing debounces.
+  staffField(id, field, value, immediate = false) {
+    store.mutate(s => {
+      const p = s.staff.find(x => x.id === id);
+      if (p) p[field] = value;
+    }, { immediate });
+  },
+  toggleCloser: id => store.toggleCloserOverride(id),
+  removePerson(id) {
+    closeSheet('sheet-staff');
+    store.removeStaff(id);
   },
 
   // Roster: remember names as they're committed, one-tap re-add next shift
@@ -225,34 +221,6 @@ window.App = {
     forgetName(name);
     render(store.getState());
   },
-  openRoster: openRosterSheet,
-  rosterPick,
-  rosterAll: rosterSelectAll,
-  rosterEdit: toggleRosterEdit,
-  // Each pick fills the next blank row of their role, or gets a new row.
-  rosterAddSelected() {
-    const picks = rosterSelected();
-    if (!picks.length) return;
-    const roles = rolesOn();
-    invalidateStaffList();
-    store.mutate(st => {
-      picks.forEach(({ name, role }) => {
-        const r = roles ? role : 'bartender';
-        const blank = st.staff.find(p => !p.name.trim() && (!roles || p.role === r));
-        if (blank) blank.name = name;
-        else st.staff.push({ ...store.newStaff(r), name });
-      });
-    }, { immediate: true });
-    closeSheet('sheet-roster');
-  },
-
-  // Time sheet (tap a time chip)
-  timeStep,
-  timeInput,
-  timeBand,
-  bandPick,
-  bandScroll,
-  timeReset,
 
   // defaults
   roleDefault: (role, field, value) => store.setRoleDefault(role, field, value.trim()),
@@ -476,7 +444,7 @@ if (window.visualViewport) {
     const t = e.target;
     const x = e.touches[0].clientX, box = document.body.getBoundingClientRect();
     tracking = x - box.left >= EDGE && box.right - x >= EDGE
-      && !t.closest('.overflow-x-auto') && !t.closest('.staff-row') && !t.closest('.subtabs')
+      && !t.closest('.overflow-x-auto') && !t.closest('.subtabs')
       && !(t.matches('input') && t === document.activeElement)
       && !document.body.classList.contains('keyboard-open');
     x0 = x;
@@ -507,13 +475,6 @@ state.staff.forEach(p => rememberName(p.name, p.role));
 switchTab(state.ui.activeTab);
 render(state);
 
-// Slide a time chip up/down (or tap it) to set In/Out; swipe a row left for
-// its actions. (After the first render: #staffList is built by renderStaff.)
-initStaffGestures({
-  setTime: (id, field, raw) => store.updateStaff(id, field, raw),
-  openTime: (id, field) => openTimeSheet(id, field),
-});
-
 // Side panels: drag in from either screen edge, drag back to close.
 initPanelGestures({
   canOpen: () => !document.body.classList.contains('keyboard-open')
@@ -526,11 +487,3 @@ initPanelGestures({
   if (ready || tries > 60) document.documentElement.classList.add('ready');
   else requestAnimationFrame(() => reveal(tries + 1));
 })();
-
-// Pulse-hint the first empty staff name on a fresh session
-const firstEmpty = document.querySelector('#staffList [data-field="name"]');
-if (firstEmpty && !firstEmpty.value.trim()) {
-  const row = firstEmpty.closest('.staff-row');
-  row?.classList.add('pulse');
-  setTimeout(() => row?.classList.remove('pulse'), 1600);
-}
