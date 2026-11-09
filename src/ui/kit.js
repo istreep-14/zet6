@@ -49,7 +49,7 @@ export function Card({ class: cls = '', flush = false, tone = '', ...rest } = {}
 
 // Small uppercase label above a group.
 export function Label(text, aside = '') {
-  return html`<div class="flex items-baseline justify-between gap-2 px-1 pt-2 text-[13px] font-semibold uppercase tracking-wide text-ink-3">
+  return html`<div class="flex items-baseline justify-between gap-2 px-1 pt-3 text-[12px] font-bold uppercase tracking-[.09em] text-ink-3">
     <span>${text}</span>${aside ? html`<span class="normal-case tracking-normal font-medium">${aside}</span>` : ''}</div>`;
 }
 
@@ -59,9 +59,9 @@ export const SEP = 'border-t border-sep first:border-t-0';
 // ── Controls ─────────────────────────────────────────────────────────────────
 
 const BTN_VARIANT = {
-  primary: 'bg-gold text-gold-ink',
+  primary: 'bg-gold text-gold-ink shadow-[0_8px_24px_-8px_rgb(255_210_63/.55)]',
   tonal: 'bg-gold/12 text-gold',
-  plain: 'bg-fill text-ink',
+  plain: 'bg-fill text-ink shadow-[inset_0_1px_0_rgb(255_255_255/.06)]',
   danger: 'bg-red/15 text-red',
   ghost: 'text-gold',
   surface: 'bg-surface text-ink',
@@ -74,7 +74,7 @@ const BTN_SIZE = {
 
 export function Button({ variant = 'plain', size = 'md', block = false, icon: ic, class: cls = '', ...rest } = {}, label = '') {
   return html`<button class="${cx(
-    'inline-flex items-center justify-center gap-2 font-semibold disabled:opacity-35',
+    'inline-flex items-center justify-center gap-2 font-bold tracking-[-.01em] disabled:opacity-35',
     PRESS, BTN_VARIANT[variant], BTN_SIZE[size], block && 'w-full', cls,
   )}"${attrs(rest)}>${ic ? icon(ic, size === 'sm' ? 'size-4' : 'size-5') : ''}${label}</button>`;
 }
@@ -89,7 +89,7 @@ export function Seg({ items, value, handler, size = 'md', class: cls = '' }) {
   return html`<div class="${cx('flex gap-1 rounded-xl bg-fill-2 p-1', cls)}" role="tablist">
     ${items.map(it => html`<button role="tab" aria-selected="${it.value === value}" class="${cx(
       'flex-1 rounded-lg px-3 font-semibold transition', h,
-      it.value === value ? 'bg-high text-ink shadow-md shadow-black/30' : 'text-ink-2',
+      it.value === value ? 'bg-high text-ink shadow-[0_2px_8px_rgb(0_0_0/.4),inset_0_1px_0_rgb(255_255_255/.08)]' : 'text-ink-2',
     )}" onclick="${handler(it.value)}">${it.label}</button>`)}
   </div>`;
 }
@@ -98,7 +98,7 @@ export function Seg({ items, value, handler, size = 'md', class: cls = '' }) {
 export function Chip({ on, role, onclick }, label) {
   return html`<button class="${cx(
     'inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-[15px] font-semibold transition',
-    on ? 'bg-high text-ink' : 'bg-fill-2 text-ink-2',
+    on ? 'bg-high text-ink shadow-[inset_0_0_0_1px_rgb(255_255_255/.1)]' : 'bg-fill-2 text-ink-2',
   )}" aria-pressed="${on}" onclick="${onclick}">
     <span class="${cx('size-2 rounded-full', on ? ROLE_DOT[role] : 'bg-ink-3')}"></span>${label}</button>`;
 }
@@ -131,7 +131,7 @@ export function SwitchRow({ id, on, disabled, onclick, label, hint }) {
 // Tappable list row inside a flush card.
 export function ListRow({ onclick, icon: ic, tone = '', chevron = true }, label, aside = '') {
   return html`<button class="${cx('flex min-h-[54px] w-full items-center gap-3 px-4 text-left text-[17px] transition active:bg-raised', SEP, tone === 'danger' && 'text-red')}" onclick="${onclick}">
-    ${ic ? html`<span class="${cx('grid size-8 place-items-center rounded-lg', tone === 'danger' ? 'bg-red/15' : 'bg-gold/12 text-gold')}">${icon(ic, 'size-[18px]')}</span>` : ''}
+    ${ic ? html`<span class="${cx('grid size-8 place-items-center rounded-lg', tone === 'danger' ? 'bg-red/15' : 'bg-white/8 text-ink')}">${icon(ic, 'size-[18px]')}</span>` : ''}
     <span class="flex-1">${label}</span>
     ${aside ? html`<span class="text-[15px] text-ink-2">${aside}</span>` : ''}
     ${chevron ? icon('chevR', 'size-4 text-ink-3') : ''}
@@ -169,7 +169,7 @@ export function Alert({ tone = 'error', action } = {}, text) {
 export function Empty({ icon: ic = 'dollar', title, body, action }) {
   return html`<div class="flex flex-col items-center px-6 pb-10 pt-16 text-center text-[15px] leading-relaxed text-ink-2">
     <span class="mb-4 grid size-16 place-items-center rounded-full bg-gold/12 text-gold">${icon(ic, 'size-7')}</span>
-    <div class="mb-1 text-[22px] font-bold tracking-tight text-ink">${title}</div>
+    <div class="mb-1 text-[24px] font-extrabold tracking-[-.03em] text-ink">${title}</div>
     <div>${body}</div>
     ${action ? html`<div class="mt-6">${Button({ variant: 'primary', class: 'min-w-44', onclick: action.onclick }, action.label)}</div>` : ''}
   </div>`;
@@ -214,7 +214,7 @@ export function SheetShell({ id, title, tall = false, foot = false }) {
   return html`<div class="sheet-backdrop" id="${id}" onclick="App.sheetBg(event,'${id}')">
     <div class="${cx('sheet', tall && 'sheet--tall')}" role="dialog" aria-labelledby="${id}-title">
       <div class="flex shrink-0 items-center gap-2 py-1.5 pl-5 pr-2.5">
-        <span class="flex-1 truncate text-[22px] font-bold tracking-tight" id="${id}-title">${title}</span>
+        <span class="flex-1 truncate text-[24px] font-extrabold tracking-[-.03em]" id="${id}-title">${title}</span>
         <button class="grid size-12 place-items-center" onclick="App.closeSheet('${id}')" aria-label="Close">
           <span class="grid size-8 place-items-center rounded-full bg-fill text-ink-2">${icon('x', 'size-4')}</span>
         </button>

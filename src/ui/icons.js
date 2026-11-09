@@ -23,6 +23,8 @@ const PATHS = {
   download: '<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>',
   upload: '<path d="M12 21V9M7 14l5-5 5 5M5 3h14"/>',
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h10"/>',
+  pencil: '<path d="M17 3l4 4L8 20H4v-4L17 3z"/>',
   sliders: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
 };
 

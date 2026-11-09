@@ -1,10 +1,9 @@
 // Payout tab — the answer:
 //   tally (total · rate · hours)
 //   → a fix card when the drawer can't make exact change (with Apply)
-//   → one row per person: name + shift (subtle), pay + hours stacked;
-//     chump, total
+//   → one table, one tight line per person: name · shift · hrs · bills · pay;
+//     chump, total (hours, drawer bill counts, grand total)
 //   → how the split was worked out → pools (multi-pool) → tools.
-// Envelope bills live in the tap-a-person sheet (sheets.js).
 
 import { DENOMS, fmtHrs, fmtMoney, payoutOrder, poolValue } from '../util.js';
 import { fmtTimeAbs, timeParts } from '../time.js';
@@ -12,7 +11,7 @@ import { planMakeChange, computeTradeUp, distribute } from '../engine.js';
 import { updatePool } from '../store.js';
 import { html, cx, mount } from '../ui/html.js';
 import { icon } from '../ui/icons.js';
-import { Card, Button, Avatar, Alert, Empty, Label, Money, Denom, ROLE_DOT, SEP } from '../ui/kit.js';
+import { Card, Button, Alert, Empty, Label, Money, Denom, ROLE_DOT, SEP } from '../ui/kit.js';
 import { invalidateTips } from './tips.js';
 
 const $ = id => document.getElementById(id);
@@ -95,7 +94,7 @@ function tallyHTML(vm) {
   return html`<div class="flex items-end justify-between gap-3 px-1">
     <div class="flex min-w-0 flex-col">
       <span class="text-[13px] font-semibold text-ink-2">Total pool${date ? ' · ' + date : ''}</span>
-      <span class="mt-0.5 font-rounded text-[56px] font-bold leading-none tracking-[-.035em] max-[374px]:text-[46px]">${fmtMoney(s.totalCash)}</span>
+      <span class="mt-1 font-rounded text-[60px] font-extrabold leading-none tracking-[-.045em] max-[374px]:text-[46px]">${fmtMoney(s.totalCash)}</span>
     </div>
     <div class="flex flex-col items-end pb-1.5 text-right">
       <span class="font-rounded text-[22px] font-bold text-green">$${rate.toFixed(2)}<small class="ml-px text-[13px] font-medium text-ink-2">/hr</small></span>
@@ -104,40 +103,74 @@ function tallyHTML(vm) {
   </div>`;
 }
 
-// Shift read like a calendar event: "5–11:45PM", "5PM–2AM" (subtle line).
-function shiftHTML(inAbs, outAbs) {
-  const a = timeParts(inAbs), b = timeParts(outAbs);
-  const t = x => x.h + (x.m ? ':' + x.m : '');
-  const ap = x => x.ap ? html`<small class="ml-px text-[8.5px] font-semibold tracking-wide">${x.ap.toUpperCase()}M</small>` : '';
-  const text = a.ap === b.ap ? html`${t(a)}–${t(b)}${ap(b)}` : html`${t(a)}${ap(a)}–${t(b)}${ap(b)}`;
-  return html`<span class="min-w-0 truncate text-[12px] text-ink-3" aria-label="${fmtTimeAbs(inAbs)} to ${fmtTimeAbs(outAbs)}">${text}</span>`;
+// ── Payout table: one tight line per person ──────────────────────────────────
+// Name · Shift · Hrs · one equal column per bill size in use · Pay.
+// Chump row, then a Total row with hours, the drawer's bill counts and the
+// grand total. table-fixed so it always fits the card; no sideways scroll.
+
+// Compact shift, no am/pm: "5–11:45", "5:30–12". Closers' out time in red.
+function shiftHTML(p) {
+  const t = x => { const q = timeParts(x); return q.h + (q.m ? ':' + q.m : ''); };
+  return html`<span aria-label="${fmtTimeAbs(p.inAbs)} to ${fmtTimeAbs(p.outAbs)}">${t(p.inAbs)}–<span class="${p.closer ? 'text-red' : ''}">${t(p.outAbs)}</span></span>`;
 }
 
-// Hours: decimals only when needed; whole hours in a --hi-wide slot so the
-// ones digits line up down the column.
-function hrsHTML(h) {
-  const [w, f] = fmtHrs(h).split('.');
-  return html`<span class="grid grid-cols-[var(--hi,1ch)_auto] whitespace-nowrap font-medium tabular-nums">
-    <span class="text-right">${w}</span><span>${f ? '.' + f : ''}<small class="ml-[3px] text-[12px]">hr</small></span></span>`;
-}
+function payoutTableHTML(vm, byPerson, remBills, note) {
+  const s = vm.shares;
+  const ordered = payoutOrder(s.perPerson);
+  const rem = s.leftover > 0 ? (remBills || {}) : {};
+  const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
+  const cols = DENOMS.filter(d => colTotal(d) > 0);
+  const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
 
-const ROW = 'col-span-full grid grid-cols-subgrid items-center px-4 max-[374px]:px-3';
+  const V = 'border-l border-sep';
+  const C = 'px-0 py-2 text-center';
+  const bill = n => html`<td class="${cx(V, C, 'font-rounded', n > 0 ? 'font-bold' : 'text-ink-3/40')}">${n > 0 ? n : '–'}</td>`;
+  const nameTd = 'truncate py-2 pl-3 pr-1 text-left';
+  const payTd = cx(V, 'py-2 pl-0.5 pr-3 text-right');
 
-function personRowHTML(p, extra) {
-  return html`<button class="${cx(ROW, SEP, 'min-h-14 py-2.5 text-left transition active:bg-raised')}" onclick="App.personModal('${p.id}')">
-    <span class="flex min-w-0 items-center gap-2.5">
-      ${Avatar(p.name, p.role)}
-      <span class="flex min-w-0 flex-col gap-0.5">
-        <span class="truncate text-[17px] font-semibold leading-tight max-[374px]:text-[16px]">${p.name}</span>
-        <span class="flex min-w-0 items-center">${shiftHTML(p.inAbs, p.outAbs)}</span>
-        ${extra && html`<span class="truncate text-[11px] text-ink-3">${extra}</span>`}
-      </span>
-    </span>
-    <span class="flex flex-col items-end gap-0.5">
-      ${Money(p.final, cx('font-rounded text-[21px] font-bold leading-none tracking-tight max-[374px]:text-[19px]', !(p.final > 0) && 'text-ink-3'))}
-      <span class="text-[12px] font-medium text-ink-2">${hrsHTML(p.shiftHours ?? p.hours)}</span>
-    </span>
-  </button>`;
+  return Card({ flush: true },
+    html`<div class="flex items-baseline justify-between gap-2 px-3 pb-2 pt-3">
+      <span class="text-[17px] font-bold tracking-tight">Payouts</span>
+      <span class="truncate text-[12px] font-medium text-ink-2">${note}</span>
+    </div>
+    <table class="w-full table-fixed border-collapse whitespace-nowrap text-[14px] tabular-nums max-[374px]:text-[13px]">
+      <colgroup>
+        <col class="w-[21%]"><col class="w-[16%]"><col class="w-[8%]">
+        ${cols.map(() => html`<col>`)}
+        <col class="w-[17%]">
+      </colgroup>
+      <thead><tr class="border-t border-sep text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+        <th class="${cx(nameTd, 'py-1.5 font-semibold')}">Name</th>
+        <th class="py-1.5 text-left font-semibold">Shift</th>
+        <th class="py-1.5 pr-1 text-right font-semibold">Hrs</th>
+        ${cols.map(d => html`<th class="${cx(V, 'bill-col py-1.5 text-center text-[11px] normal-case tracking-tight')}" data-d="${d}">${d}</th>`)}
+        <th class="${cx(payTd, 'py-1.5 font-semibold')}">Pay</th>
+      </tr></thead>
+      <tbody>
+        ${ordered.map(p => {
+          const b = byPerson[p.id] || {};
+          return html`<tr class="cursor-pointer border-t border-sep transition active:bg-raised" onclick="App.personModal('${p.id}')">
+            <td class="${cx(nameTd, 'font-semibold')}">${p.name}</td>
+            <td class="truncate py-2 text-[12px] text-ink-2">${shiftHTML(p)}</td>
+            <td class="py-2 pr-1 text-right text-ink-2">${fmtHrs(p.shiftHours ?? p.hours)}</td>
+            ${cols.map(d => bill(b[d] || 0))}
+            <td class="${payTd}">${Money(p.final, cx('font-rounded font-bold', !(p.final > 0) && 'text-ink-3'))}</td>
+          </tr>`;
+        })}
+        ${s.leftover > 0 && html`<tr class="border-t border-sep text-ink-2">
+          <td class="${nameTd}" colspan="3">Chump · in drawer</td>
+          ${cols.map(d => bill(rem[d] || 0))}
+          <td class="${payTd}">${Money(s.leftover, 'font-semibold')}</td>
+        </tr>`}
+      </tbody>
+      <tfoot><tr class="border-t border-white/15 bg-raised">
+        <td class="${cx(nameTd, 'text-[11px] font-bold uppercase tracking-wider text-ink-2')}">Total</td>
+        <td></td>
+        <td class="py-2 pr-1 text-right font-semibold">${fmtHrs(s.totalHours)}</td>
+        ${cols.map(d => html`<td class="${cx(V, C, 'bill-col')}" data-d="${d}">${colTotal(d)}</td>`)}
+        <td class="${payTd}">${Money(grand, 'font-rounded text-[13px] font-bold text-gold')}</td>
+      </tr></tfoot>
+    </table>`);
 }
 
 function keyHTML(people) {
@@ -154,31 +187,6 @@ function keyHTML(people) {
   return parts.length
     ? html`<p class="-mt-1 flex flex-wrap items-center justify-center gap-1.5 text-[12px] text-ink-3">${parts.map((x, i) => html`${i ? ' · ' : ''}${x}`)}</p>`
     : '';
-}
-
-// The payout table: one grid that rows, chump and total join with subgrid.
-function tableHTML(vm, extraFor) {
-  const s = vm.shares;
-  const ordered = payoutOrder(s.perPerson);
-  const grand = s.perPerson.reduce((t, p) => t + p.final, 0) + s.leftover;
-  const intW = Math.max(...[...ordered.map(p => p.shiftHours ?? p.hours), s.totalHours].map(h => String(Math.floor(h)).length));
-
-  return html`${Card({ flush: true, class: 'grid grid-cols-[minmax(0,1fr)_auto] gap-x-3.5 max-[374px]:gap-x-2.5', style: `--hi:${intW}ch` },
-    html`<div class="${cx(ROW, 'h-10 items-baseline pt-3 text-[12px] font-semibold text-ink-2')}">
-      <span class="text-[16px] text-ink">Payouts</span><span class="text-right">Pay</span>
-    </div>
-    ${ordered.map(p => personRowHTML(p, extraFor(p)))}
-    ${s.leftover > 0 && html`<div class="${cx(ROW, SEP, 'py-2.5 text-[13px] text-ink-2')}">
-      <span>Chump · stays in the drawer</span>${Money(s.leftover, 'text-right font-semibold')}
-    </div>`}
-    <div class="${cx(ROW, 'min-h-14 bg-raised py-2.5 font-semibold')}">
-      <span>Total</span>
-      <span class="flex flex-col items-end gap-0.5">
-        ${Money(grand, 'font-rounded text-[19px] font-bold leading-none tracking-tight text-gold')}
-        <span class="text-[12px] font-medium text-ink-2">${hrsHTML(s.totalHours)}</span>
-      </span>
-    </div>`)}
-  ${keyHTML(ordered)}`;
 }
 
 // ── Fix card: drawer can't make exact change ─────────────────────────────────
@@ -245,7 +253,7 @@ function tradeUpHTML(vm) {
   if (!t) return '';
   return html`<details class="group rounded-card bg-surface">
     <summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 [&::-webkit-details-marker]:hidden">
-      <span class="grid size-8 place-items-center rounded-lg bg-gold/12 text-gold">${icon('swap', 'size-[18px]')}</span>
+      <span class="grid size-8 place-items-center rounded-lg bg-white/8 text-ink">${icon('swap', 'size-[18px]')}</span>
       <span class="flex-1"><span class="block font-semibold">Tidy the drawer</span><span class="text-[13px] text-ink-2">Swap extra small bills for ${t.new20s} × $20</span></span>
       ${icon('chevD', 'size-5 text-ink-3 transition group-open:rotate-180')}
     </summary>
@@ -312,7 +320,7 @@ function worksheetHTML(vm) {
 
   return html`<details class="ws group rounded-card bg-surface">
     <summary class="flex min-h-[52px] cursor-pointer list-none items-center gap-2 px-4 font-semibold [&::-webkit-details-marker]:hidden">
-      <span class="grid size-8 place-items-center rounded-lg bg-gold/12 text-gold">${icon('calc', 'size-[18px]')}</span>
+      <span class="grid size-8 place-items-center rounded-lg bg-white/8 text-ink">${icon('calc', 'size-[18px]')}</span>
       <span class="flex-1">Show the working</span>
       <span class="font-rounded font-bold text-green">$${pool.rate.toFixed(2)}/hr</span>
       ${icon('chevD', 'size-5 text-ink-3 transition group-open:rotate-180')}
@@ -342,7 +350,7 @@ function poolsHTML(vm) {
 
 function toolsHTML() {
   const tool = 'flex h-16 items-center gap-3 whitespace-nowrap rounded-card bg-surface px-4 text-[16px] font-semibold transition active:scale-[.96] active:bg-raised max-[374px]:h-14 max-[374px]:gap-2 max-[374px]:px-3 max-[374px]:text-[15px]';
-  const ic = 'grid size-9 place-items-center rounded-full bg-gold/12 text-gold';
+  const ic = 'grid size-9 place-items-center rounded-full bg-white/8 text-ink';
   return html`<div class="grid grid-cols-2 gap-2">
     <button class="${tool}" onclick="App.openCloseTime()"><span class="${ic}">${icon('clock')}</span>Close time</button>
     <button class="${tool}" onclick="App.openBonus()"><span class="${ic}">${icon('gift')}</span>Bonus</button>
@@ -373,16 +381,19 @@ export function renderPayout(vm) {
 
   const pools = vm.shares.perPool;
   const multi = vm.state.pools.length > 1;
-  const perPoolLine = p => !multi ? '' : pools
-    .filter(pool => p.perPool[pool.id]?.raw > 0)
-    .map(pool => `${pool.label} ${fmtMoney(Math.floor(p.perPool[pool.id].raw))}`)
-    .join(' · ');
+  // Bill columns: the real envelopes, else the swap preview, else none.
+  const bills = !errMsg && vm.dist
+    ? { ...vm.dist, note: 'tap a name for details' }
+    : pendingTradeDown
+      ? { ...pendingTradeDown, note: 'bills shown after the swap' }
+      : { byPerson: {}, remainderBills: {}, note: 'bills don’t work out yet' };
 
   mount(root, html`<div class="flex flex-col gap-4">
     ${tallyHTML(vm)}
     ${pools.map(p => p.warning).filter(Boolean).map(w => Alert({}, w))}
     ${errMsg && fixHTML(vm, errMsg)}
-    ${tableHTML(vm, perPoolLine)}
+    ${payoutTableHTML(vm, bills.byPerson, bills.remainderBills, bills.note)}
+    ${keyHTML(payoutOrder(vm.shares.perPerson))}
     ${worksheetHTML(vm)}
     ${multi && poolsHTML(vm)}
     ${toolsHTML()}

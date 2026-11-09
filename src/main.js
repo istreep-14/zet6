@@ -4,9 +4,10 @@
 
 import * as store from './store.js';
 import * as persist from './persist.js';
+import * as sessions from './sessions.js';
 import { buildViewModel } from './viewmodel.js';
 import { setClock24 } from './time.js';
-import { mountSheets, closeSheet, sheetBackdrop } from './ui/sheet.js';
+import { mountSheets, closeSheet, closeAllSheets, sheetBackdrop } from './ui/sheet.js';
 import { switchTab, updateTabIndicators, normalizeTab, TAB_ORDER } from './render/tabs.js';
 import {
   renderStaff, invalidateStaffList, staffTabNav,
@@ -19,23 +20,21 @@ import { renderTips, invalidateTips } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
-  renderSheets, openPerson, openBonus, adjustBonus, resetBonuses, openDefaults, openSettings,
+  renderSheets, openPerson, openBonus, adjustBonus, resetBonuses, openDefaults,
 } from './render/sheets.js';
+import {
+  renderDrawer, openDrawer, closeDrawer, isDrawerOpen, toggleDrawerEdit, initDrawerGestures, EDGE,
+} from './render/drawer.js';
 
 const $ = id => document.getElementById(id);
 
-// ── Load persisted state (v4 or migrated v3) ──────────────────────────────────
+// ── Load the current session (v4 or migrated v3) ──────────────────────────────
 
-const saved = persist.load();
+const saved = sessions.boot();
 if (saved) store.replaceState(saved);
 
 const state = store.getState();
-if (!state.meta.date) {
-  const t = new Date();
-  state.meta.date = t.getFullYear() + '-'
-    + String(t.getMonth() + 1).padStart(2, '0') + '-'
-    + String(t.getDate()).padStart(2, '0');
-}
+if (!state.meta.date) state.meta.date = sessions.todayISO();
 state.ui.activeTab = normalizeTab(state.ui.activeTab);
 
 mountSheets($('sheets'));
@@ -53,7 +52,54 @@ function render(s) {
   renderCloseTime(lastVm);
   renderSheets(lastVm);
   updateTabIndicators(lastVm);
-  persist.save(s);
+  sessions.saveCurrent(s, {
+    total: lastVm.totalCash || 0,
+    people: s.staff.filter(p => p.name.trim()).length,
+  });
+  renderDrawer(lastVm, sessions.list(), sessions.currentId());
+}
+
+// ── Sessions: switch / create / delete without reloading ─────────────────────
+
+// Settings are app preferences, shared by every session. A session that
+// already uses roles or several pools keeps those visible.
+function carryPrefs(next) {
+  const prefs = store.getState().settings;
+  const usesRoles = next.staff.some(p => p.role !== 'bartender') || next.pools.some(p => p.includeSupport);
+  next.settings = {
+    ...prefs,
+    allRoles: prefs.allRoles || usesRoles,
+    multiPool: prefs.multiPool || next.pools.length > 1,
+  };
+  return next;
+}
+
+// Flush the outgoing session (a debounced keystroke may not be saved yet).
+function flushCurrent() {
+  document.activeElement?.blur?.();
+  render(store.getState());
+}
+
+function activate(next, { keepDrawer = false } = {}) {
+  carryPrefs(next);
+  if (!next.meta.date) next.meta.date = sessions.todayISO();
+  next.ui.activeTab = normalizeTab(next.ui.activeTab);
+  closeAllSheets();
+  store.replaceState(next);
+  invalidateStaffList();
+  invalidateTips();
+  next.staff.forEach(p => rememberName(p.name, p.role));
+  switchTab(next.ui.activeTab);
+  syncHdrDate();
+  render(next);
+  if (!keepDrawer) closeDrawer();
+}
+
+function freshState() {
+  const fresh = store.initialState();
+  fresh.meta.date = sessions.todayISO();
+  fresh.ui.activeTab = 'staff';
+  return fresh;
 }
 
 store.subscribe(render);
@@ -93,7 +139,7 @@ function openDatePicker() {
 // ── Global handler surface for inline on* attributes ──────────────────────────
 
 const rolesOn = () => store.getState().settings.allRoles;
-const fromSettings = fn => (...a) => { closeSheet('sheet-settings'); fn(...a); };
+const fromDrawer = fn => (...a) => { closeDrawer(); fn(...a); };
 
 window.App = {
   // tabs
@@ -105,10 +151,15 @@ window.App = {
   // sheets
   closeSheet,
   sheetBg: sheetBackdrop,
-  openSettings: () => openSettings(lastVm),
-  openDefaults: fromSettings(() => openDefaults(lastVm)),
-  openBonus: fromSettings(() => openBonus(lastVm)),
-  openCloseTime: fromSettings(() => openCloseTime(lastVm)),
+  openDefaults: fromDrawer(() => openDefaults(lastVm)),
+  openBonus: fromDrawer(() => openBonus(lastVm)),
+  openCloseTime: fromDrawer(() => openCloseTime(lastVm)),
+
+  // side drawer (sessions + settings)
+  openDrawer() { closeAllSheets(); openDrawer(); },
+  closeDrawer,
+  toggleDrawer() { if (isDrawerOpen()) closeDrawer(); else App.openDrawer(); },
+  drawerEdit: toggleDrawerEdit,
   personModal: id => openPerson(lastVm, id),
 
   // settings
@@ -261,9 +312,11 @@ window.App = {
     const resetInput = () => { if (input) input.value = ''; };
     reader.onload = e => {
       try {
-        persist.save(persist.deserialize(e.target.result));
+        const next = persist.deserialize(e.target.result);
         resetInput();
-        location.reload();
+        flushCurrent();
+        sessions.createId();
+        activate(next);
       } catch (err) {
         alert('Import failed: ' + err.message);
         resetInput();
@@ -272,13 +325,48 @@ window.App = {
     reader.onerror = () => { alert('Could not read file.'); resetInput(); };
     reader.readAsText(file);
   },
-  clearSession() {
-    if (!confirm('Start a new session? This will clear all current data.')) return;
-    // Settings are a preference, not session data — carry them over.
-    const fresh = store.initialState();
-    fresh.settings = { ...store.getState().settings };
-    persist.save(fresh);
-    location.reload();
+
+  // Sessions: every shift is kept; the drawer switches between them.
+  newSession() {
+    flushCurrent();
+    sessions.createId();
+    activate(freshState());
+  },
+  switchSession(id) {
+    if (id === sessions.currentId()) { closeDrawer(); return; }
+    flushCurrent();
+    const next = sessions.loadSession(id);
+    if (!next) {
+      alert('That session could not be opened — its saved data is damaged.');
+      sessions.remove(id);
+      renderDrawer(lastVm, sessions.list(), sessions.currentId());
+      return;
+    }
+    sessions.setCurrent(id);
+    activate(next);
+  },
+  renameSession(id) {
+    const e = sessions.list().find(x => x.id === id);
+    const name = prompt('Session name (blank = show the date)', e?.name || '');
+    if (name === null) return;
+    sessions.rename(id, name);
+    renderDrawer(lastVm, sessions.list(), sessions.currentId());
+  },
+  deleteSession(id) {
+    const e = sessions.list().find(x => x.id === id);
+    const what = e?.name || (e?.date ? 'the ' + e.date + ' session' : 'this session');
+    if (!confirm(`Delete ${what}? This can’t be undone.`)) return;
+    const wasCurrent = id === sessions.currentId();
+    sessions.remove(id);
+    if (!wasCurrent) { renderDrawer(lastVm, sessions.list(), sessions.currentId()); return; }
+    // Open the next newest session, or start a fresh one.
+    for (const other of sessions.list()) {
+      const next = sessions.loadSession(other.id);
+      if (next) { sessions.setCurrent(other.id); activate(next, { keepDrawer: true }); return; }
+      sessions.remove(other.id);
+    }
+    sessions.createId();
+    activate(freshState(), { keepDrawer: true });
   },
 };
 
@@ -357,7 +445,9 @@ if (window.visualViewport) {
   area.addEventListener('touchstart', e => {
     if (e.touches.length !== 1) { tracking = false; return; }
     const t = e.target;
-    tracking = !t.closest('.overflow-x-auto') && !t.closest('.staff-row')
+    // The left edge belongs to the drawer's drag-to-open.
+    tracking = e.touches[0].clientX - document.body.getBoundingClientRect().left >= EDGE
+      && !t.closest('.overflow-x-auto') && !t.closest('.staff-row')
       && !(t.matches('input') && t === document.activeElement)
       && !document.body.classList.contains('keyboard-open');
     x0 = e.touches[0].clientX;
@@ -371,7 +461,10 @@ if (window.visualViewport) {
     const dy = e.changedTouches[0].clientY - y0;
     if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - t0 > 700) return;
     const next = TAB_ORDER[TAB_ORDER.indexOf(store.getState().ui.activeTab) + (dx < 0 ? 1 : -1)];
-    if (!next) return;
+    if (!next) {
+      if (dx > 0) App.openDrawer();          // right swipe on the first tab
+      return;
+    }
     document.activeElement?.blur?.();
     switchTab(next, { swipe: dx < 0 ? 'left' : 'right' });
     store.setActiveTab(next);
@@ -391,6 +484,12 @@ render(state);
 initStaffGestures({
   setTime: (id, field, raw) => store.updateStaff(id, field, raw),
   openTime: (id, field) => openTimeSheet(id, field),
+});
+
+// Drawer: drag in from the left edge, drag it back to close.
+initDrawerGestures({
+  canOpen: () => !document.body.classList.contains('keyboard-open')
+    && !document.querySelector('.sheet-backdrop.open'),
 });
 
 // Reveal once Tailwind has styled the page (it compiles in the browser).

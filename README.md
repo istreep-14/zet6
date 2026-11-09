@@ -16,7 +16,7 @@ The tab bar has three tabs, in the order you use them:
 | **Tips** | The tips: type one net total, or count each bill size with −/+ steppers. |
 | **Payout** | The answer: total pool and rate, then each person's shift, hours, pay **and the bills for their envelope**. If the drawer can't make exact change, a fix card shows the fewest swaps and **Apply** updates the cash count. **Show the working** explains the maths; Close time and Bonus tools sit below. |
 
-The gear in the header opens **Settings** (servers & support, multiple pools, 24-hour time, default times, export/import, new session). Swipe left or right on the page to move between tabs.
+The menu button in the header — or a swipe in from the left edge — opens the **side drawer**: every saved session (tap one to switch, Edit to rename or delete), **New session**, and the settings (servers & support, multiple pools, 24-hour time, default times, export/import). Swipe left or right on the page to move between tabs.
 
 ### Staff
 
@@ -35,7 +35,7 @@ The gear in the header opens **Settings** (servers & support, multiple pools, 24
 3. The leftover dollars go to the closers (or however you set them in **Bonus**).
 4. Anything that still can't be split evenly stays in the drawer as the "chump".
 
-With **Multiple pools** turned on (Settings), tips can be split by time window — e.g. a lunch pool and a dinner pool, each shared only by the people working then.
+With **Multiple pools** turned on (in the drawer), tips can be split by time window — e.g. a lunch pool and a dinner pool, each shared only by the people working then.
 
 ### Bills
 
@@ -43,15 +43,15 @@ The app works out which physical bills each person gets, keeping $100s/$50s prop
 
 ### Simple vs detailed
 
-By default the app is in simple mode: one staff list and one tip pool. In Settings you can turn on **Servers & support** (separate bartender / server / support lists with their own default times) and **Multiple pools**.
+By default the app is in simple mode: one staff list and one tip pool. In the drawer you can turn on **Servers & support** (separate bartender / server / support lists with their own default times) and **Multiple pools**.
 
 ---
 
 ## Saving
 
 - Everything auto-saves on the device (`localStorage`).
-- **Export JSON** in Settings downloads the shift as a dated `.json` file; **Import JSON** loads one back.
-- **New session** clears the shift but keeps your settings and saved names.
+- Every shift is saved as its own **session**; **New session** starts a fresh one and keeps the old ones in the drawer. Settings and saved names are shared by all sessions.
+- **Export JSON** in the drawer downloads the current session as a dated `.json` file; **Import** adds a file back as a new session.
 
 ---
 
