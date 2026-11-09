@@ -1,9 +1,11 @@
-// Payout tab — the answer:
-//   tally (total · rate · hours)
-//   → a fix card when the drawer can't make exact change (with Apply)
-//   → one table, one tight line per person: name · shift · hrs · bills · pay;
-//     chump, total (hours, drawer bill counts, grand total)
-//   → how the split was worked out → pools (multi-pool) → tools.
+// Payout tab — three swipeable sub-tabs:
+//   Summary  tally (total · rate · hours) → who gets what: name · shift · hrs
+//            · pay, chump, total → key → tools. No bills.
+//   Bills    status (exact change ✓ / fix card with Apply) → envelope table:
+//            name · one column per bill size · pay, chump, drawer totals
+//            → "Tidy the drawer".
+//   Working  how the split was worked out, step by step (single pool), or
+//            the pools list (several pools).
 
 import { DENOMS, fmtHrs, fmtMoney, payoutOrder, poolValue } from '../util.js';
 import { fmtTimeAbs, timeParts } from '../time.js';
@@ -13,13 +15,13 @@ import { html, cx, mount } from '../ui/html.js';
 import { icon } from '../ui/icons.js';
 import { Card, Button, Alert, Empty, Label, Money, Denom, ROLE_DOT, SEP } from '../ui/kit.js';
 import { invalidateTips } from './tips.js';
+import { activeSub } from './tabs.js';
 
 const $ = id => document.getElementById(id);
 
 let currentVm = null;
 let pendingTradeUp = null;
 let pendingTradeDown = null;
-let worksheetOpen = false;
 
 // ── Distribution status ──────────────────────────────────────────────────────
 
@@ -114,12 +116,13 @@ function shiftHTML(p) {
   return html`<span aria-label="${fmtTimeAbs(p.inAbs)} to ${fmtTimeAbs(p.outAbs)}">${t(p.inAbs)}–<span class="${p.closer ? 'text-red' : ''}">${t(p.outAbs)}</span></span>`;
 }
 
-function payoutTableHTML(vm, byPerson, remBills, note) {
+function payoutTableHTML(vm, byPerson, remBills, note, { bills: withBills = true } = {}) {
   const s = vm.shares;
   const ordered = payoutOrder(s.perPerson);
   const rem = s.leftover > 0 ? (remBills || {}) : {};
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
-  const cols = DENOMS.filter(d => colTotal(d) > 0);
+  const cols = withBills ? DENOMS.filter(d => colTotal(d) > 0) : [];
+  const shift = !withBills;
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
 
   const V = 'border-l border-sep';
@@ -130,19 +133,19 @@ function payoutTableHTML(vm, byPerson, remBills, note) {
 
   return Card({ flush: true },
     html`<div class="flex items-baseline justify-between gap-2 px-3 pb-2 pt-3">
-      <span class="text-[17px] font-bold tracking-tight">Payouts</span>
+      <span class="text-[17px] font-bold tracking-tight">${withBills ? 'Envelopes' : 'Payouts'}</span>
       <span class="truncate text-[12px] font-medium text-ink-2">${note}</span>
     </div>
     <table class="w-full table-fixed border-collapse whitespace-nowrap text-[14px] tabular-nums max-[374px]:text-[13px]">
       <colgroup>
-        <col class="w-[21%]"><col class="w-[16%]"><col class="w-[8%]">
-        ${cols.map(() => html`<col>`)}
-        <col class="w-[17%]">
+        ${shift
+          ? html`<col class="w-[34%]"><col class="w-[30%]"><col class="w-[14%]"><col>`
+          : html`<col class="w-[28%]">${cols.map(() => html`<col>`)}<col class="w-[20%]">`}
       </colgroup>
       <thead><tr class="border-t border-sep text-[11px] font-semibold uppercase tracking-wide text-ink-3">
         <th class="${cx(nameTd, 'py-1.5 font-semibold')}">Name</th>
-        <th class="py-1.5 text-left font-semibold">Shift</th>
-        <th class="py-1.5 pr-1 text-right font-semibold">Hrs</th>
+        ${shift && html`<th class="py-1.5 text-left font-semibold">Shift</th>
+        <th class="py-1.5 pr-1 text-right font-semibold">Hrs</th>`}
         ${cols.map(d => html`<th class="${cx(V, 'bill-col py-1.5 text-center text-[11px] normal-case tracking-tight')}" data-d="${d}">${d}</th>`)}
         <th class="${cx(payTd, 'py-1.5 font-semibold')}">Pay</th>
       </tr></thead>
@@ -151,22 +154,22 @@ function payoutTableHTML(vm, byPerson, remBills, note) {
           const b = byPerson[p.id] || {};
           return html`<tr class="cursor-pointer border-t border-sep transition active:bg-raised" onclick="App.personModal('${p.id}')">
             <td class="${cx(nameTd, 'font-semibold')}">${p.name}</td>
-            <td class="truncate py-2 text-[12px] text-ink-2">${shiftHTML(p)}</td>
-            <td class="py-2 pr-1 text-right text-ink-2">${fmtHrs(p.shiftHours ?? p.hours)}</td>
+            ${shift && html`<td class="truncate py-2.5 text-[13px] text-ink-2">${shiftHTML(p)}</td>
+            <td class="py-2.5 pr-1 text-right text-ink-2">${fmtHrs(p.shiftHours ?? p.hours)}</td>`}
             ${cols.map(d => bill(b[d] || 0))}
-            <td class="${payTd}">${Money(p.final, cx('font-rounded font-bold', !(p.final > 0) && 'text-ink-3'))}</td>
+            <td class="${payTd}">${Money(p.final, cx('font-rounded font-bold', shift && 'text-[16px]', !(p.final > 0) && 'text-ink-3'))}</td>
           </tr>`;
         })}
         ${s.leftover > 0 && html`<tr class="border-t border-sep text-ink-2">
-          <td class="${nameTd}" colspan="3">Chump · in drawer</td>
+          <td class="${nameTd}" colspan="${shift ? 3 : 1}">Chump${shift ? ' · stays in drawer' : ''}</td>
           ${cols.map(d => bill(rem[d] || 0))}
           <td class="${payTd}">${Money(s.leftover, 'font-semibold')}</td>
         </tr>`}
       </tbody>
       <tfoot><tr class="border-t border-white/15 bg-raised">
         <td class="${cx(nameTd, 'text-[11px] font-bold uppercase tracking-wider text-ink-2')}">Total</td>
-        <td></td>
-        <td class="py-2 pr-1 text-right font-semibold">${fmtHrs(s.totalHours)}</td>
+        ${shift && html`<td></td>
+        <td class="py-2 pr-1 text-right font-semibold">${fmtHrs(s.totalHours)}</td>`}
         ${cols.map(d => html`<td class="${cx(V, C, 'bill-col')}" data-d="${d}">${colTotal(d)}</td>`)}
         <td class="${payTd}">${Money(grand, 'font-rounded text-[13px] font-bold text-gold')}</td>
       </tr></tfoot>
@@ -318,20 +321,19 @@ function worksheetHTML(vm) {
       <div class="${V}">${where}</div>`);
   }
 
-  return html`<details class="ws group rounded-card bg-surface">
-    <summary class="flex min-h-[52px] cursor-pointer list-none items-center gap-2 px-4 font-semibold [&::-webkit-details-marker]:hidden">
+  return html`<div class="rounded-card bg-surface">
+    <div class="flex min-h-[52px] items-center gap-2 px-4 pt-1 font-semibold">
       <span class="grid size-8 place-items-center rounded-lg bg-white/8 text-ink">${icon('calc', 'size-[18px]')}</span>
-      <span class="flex-1">Show the working</span>
+      <span class="flex-1">How the split works</span>
       <span class="font-rounded font-bold text-green">$${pool.rate.toFixed(2)}/hr</span>
-      ${icon('chevD', 'size-5 text-ink-3 transition group-open:rotate-180')}
-    </summary>
+    </div>
     <ol class="flex flex-col gap-4 px-4 pb-4 pt-1">
       ${steps.map((st, i) => html`<li class="grid grid-cols-[22px_minmax(0,1fr)] gap-2.5">
         <span class="grid size-[22px] place-items-center rounded-full bg-gold text-[12px] font-bold text-gold-ink">${i + 1}</span>
         <div class="flex min-w-0 flex-col gap-1"><div class="text-[14px] font-semibold">${st.label}</div>${st.body}</div>
       </li>`)}
     </ol>
-  </details>`;
+  </div>`;
 }
 
 // ── Multi-pool ───────────────────────────────────────────────────────────────
@@ -381,29 +383,52 @@ export function renderPayout(vm) {
 
   const pools = vm.shares.perPool;
   const multi = vm.state.pools.length > 1;
-  // Bill columns: the real envelopes, else the swap preview, else none.
-  const bills = !errMsg && vm.dist
-    ? { ...vm.dist, note: 'tap a name for details' }
-    : pendingTradeDown
-      ? { ...pendingTradeDown, note: 'bills shown after the swap' }
-      : { byPerson: {}, remainderBills: {}, note: 'bills don’t work out yet' };
+  const sub = activeSub('payout', vm.state);
+  const warnings = pools.map(p => p.warning).filter(Boolean).map(w => Alert({}, w));
+
+  if (sub === 'bills') {
+    // Bill columns: the real envelopes, else the swap preview, else none.
+    const bills = !errMsg && vm.dist
+      ? { ...vm.dist, note: 'tap a name for details' }
+      : pendingTradeDown
+        ? { ...pendingTradeDown, note: 'shown after the swap' }
+        : { byPerson: {}, remainderBills: {}, note: 'bills don’t work out yet' };
+    mount(root, html`<div class="flex flex-col gap-4">
+      ${errMsg ? fixHTML(vm, errMsg) : okHTML(vm)}
+      ${payoutTableHTML(vm, bills.byPerson, bills.remainderBills, bills.note)}
+      ${tradeUpHTML(vm)}
+    </div>`);
+    return;
+  }
+
+  if (sub === 'working') {
+    mount(root, html`<div class="flex flex-col gap-4">
+      ${warnings}
+      ${multi ? poolsHTML(vm) : worksheetHTML(vm)}
+    </div>`);
+    return;
+  }
 
   mount(root, html`<div class="flex flex-col gap-4">
     ${tallyHTML(vm)}
-    ${pools.map(p => p.warning).filter(Boolean).map(w => Alert({}, w))}
-    ${errMsg && fixHTML(vm, errMsg)}
-    ${payoutTableHTML(vm, bills.byPerson, bills.remainderBills, bills.note)}
+    ${warnings}
+    ${errMsg && html`<button class="flex min-h-14 w-full items-center gap-3 rounded-card bg-red/12 px-4 text-left ring-1 ring-red/30 transition active:scale-[.98]" onclick="App.sub('payout','bills')">
+      <span class="grid size-8 shrink-0 place-items-center rounded-full bg-red/20 text-red">${icon('alert', 'size-4')}</span>
+      <span class="flex-1"><span class="block text-[15px] font-semibold">Bills don’t work out yet</span><span class="text-[13px] text-red-soft">See the fix on Bills</span></span>
+      ${icon('chevR', 'size-5 text-red-soft')}
+    </button>`}
+    ${payoutTableHTML(vm, {}, {}, 'tap a name for details', { bills: false })}
     ${keyHTML(payoutOrder(vm.shares.perPerson))}
-    ${worksheetHTML(vm)}
-    ${multi && poolsHTML(vm)}
     ${toolsHTML()}
-    ${tradeUpHTML(vm)}
   </div>`);
+}
 
-  // Keep the worksheet open across re-renders once someone opens it.
-  const ws = root.querySelector('details.ws');
-  if (ws) {
-    ws.open = worksheetOpen;
-    ws.addEventListener('toggle', () => { worksheetOpen = ws.open; });
-  }
+// Bills tab, when the drawer pays out exactly.
+function okHTML(vm) {
+  const notes = DENOMS.reduce((t, d) => t + (vm.bills[d] || 0), 0);
+  return html`<div class="flex items-center gap-3 rounded-card bg-green/10 px-4 py-3 ring-1 ring-green/25">
+    <span class="grid size-8 shrink-0 place-items-center rounded-full bg-green/20 text-green">${icon('check', 'size-4')}</span>
+    <span class="flex-1 text-[15px]"><span class="block font-semibold">Exact change for everyone</span>
+      <span class="text-[13px] text-ink-2">${notes} bills · ${fmtMoney(poolValue(vm.bills))} in the drawer</span></span>
+  </div>`;
 }

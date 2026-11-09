@@ -87,7 +87,7 @@ export function IconButton({ icon: ic, label, class: cls = '', ...rest }) {
 export function Seg({ items, value, handler, size = 'md', class: cls = '' }) {
   const h = size === 'sm' ? 'h-8 text-[14px]' : 'h-10 text-[15px]';
   return html`<div class="${cx('flex gap-1 rounded-xl bg-fill-2 p-1', cls)}" role="tablist">
-    ${items.map(it => html`<button role="tab" aria-selected="${it.value === value}" class="${cx(
+    ${items.map(it => html`<button role="tab" aria-selected="${String(it.value === value)}" class="${cx(
       'flex-1 rounded-lg px-3 font-semibold transition', h,
       it.value === value ? 'bg-high text-ink shadow-[0_2px_8px_rgb(0_0_0/.4),inset_0_1px_0_rgb(255_255_255/.08)]' : 'text-ink-2',
     )}" onclick="${handler(it.value)}">${it.label}</button>`)}
@@ -99,7 +99,7 @@ export function Chip({ on, role, onclick }, label) {
   return html`<button class="${cx(
     'inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-[15px] font-semibold transition',
     on ? 'bg-high text-ink shadow-[inset_0_0_0_1px_rgb(255_255_255/.1)]' : 'bg-fill-2 text-ink-2',
-  )}" aria-pressed="${on}" onclick="${onclick}">
+  )}" aria-pressed="${String(!!on)}" onclick="${onclick}">
     <span class="${cx('size-2 rounded-full', on ? ROLE_DOT[role] : 'bg-ink-3')}"></span>${label}</button>`;
 }
 
@@ -122,7 +122,7 @@ export function Field({ label, class: cls = '', inputClass = '', ...input }) {
 
 export function SwitchRow({ id, on, disabled, onclick, label, hint }) {
   return html`<button class="${cx('switch-row flex min-h-16 w-full items-center gap-4 px-4 py-2.5 text-left disabled:opacity-60', SEP)}"
-    id="${id}" role="switch" aria-checked="${!!on}" ${disabled ? 'disabled' : ''} onclick="${onclick}">
+    id="${id}" role="switch" aria-checked="${String(!!on)}" ${disabled ? 'disabled' : ''} onclick="${onclick}">
     <span class="flex flex-1 flex-col gap-0.5 text-[17px]">${label}${hint ? html`<small class="text-[13px] leading-snug text-ink-2">${hint}</small>` : ''}</span>
     <span class="switch"></span>
   </button>`;
