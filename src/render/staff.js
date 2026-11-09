@@ -674,7 +674,8 @@ function showChipBand(chipEl, curAbs, closer) {
   const r = chipEl.getBoundingClientRect();
   const w = 176, h = 160;
   const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
-  const top = r.top > h + 24 ? r.top - h - 8 : r.bottom + 8;
+  // In front of the chip (centred on it), clamped to the viewport.
+  const top = Math.max(8, Math.min(r.top + r.height / 2 - h / 2, window.innerHeight - h - 8));
   el.style.left = left + 'px';
   el.style.top = top + 'px';
   el.hidden = false;

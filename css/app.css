@@ -365,18 +365,19 @@
   .tcol.is-bad .band { opacity: .5; }
 
   /* Hold-slide preview: floating 5-row wheel (32px rows) in front of a
-     scrubbing tchip — no box, just the rows + centre mark. */
+     scrubbing tchip, raised card around the rows + centre mark. */
   .chip-band {
     position: fixed;
     width: 176px; height: 160px;
-    background: transparent;
+    border-radius: 16px;
+    background: var(--color-raised);
+    box-shadow: 0 12px 32px rgb(0 0 0 / .55), inset 0 0 0 .5px rgb(255 255 255 / .12);
     z-index: 90;
     pointer-events: none;
     user-select: none; -webkit-user-select: none;
     perspective: 520px;
     opacity: 0; transform: scale(.94);
     transition: opacity .12s ease, transform .12s ease;
-    text-shadow: 0 1px 10px rgb(0 0 0 / .85), 0 0 2px rgb(0 0 0 / .8);
   }
   .chip-band[hidden] { display: none; }
   .chip-band.is-show { opacity: 1; transform: scale(1); }
