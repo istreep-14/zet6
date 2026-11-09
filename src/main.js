@@ -328,6 +328,17 @@ if (window.visualViewport) {
   document.addEventListener('focusout', () => setTimeout(updateKeyboardState, 50));
 }
 
+// Lock page zoom. iOS ignores user-scalable=no in places, and a pinched or
+// focus-zoomed page shifts the fixed tab bar off the bottom edge — so block
+// pinch gestures here; double-tap zoom is off via touch-action in app.css.
+(() => {
+  const block = e => e.preventDefault();
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, block, { passive: false }));
+  document.addEventListener('touchmove', e => {
+    if (e.touches.length > 1 || (e.scale !== undefined && e.scale !== 1)) e.preventDefault();
+  }, { passive: false });
+})();
+
 // Swipe left/right on the content area to move between tabs. Ignored when the
 // gesture starts in a sideways-scrolling table, while typing, or when it's
 // mostly vertical (normal scrolling).

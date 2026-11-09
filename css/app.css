@@ -81,6 +81,8 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
 html, body { height: 100%; overflow: hidden; background: var(--bg); }
+/* No pinch / double-tap zoom: a zoomed page drags the fixed tab bar off its spot */
+html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
 
 body {
   color: var(--text);
