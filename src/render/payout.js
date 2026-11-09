@@ -1,4 +1,4 @@
-// Payout tab — the cash side (the people side is the Summary tab,
+// Payout tab (Preact) — the cash side (the people side is the Summary tab,
 // render/summary.js). Two swipeable sub-tabs:
 //   Bills    status (exact change ✓ / fix card with Apply) → envelope table:
 //            name · one column per bill size · pay, chump, drawer totals
@@ -7,12 +7,11 @@
 //            the pools list (several pools).
 
 import { DENOMS, fmtHrs, fmtMoney, payoutOrder, poolValue } from '../util.js';
-import { fmtTimeAbs, timeParts } from '../time.js';
+import { fmtTimeAbs } from '../time.js';
 import { planMakeChange, computeTradeUp, distribute } from '../engine.js';
 import { updatePool } from '../store.js';
-import { html, cx, mount } from '../ui/html.js';
-import { icon } from '../ui/icons.js';
-import { Card, Button, Alert, Empty, Label, Money, Denom, ROLE_DOT, SEP } from '../ui/kit.js';
+import { html, render } from '../ui/preact.js';
+import { cx, Icon, Card, Button, Alert, Label, Money, Denom, Blocked } from '../ui/pkit.js';
 import { invalidateTips } from './tips.js';
 import { activeSub } from './tabs.js';
 
@@ -79,155 +78,140 @@ export function applyPendingTradeDown() {
   if (currentVm && pendingTradeDown) applyBillCountsToPool(currentVm, pendingTradeDown.pool);
 }
 
-// ── Pieces ───────────────────────────────────────────────────────────────────
+// ── Envelopes table: name · one equal column per bill size in use · pay ─────
+// Chump row, then a Total row with the drawer's bill counts and the grand
+// total. table-fixed so it always fits the card; no sideways scroll.
 
-// ── Payout table: one tight line per person ──────────────────────────────────
-// Name · Shift · Hrs · one equal column per bill size in use · Pay.
-// Chump row, then a Total row with hours, the drawer's bill counts and the
-// grand total. table-fixed so it always fits the card; no sideways scroll.
-
-// Compact shift, no am/pm: "5–11:45", "5:30–12". Closers' out time in red.
-function shiftHTML(p) {
-  const t = x => { const q = timeParts(x); return q.h + (q.m ? ':' + q.m : ''); };
-  return html`<span aria-label="${fmtTimeAbs(p.inAbs)} to ${fmtTimeAbs(p.outAbs)}">${t(p.inAbs)}–<span class="${p.closer ? 'text-red' : ''}">${t(p.outAbs)}</span></span>`;
-}
-
-function payoutTableHTML(vm, byPerson, remBills, note, { bills: withBills = true } = {}) {
+function Envelopes({ vm, byPerson, remBills, note }) {
   const s = vm.shares;
   const ordered = payoutOrder(s.perPerson);
   const rem = s.leftover > 0 ? (remBills || {}) : {};
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
-  const cols = withBills ? DENOMS.filter(d => colTotal(d) > 0) : [];
-  const shift = !withBills;
+  const cols = DENOMS.filter(d => colTotal(d) > 0);
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
 
   const V = 'border-l border-sep';
-  const C = 'px-0 py-2 text-center';
-  const bill = n => html`<td class="${cx(V, C, 'font-rounded', n > 0 ? 'font-bold' : 'text-ink-3/40')}">${n > 0 ? n : '–'}</td>`;
-  const nameTd = 'truncate py-2 pl-3 pr-1 text-left';
-  const payTd = cx(V, 'py-2 pl-0.5 pr-3 text-right');
+  const nameTd = 'truncate py-2.5 pl-3 pr-1 text-left';
+  const payTd = cx(V, 'py-2.5 pl-0.5 pr-3 text-right');
+  const Bill = ({ n }) => html`<td class=${cx(V, 'px-0 py-2.5 text-center font-rounded', n > 0 ? 'font-bold' : 'text-ink-3/40')}>${n > 0 ? n : '–'}</td>`;
 
-  return Card({ flush: true },
-    html`<div class="flex items-baseline justify-between gap-2 px-3 pb-2 pt-3">
-      <span class="text-[17px] font-bold tracking-tight">${withBills ? 'Envelopes' : 'Payouts'}</span>
+  return html`<${Card} flush>
+    <div class="flex items-baseline justify-between gap-2 px-3 pb-2 pt-3">
+      <span class="text-[17px] font-bold tracking-tight">Envelopes</span>
       <span class="truncate text-[12px] font-medium text-ink-2">${note}</span>
     </div>
-    <table class="w-full table-fixed border-collapse whitespace-nowrap text-[14px] tabular-nums max-[374px]:text-[13px]">
-      <colgroup>
-        ${shift
-          ? html`<col class="w-[34%]"><col class="w-[30%]"><col class="w-[14%]"><col>`
-          : html`<col class="w-[28%]">${cols.map(() => html`<col>`)}<col class="w-[20%]">`}
-      </colgroup>
+    <table class="w-full table-fixed border-collapse whitespace-nowrap text-[15px] tabular-nums max-[374px]:text-[13px]">
+      <colgroup><col class="w-[28%]" />${cols.map(d => html`<col key=${d} />`)}<col class="w-[20%]" /></colgroup>
       <thead><tr class="border-t border-sep text-[11px] font-semibold uppercase tracking-wide text-ink-3">
-        <th class="${cx(nameTd, 'py-1.5 font-semibold')}">Name</th>
-        ${shift && html`<th class="py-1.5 text-left font-semibold">Shift</th>
-        <th class="py-1.5 pr-1 text-right font-semibold">Hrs</th>`}
-        ${cols.map(d => html`<th class="${cx(V, 'bill-col py-1.5 text-center text-[11px] normal-case tracking-tight')}" data-d="${d}">${d}</th>`)}
-        <th class="${cx(payTd, 'py-1.5 font-semibold')}">Pay</th>
+        <th class=${cx(nameTd, 'py-1.5 font-semibold')}>Name</th>
+        ${cols.map(d => html`<th key=${d} class=${cx(V, 'bill-col py-1.5 text-center text-[11px] normal-case tracking-tight')} data-d=${d}>${d}</th>`)}
+        <th class=${cx(payTd, 'py-1.5 font-semibold')}>Pay</th>
       </tr></thead>
       <tbody>
         ${ordered.map(p => {
           const b = byPerson[p.id] || {};
-          return html`<tr class="cursor-pointer border-t border-sep transition active:bg-raised" onclick="App.personModal('${p.id}')">
-            <td class="${cx(nameTd, 'font-semibold')}">${p.name}</td>
-            ${shift && html`<td class="truncate py-2.5 text-[13px] text-ink-2">${shiftHTML(p)}</td>
-            <td class="py-2.5 pr-1 text-right text-ink-2">${fmtHrs(p.shiftHours ?? p.hours)}</td>`}
-            ${cols.map(d => bill(b[d] || 0))}
-            <td class="${payTd}">${Money(p.final, cx('font-rounded font-bold', shift && 'text-[16px]', !(p.final > 0) && 'text-ink-3'))}</td>
+          return html`<tr key=${p.id} class="cursor-pointer border-t border-sep transition active:bg-raised" onClick=${() => App.personModal(p.id)}>
+            <td class=${cx(nameTd, 'font-semibold')}>${p.name}</td>
+            ${cols.map(d => html`<${Bill} key=${d} n=${b[d] || 0} />`)}
+            <td class=${payTd}><${Money} value=${p.final} class=${cx('font-rounded font-bold', !(p.final > 0) && 'text-ink-3')} /></td>
           </tr>`;
         })}
         ${s.leftover > 0 && html`<tr class="border-t border-sep text-ink-2">
-          <td class="${nameTd}" colspan="${shift ? 3 : 1}">Chump${shift ? ' · stays in drawer' : ''}</td>
-          ${cols.map(d => bill(rem[d] || 0))}
-          <td class="${payTd}">${Money(s.leftover, 'font-semibold')}</td>
+          <td class=${nameTd}>Chump</td>
+          ${cols.map(d => html`<${Bill} key=${d} n=${rem[d] || 0} />`)}
+          <td class=${payTd}><${Money} value=${s.leftover} class="font-semibold" /></td>
         </tr>`}
       </tbody>
       <tfoot><tr class="border-t border-white/15 bg-raised">
-        <td class="${cx(nameTd, 'text-[11px] font-bold uppercase tracking-wider text-ink-2')}">Total</td>
-        ${shift && html`<td></td>
-        <td class="py-2 pr-1 text-right font-semibold">${fmtHrs(s.totalHours)}</td>`}
-        ${cols.map(d => html`<td class="${cx(V, C, 'bill-col')}" data-d="${d}">${colTotal(d)}</td>`)}
-        <td class="${payTd}">${Money(grand, 'font-rounded text-[13px] font-bold text-gold')}</td>
+        <td class=${cx(nameTd, 'text-[11px] font-bold uppercase tracking-wider text-ink-2')}>Total</td>
+        ${cols.map(d => html`<td key=${d} class=${cx(V, 'bill-col px-0 py-2.5 text-center')} data-d=${d}>${colTotal(d)}</td>`)}
+        <td class=${payTd}><${Money} value=${grand} class="font-rounded text-[14px] font-bold text-gold" /></td>
       </tr></tfoot>
-    </table>`);
+    </table>
+  <//>`;
 }
 
-// ── Fix card: drawer can't make exact change ─────────────────────────────────
+// ── Status: exact change, or the fix card ────────────────────────────────────
 
-function reqHTML(req, pool) {
+function ExactChange({ vm }) {
+  const notes = DENOMS.reduce((t, d) => t + (vm.bills[d] || 0), 0);
+  return html`<div class="flex items-center gap-3 rounded-card bg-green/10 px-4 py-3 ring-1 ring-green/25">
+    <span class="grid size-8 shrink-0 place-items-center rounded-full bg-green/20 text-green"><${Icon} name="check" class="size-4" /></span>
+    <span class="flex-1 text-[15px]"><span class="block font-semibold">Exact change for everyone</span>
+      <span class="text-[13px] text-ink-2">${notes} bills · ${fmtMoney(poolValue(vm.bills))} in the drawer</span></span>
+  </div>`;
+}
+
+function SmallBills({ req, pool }) {
   const minFives = Math.max(0, (req.minOneFiveValue - req.minOnes) / 5);
   const minTens = Math.max(0, (req.minOneFiveTenValue - req.minOneFiveValue) / 10);
-  const row = (d, need, have, valueShort) => {
-    const status = valueShort > 0
-      ? html`<span class="rounded-full bg-red/15 px-2.5 py-0.5 text-[13px] font-semibold text-red">short ${Math.ceil(valueShort / d)}</span>`
-      : html`<span class="rounded-full bg-green/15 px-2.5 py-0.5 text-[13px] font-semibold text-green">${have < Math.ceil(need) ? '✓ via smaller' : '✓ ok'}</span>`;
-    return html`<div class="grid grid-cols-[56px_1fr_1fr_auto] items-center gap-2 py-2 text-[15px]">
-      ${Denom(d)}<span class="text-ink-2">need ${Math.ceil(need)}</span><span class="text-ink-2">have ${have}</span><span class="justify-self-end">${status}</span></div>`;
-  };
+  const Row = ({ d, need, have, short }) => html`<div class="grid grid-cols-[56px_1fr_1fr_auto] items-center gap-2 py-2 text-[15px]">
+    <${Denom} d=${d} /><span class="text-ink-2">need ${Math.ceil(need)}</span><span class="text-ink-2">have ${have}</span>
+    <span class="justify-self-end">${short > 0
+      ? html`<span class="rounded-full bg-red/15 px-2.5 py-0.5 text-[13px] font-semibold text-red">short ${Math.ceil(short / d)}</span>`
+      : html`<span class="rounded-full bg-green/15 px-2.5 py-0.5 text-[13px] font-semibold text-green">${have < Math.ceil(need) ? '✓ via smaller' : '✓ ok'}</span>`}</span>
+  </div>`;
   return html`<div class="rounded-2xl bg-black/20 px-3.5 py-1.5">
     <div class="pt-1.5 text-[13px] font-semibold text-ink-2">Small bills needed</div>
     <div class="divide-y divide-sep">
-      ${row(1, req.minOnes, pool[1] || 0, req.onesShort)}
-      ${row(5, minFives, pool[5] || 0, Math.max(0, req.oneFiveShort - req.onesShort))}
-      ${row(10, minTens, pool[10] || 0, Math.max(0, req.oneFiveTenShort - req.oneFiveShort))}
+      <${Row} d=${1} need=${req.minOnes} have=${pool[1] || 0} short=${req.onesShort} />
+      <${Row} d=${5} need=${minFives} have=${pool[5] || 0} short=${Math.max(0, req.oneFiveShort - req.onesShort)} />
+      <${Row} d=${10} need=${minTens} have=${pool[10] || 0} short=${Math.max(0, req.oneFiveTenShort - req.oneFiveShort)} />
     </div>
   </div>`;
 }
 
 // Swap preview, one row per bill size: Bill · Now · Swap · After.
-function swapHTML(nowPool, deltas, afterPool) {
-  const rows = DENOMS.filter(d => (nowPool[d] || 0) || (afterPool[d] || 0) || (deltas[d] || 0)).map(d => {
-    const v = deltas[d] || 0;
-    return html`<div class="grid grid-cols-[1.1fr_1fr_1fr_1fr] items-center py-2 text-center text-[17px] font-semibold tabular-nums">
-      <span class="text-left">${Denom(d)}</span>
-      <span class="text-ink-2">${nowPool[d] || 0}</span>
-      <span class="${v > 0 ? 'text-green' : v < 0 ? 'text-red' : 'text-ink-3'}">${v === 0 ? '—' : (v > 0 ? '+' : '−') + Math.abs(v)}</span>
-      <span class="${v ? 'text-gold' : ''}">${afterPool[d] || 0}</span>
-    </div>`;
-  });
+function SwapTable({ now, deltas, after }) {
+  const rows = DENOMS.filter(d => (now[d] || 0) || (after[d] || 0) || (deltas[d] || 0));
   return html`<div class="rounded-2xl bg-black/20 px-3.5 py-1">
     <div class="grid grid-cols-[1.1fr_1fr_1fr_1fr] pb-1 pt-2 text-center text-[13px] font-medium text-ink-2"><span class="text-left">Bill</span><span>Now</span><span>Swap</span><span>After</span></div>
-    <div class="divide-y divide-sep">${rows}</div>
+    <div class="divide-y divide-sep">${rows.map(d => {
+      const v = deltas[d] || 0;
+      return html`<div key=${d} class="grid grid-cols-[1.1fr_1fr_1fr_1fr] items-center py-2 text-center text-[17px] font-semibold tabular-nums">
+        <span class="text-left"><${Denom} d=${d} /></span>
+        <span class="text-ink-2">${now[d] || 0}</span>
+        <span class=${v > 0 ? 'text-green' : v < 0 ? 'text-red' : 'text-ink-3'}>${v === 0 ? '—' : (v > 0 ? '+' : '−') + Math.abs(v)}</span>
+        <span class=${v ? 'text-gold' : ''}>${after[d] || 0}</span>
+      </div>`;
+    })}</div>
   </div>`;
 }
 
-function fixHTML(vm, errMsg) {
-  const plan = pendingTradeDown;
-  const showReq = smallBillsShort(vm.req);
-  return Card({ tone: 'error', class: 'flex flex-col gap-3' },
-    html`<div class="flex items-start gap-3">
-      <span class="grid size-9 shrink-0 place-items-center rounded-full bg-red/20 text-red">${icon('alert', 'size-[18px]')}</span>
+function FixCard({ vm, errMsg, plan }) {
+  return html`<${Card} tone="error" class="flex flex-col gap-3">
+    <div class="flex items-start gap-3">
+      <span class="grid size-9 shrink-0 place-items-center rounded-full bg-red/20 text-red"><${Icon} name="alert" class="size-[18px]" /></span>
       <div class="flex-1">
         <div class="text-[17px] font-bold">Bills don’t work out yet</div>
         <div class="mt-0.5 text-[14px] leading-snug text-red-soft">${errMsg}</div>
       </div>
     </div>
-    ${showReq && reqHTML(vm.req, vm.bills)}
+    ${smallBillsShort(vm.req) && html`<${SmallBills} req=${vm.req} pool=${vm.bills} />`}
     ${plan
       ? html`<div class="text-[14px] font-semibold text-ink-2">Fewest bills to swap at the bar:</div>
         ${plan.trades.length > 0 && html`<ul class="flex flex-col gap-1.5">${plan.trades.map(t => html`<li class="rounded-xl bg-black/20 px-3.5 py-2.5 text-[16px] font-semibold">${t}</li>`)}</ul>`}
-        ${swapHTML(vm.bills, plan.deltas, plan.pool)}
-        ${Button({ variant: 'primary', block: true, icon: 'swap', onclick: 'App.applyTradeDown()' }, 'Apply swap to the cash count')}`
-      : Button({ variant: 'plain', block: true, onclick: "App.tab('tips')" }, vm.state.pools.length > 1 ? 'Edit pool cash' : 'Edit the cash count')}`);
+        <${SwapTable} now=${vm.bills} deltas=${plan.deltas} after=${plan.pool} />
+        <${Button} variant="primary" block icon="swap" onClick=${applyPendingTradeDown}>Apply swap to the cash count<//>`
+      : html`<${Button} block onClick=${() => App.tab('tips')}>${vm.state.pools.length > 1 ? 'Edit pool cash' : 'Edit the cash count'}<//>`}
+  <//>`;
 }
 
-function tradeUpHTML(vm) {
-  const t = pendingTradeUp;
-  if (!t) return '';
+function TidyDrawer({ vm, plan }) {
   return html`<details class="group rounded-card bg-surface">
     <summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 [&::-webkit-details-marker]:hidden">
-      <span class="grid size-8 place-items-center rounded-lg bg-white/8 text-ink">${icon('swap', 'size-[18px]')}</span>
-      <span class="flex-1"><span class="block font-semibold">Tidy the drawer</span><span class="text-[13px] text-ink-2">Swap extra small bills for ${t.new20s} × $20</span></span>
-      ${icon('chevD', 'size-5 text-ink-3 transition group-open:rotate-180')}
+      <span class="grid size-8 place-items-center rounded-lg bg-white/8 text-ink"><${Icon} name="swap" class="size-[18px]" /></span>
+      <span class="flex-1"><span class="block font-semibold">Tidy the drawer</span><span class="text-[13px] text-ink-2">Swap extra small bills for ${plan.new20s} × $20</span></span>
+      <${Icon} name="chevD" class="size-5 text-ink-3 transition group-open:rotate-180" />
     </summary>
     <div class="flex flex-col gap-3 px-4 pb-4">
-      ${swapHTML(vm.bills, t.delta, t.newPool)}
-      ${Button({ variant: 'tonal', block: true, onclick: 'App.applyTradeUp()' }, 'Apply to the cash count')}
+      <${SwapTable} now=${vm.bills} deltas=${plan.delta} after=${plan.newPool} />
+      <${Button} variant="tonal" block onClick=${applyPendingTradeUp}>Apply to the cash count<//>
     </div>
   </details>`;
 }
 
-// ── Worksheet: how the split was worked out (single pool) ────────────────────
+// ── Working: how the split was worked out (single pool) ──────────────────────
 
 function hoursDecimals(values) {
   const need = values.reduce((m, h) => Math.max(m, (fmtHrs(h).split('.')[1] || '').length), 0);
@@ -235,10 +219,10 @@ function hoursDecimals(values) {
 }
 const cents = n => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function worksheetHTML(vm) {
+function Worksheet({ vm }) {
   const s = vm.shares;
   const pool = s.perPool[0];
-  if (!pool || vm.state.pools.length !== 1) return '';
+  if (!pool || vm.state.pools.length !== 1) return null;
   const ordered = payoutOrder(s.perPerson);
   const dp = hoursDecimals([...ordered.map(p => p.hours), s.totalHours]);
   const h = v => v.toFixed(dp);
@@ -252,14 +236,14 @@ function worksheetHTML(vm) {
   const step = (label, body) => steps.push({ label, body });
 
   step(sup ? 'Add up bar & server hours' : 'Add up everyone’s hours',
-    html`<div class="${V}">${tipped.map(p => h(p.hours)).join(' + ')} = <b>${h(tipped.reduce((t, p) => t + p.hours, 0))} h</b></div>`);
+    html`<div class=${V}>${tipped.map(p => h(p.hours)).join(' + ')} = <b>${h(tipped.reduce((t, p) => t + p.hours, 0))} h</b></div>`);
   if (sup) {
     step('Take out the support tip-out', html`
-      <div class="${V}">$${sup.rate.toFixed(4)}/hr × ${h(sup.hours)} h = <b>−$${cents(sup.cut)}</b></div>
-      <div class="${V}">$${cents(pool.total)} − $${cents(sup.cut)} = <b>$${cents(pool.tippedTotal)}</b> to share</div>`);
+      <div class=${V}>$${sup.rate.toFixed(4)}/hr × ${h(sup.hours)} h = <b>−$${cents(sup.cut)}</b></div>
+      <div class=${V}>$${cents(pool.total)} − $${cents(sup.cut)} = <b>$${cents(pool.tippedTotal)}</b> to share</div>`);
   }
   step('Divide the pool by the hours',
-    html`<div class="${V}">$${cents(sup ? pool.tippedTotal : pool.total)} ÷ ${h(pool.tippedHours)} h = <b>$${pool.rate.toFixed(4)}/hr</b></div>`);
+    html`<div class=${V}>$${cents(sup ? pool.tippedTotal : pool.total)} ÷ ${h(pool.tippedHours)} h = <b>$${pool.rate.toFixed(4)}/hr</b></div>`);
 
   const line = (p, rate) => html`<span class="truncate py-1.5 text-ink">${p.name}</span>
     <span class="py-1.5 pl-2 text-right">${h(p.hours)} × ${rate.toFixed(4)}</span>
@@ -277,18 +261,18 @@ function worksheetHTML(vm) {
       s.leftover > 0 ? `${fmtMoney(s.leftover)} stays in the drawer` : '',
     ].filter(Boolean).join(' · ');
     step('Share out the dollars left over', html`
-      <div class="${V}">${fmtMoney(s.totalCash)} − ${fmtMoney(ordered.reduce((t, p) => t + p.base, 0))} rounded = <b>${fmtMoney(s.remainder)}</b></div>
-      <div class="${V}">${where}</div>`);
+      <div class=${V}>${fmtMoney(s.totalCash)} − ${fmtMoney(ordered.reduce((t, p) => t + p.base, 0))} rounded = <b>${fmtMoney(s.remainder)}</b></div>
+      <div class=${V}>${where}</div>`);
   }
 
   return html`<div class="rounded-card bg-surface">
     <div class="flex min-h-[52px] items-center gap-2 px-4 pt-1 font-semibold">
-      <span class="grid size-8 place-items-center rounded-lg bg-white/8 text-ink">${icon('calc', 'size-[18px]')}</span>
+      <span class="grid size-8 place-items-center rounded-lg bg-white/8 text-ink"><${Icon} name="calc" class="size-[18px]" /></span>
       <span class="flex-1">How the split works</span>
       <span class="font-rounded font-bold text-green">$${pool.rate.toFixed(2)}/hr</span>
     </div>
     <ol class="flex flex-col gap-4 px-4 pb-4 pt-1">
-      ${steps.map((st, i) => html`<li class="grid grid-cols-[22px_minmax(0,1fr)] gap-2.5">
+      ${steps.map((st, i) => html`<li key=${i} class="grid grid-cols-[22px_minmax(0,1fr)] gap-2.5">
         <span class="grid size-[22px] place-items-center rounded-full bg-gold text-[12px] font-bold text-gold-ink">${i + 1}</span>
         <div class="flex min-w-0 flex-col gap-1"><div class="text-[14px] font-semibold">${st.label}</div>${st.body}</div>
       </li>`)}
@@ -296,75 +280,52 @@ function worksheetHTML(vm) {
   </div>`;
 }
 
-// ── Multi-pool ───────────────────────────────────────────────────────────────
-
-function poolsHTML(vm) {
-  const pools = vm.shares.perPool;
-  return html`${Label('Pools')}
-    ${Card({ flush: true }, pools.map(p => html`<div class="${cx('flex items-center gap-3 px-4 py-3.5', SEP)}">
+function PoolsList({ vm }) {
+  return html`<${Label}>Pools<//>
+    <${Card} flush>${vm.shares.perPool.map(p => html`<div key=${p.id} class="flex items-center gap-3 border-t border-sep px-4 py-3.5 first:border-t-0">
       <div class="flex min-w-0 flex-1 flex-col gap-0.5">
         <span class="text-[17px] font-semibold">${p.label}</span>
         <span class="text-[14px] text-ink-2">${fmtTimeAbs(p.startAbs)}–${fmtTimeAbs(p.endAbs)} · ${fmtHrs(p.hours)}h${p.hours > 0 ? ' · $' + (p.total / p.hours).toFixed(2) + '/hr' : ''}</span>
       </div>
       <span class="font-rounded text-[22px] font-bold tracking-tight">${fmtMoney(p.total)}</span>
-    </div>`))}`;
+    </div>`)}<//>`;
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────
+
+function Payout({ vm, sub, errMsg, tradeDown, tradeUp }) {
+  if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
+  const warnings = vm.shares.perPool.map(p => p.warning).filter(Boolean).map(w => html`<${Alert}>${w}<//>`);
+  if (sub === 'working') {
+    return html`<div class="flex flex-col gap-4">${warnings}
+      ${vm.state.pools.length > 1 ? html`<${PoolsList} vm=${vm} />` : html`<${Worksheet} vm=${vm} />`}</div>`;
+  }
+  // Bill columns: the real envelopes, else the swap preview, else none.
+  const bills = !errMsg && vm.dist
+    ? { ...vm.dist, note: 'tap a name for details' }
+    : tradeDown
+      ? { ...tradeDown, note: 'shown after the swap' }
+      : { byPerson: {}, remainderBills: {}, note: 'bills don’t work out yet' };
+  return html`<div class="flex flex-col gap-4">
+    ${warnings}
+    ${errMsg ? html`<${FixCard} vm=${vm} errMsg=${errMsg} plan=${tradeDown} />` : html`<${ExactChange} vm=${vm} />`}
+    <${Envelopes} vm=${vm} byPerson=${bills.byPerson} remBills=${bills.remainderBills} note=${bills.note} />
+    ${tradeUp && html`<${TidyDrawer} vm=${vm} plan=${tradeUp} />`}
+  </div>`;
+}
 
 export function renderPayout(vm) {
   currentVm = vm;
   const root = $('payout-root');
   if (!root) return;
-
-  if (vm.blocked) {
-    pendingTradeUp = pendingTradeDown = null;
-    const pristine = !vm.hasNamedStaff && vm.totalCash === 0;
-    const goTips = /cash|total|count|window|support (%|\$|hours)/i.test(vm.blocked);
-    mount(root, pristine
-      ? Empty({ title: 'No shift yet', body: 'Add who worked, then enter the tips.', action: { label: 'Add staff', onclick: "App.tab('staff')" } })
-      : html`<div class="flex flex-col gap-3">${Alert({ action: { label: 'Fix →', onclick: `App.tab('${goTips ? 'tips' : 'staff'}')` } }, vm.blocked)}</div>`);
-    return;
+  let errMsg = '';
+  pendingTradeUp = pendingTradeDown = null;
+  if (!vm.blocked) {
+    errMsg = distErrorText(vm);
+    const canTrade = tradesEnabled(vm);
+    pendingTradeDown = errMsg && canTrade ? breakPlan(vm) : null;
+    pendingTradeUp = !errMsg && canTrade ? safeTradeUp(vm) : null;
   }
-
-  const errMsg = distErrorText(vm);
-  const canTrade = tradesEnabled(vm);
-  pendingTradeDown = errMsg && canTrade ? breakPlan(vm) : null;
-  pendingTradeUp = !errMsg && canTrade ? safeTradeUp(vm) : null;
-
-  const pools = vm.shares.perPool;
-  const multi = vm.state.pools.length > 1;
-  const sub = activeSub('payout', vm.state);
-  const warnings = pools.map(p => p.warning).filter(Boolean).map(w => Alert({}, w));
-
-  if (sub === 'working') {
-    mount(root, html`<div class="flex flex-col gap-4">
-      ${warnings}
-      ${multi ? poolsHTML(vm) : worksheetHTML(vm)}
-    </div>`);
-    return;
-  }
-
-  // Bills. Columns: the real envelopes, else the swap preview, else none.
-  const bills = !errMsg && vm.dist
-    ? { ...vm.dist, note: 'tap a name for details' }
-    : pendingTradeDown
-      ? { ...pendingTradeDown, note: 'shown after the swap' }
-      : { byPerson: {}, remainderBills: {}, note: 'bills don’t work out yet' };
-  mount(root, html`<div class="flex flex-col gap-4">
-    ${warnings}
-    ${errMsg ? fixHTML(vm, errMsg) : okHTML(vm)}
-    ${payoutTableHTML(vm, bills.byPerson, bills.remainderBills, bills.note)}
-    ${tradeUpHTML(vm)}
-  </div>`);
-}
-
-// Bills tab, when the drawer pays out exactly.
-function okHTML(vm) {
-  const notes = DENOMS.reduce((t, d) => t + (vm.bills[d] || 0), 0);
-  return html`<div class="flex items-center gap-3 rounded-card bg-green/10 px-4 py-3 ring-1 ring-green/25">
-    <span class="grid size-8 shrink-0 place-items-center rounded-full bg-green/20 text-green">${icon('check', 'size-4')}</span>
-    <span class="flex-1 text-[15px]"><span class="block font-semibold">Exact change for everyone</span>
-      <span class="text-[13px] text-ink-2">${notes} bills · ${fmtMoney(poolValue(vm.bills))} in the drawer</span></span>
-  </div>`;
+  render(html`<${Payout} vm=${vm} sub=${activeSub('payout', vm.state)} errMsg=${errMsg}
+    tradeDown=${pendingTradeDown} tradeUp=${pendingTradeUp} />`, root);
 }

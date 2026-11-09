@@ -2,7 +2,7 @@
 
 ## What this app is
 
-A mobile-first, no-build single-page web app for calculating and distributing a cash tip pool among restaurant/bar staff. No server-side code, no build step, no npm install. ES modules served statically; styling is Tailwind v4's browser build, vendored at `vendor/tailwind-browser-4.3.3.js` (no CDN).
+A mobile-first, no-build single-page web app for calculating and distributing a cash tip pool among restaurant/bar staff. No server-side code, no build step, no npm install. ES modules served statically; styling is Tailwind v4's browser build, vendored at `vendor/tailwind-browser-4.3.3.js` (no CDN). Views are moving to **Preact + htm** (React API, no build), vendored at `vendor/preact-htm-3.1.1.js`.
 
 **Unified pool model (v4):** there is no day/night mode split. Tips are entered into one or more *pools*; each pool has its own time window, role inclusion (Bar / Srv / Sup chips), and cash entry. "Night shift" is just the default single pool with no window (whole shift). Support staff included in a pool are ordinary participants sharing by overlap hours — there is no separate tip-out formula.
 
@@ -57,6 +57,8 @@ input event → App.* handler → store action mutates state
 | `roster.js` | Remembered staff names for quick-add (own localStorage key, survives New session) |
 | `sessions.js` | Saved sessions: index (`tippool_sessions`) + one snapshot per session (`tippool_s_<id>`); boot, list, switch, rename, delete |
 | `persist.js` | localStorage save/load, schema v4 + v1–v3 migration, export/import |
+| `ui/preact.js` | Re-exports Preact + htm (`html`, `render`, hooks) from the vendored file |
+| `ui/pkit.js` | Preact component kit — `Icon` `Card` `Label` `Button` `Avatar` `Money` `Denom` `Alert` `Empty` `Blocked`; same look as `ui/kit.js` |
 | `ui/html.js` | `html\`\`` tagged template (auto-escapes; arrays join; null/false render nothing), `raw`, `cx`, `js`, `mount` |
 | `ui/kit.js` | Component kit — `Card` `Label` `Button` `Seg` `Chip` `Stepper` `Field` `SwitchRow` `ListRow` `Avatar` `Badge` `Alert` `Empty` `Stat` `Money` `Denom` `BillTags` `SheetShell` + shared class tokens |
 | `ui/icons.js` | Line icons: `icon('clock', 'size-5')` |
@@ -122,6 +124,7 @@ Small-bill requirements (`getSmallBillRequirements`, used by preflight, the Bill
 
 ## UI notes
 
+- **Preact migration (in progress):** Summary and Payout are Preact components (`render(html\`<${View} vm=${vm} />\`, root)` on every app render; Preact diffs, so focus/scroll/`<details>` state survive). Handlers are functions (`onClick=${() => App.tab('tips')}`), components come from `ui/pkit.js`. Still on string templates + manual patching: Staff, Tips, sub-tabs, side panels, sheets — port them the same way, then retire `ui/kit.js` / `ui/html.js` and the signature/patch code. Pure modules (engine, shares, resolve, time, persist, sessions) don't change.
 - **Writing UI:** markup is `html\`\`` templates built from `ui/kit.js` components and styled with Tailwind classes. Theme tokens live in the `@theme static` block in `index.html` (`bg-surface`, `bg-raised`, `text-ink-2`, `text-gold`, `bg-bar/20`, `rounded-card`, `font-rounded` …) and are also CSS variables (`--color-gold`). A visual change to a repeated piece = edit its kit function once. Inline `onclick`/`oninput` strings call `window.App.*`. Tailwind's browser build scans the live DOM, so dynamic class names work; `<html>` gets `.ready` (main.js) once the theme has compiled, which un-hides the page.
 - **Clock:** every displayed time goes through `fmtTimeAbs` (time.js): "h:mma/p" by default, "HH:MM" when `settings.clock24` is on. Entry is unchanged — decimal 12-hour.
 - **Side panels** (`ui/panels.js`) — X-app style, one scrim, one open at a time. Open from a header button, a drag in from that screen edge (follows the finger; `EDGE` = 24px, page swipes ignore touches that start there), or a flick past the first (→ left) / last (→ right) sub-tab; drag back / tap the scrim / Esc to close.
