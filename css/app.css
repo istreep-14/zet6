@@ -75,22 +75,29 @@
     height: calc(var(--hdr-h) + var(--safe-t) + var(--hdr-gap));
   }
   .hdr-title { font-size: 30px; line-height: 1; letter-spacing: -.025em; margin-right: auto; }
-  .hdr-date {
-    flex-shrink: 0;
-    height: 34px;
-    padding: 0 12px;
-    font-size: 15px;
-    font-weight: 500;
-    color: var(--color-ink-2);
-    background: var(--color-fill);
-    border-radius: 999px;
-    outline: none;
+  /* Header date: pretty pill label; the invisible native <input type=date>
+     sits exactly over it so a tap opens iOS's native picker. */
+  .hdr-date-wrap { position: relative; flex-shrink: 0; }
+  .hdr-date-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 36px; padding: 0 12px;
+    font-size: 15px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink); background: var(--color-fill);
+    border-radius: 999px; outline: none;
+    transition: background .15s, transform .1s;
   }
-  .hdr-date::-webkit-date-and-time-value { text-align: center; }
-  .hdr-date::-webkit-calendar-picker-indicator { filter: invert(.7); }
+  .hdr-date-btn:active { background: var(--color-high); transform: scale(.97); }
+  .hdr-date-btn:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-gold) 60%, transparent); }
+  .hdr-date-input {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer;
+    font-size: 16px; /* ≥16: iOS won't zoom when the hidden control is tapped */
+    -webkit-appearance: none; appearance: none; background: transparent;
+  }
   @media (max-width: 374px) {
     .hdr-title { font-size: 26px; }
-    .hdr-date { padding: 0 8px; font-size: 14px; }
+    .hdr-date-btn { padding: 0 10px; font-size: 14px; }
   }
 
   /* ── Scroll area ──────────────────────────────────────────────────────── */
@@ -304,6 +311,41 @@
   .tcol.is-set .tval { color: var(--color-ink); }
   .tval.is-closer, .tval.is-bad { color: var(--color-red) !important; }
   .tval.is-scrubbing { background: color-mix(in srgb, var(--color-gold) 15%, transparent); color: var(--color-gold) !important; }
+
+  /* iOS-style horizontal slider (time sheet): white 28px thumb, gold fill.
+     --p (0–100%) is set from JS so webkit shows progress. */
+  .time-slider {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 32px; margin: 0; padding: 0;
+    background: transparent; cursor: pointer; touch-action: pan-y;
+  }
+  .time-slider::-webkit-slider-runnable-track {
+    height: 4px; border-radius: 2px;
+    background: linear-gradient(to right, var(--color-gold) 0%, var(--color-gold) var(--p, 50%), var(--color-high) var(--p, 50%), var(--color-high) 100%);
+  }
+  .time-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #fff; border: none; margin-top: -12px;
+    box-shadow: 0 2px 6px rgb(0 0 0 / .45), 0 0 0 .5px rgb(0 0 0 / .15);
+  }
+  .time-slider::-moz-range-track { height: 4px; border-radius: 2px; background: var(--color-high); }
+  .time-slider::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--color-gold); }
+  .time-slider::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: #fff; border: none; box-shadow: 0 2px 6px rgb(0 0 0 / .45); }
+  .time-slider:focus-visible { outline: none; }
+  .time-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 2px 6px rgb(0 0 0 / .45), 0 0 0 3px color-mix(in srgb, var(--color-gold) 55%, transparent); }
+  .tcol.is-bad .time-slider, .tcol.is-bad .time-slider::-webkit-slider-thumb { opacity: .45; }
+
+  /* Native wheel test: the input itself opens UIDatePicker (.wheels) on iOS. */
+  .time-wheel {
+    width: 100%; height: 44px; padding: 0 10px;
+    border-radius: 12px; background: var(--color-fill);
+    color: var(--color-ink); text-align: center;
+    font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
+    outline: none; cursor: pointer;
+  }
+  .time-wheel:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-gold) 55%, transparent); }
+  .time-wheel::-webkit-calendar-picker-indicator { filter: invert(.7); }
 
   /* ── Settings switch ──────────────────────────────────────────────────── */
   .switch { position: relative; flex-shrink: 0; width: 51px; height: 31px; border-radius: 999px; background: var(--color-fill); transition: background .25s; }

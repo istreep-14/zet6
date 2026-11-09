@@ -11,7 +11,7 @@ import { switchTab, updateTabIndicators, normalizeTab, TAB_ORDER } from './rende
 import {
   renderStaff, invalidateStaffList, staffTabNav,
   initStaffGestures, closeAllSwipes,
-  openTimeSheet, timeStep, timeInput, timeReset,
+  openTimeSheet, timeStep, timeInput, timeSlider, timeWheel, timeReset,
   openRosterSheet, rosterPick, rosterSelectAll, rosterSelected, toggleRosterEdit,
 } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
@@ -57,6 +57,38 @@ function render(s) {
 }
 
 store.subscribe(render);
+
+// ── Header date: formatted pill over the hidden native date input ─────────────
+// The pill shows "Sat, Nov 8"; the invisible input sits over it and opens
+// iOS's native picker on tap. Desktop/keyboard fall through to showPicker().
+
+function fmtHdrDate(iso) {
+  if (!iso) return 'Today';
+  // Parse as local noon so DST shifts never move the visible day.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return iso;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], 12);
+  return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(d);
+}
+
+function syncHdrDate() {
+  const d = store.getState().meta.date;
+  const input = $('tipDate');
+  if (input && input.value !== d) input.value = d || '';
+  const label = $('hdrDateLabel');
+  const text = fmtHdrDate(d);
+  if (label && label.textContent !== text) label.textContent = text;
+}
+
+function openDatePicker() {
+  const input = $('tipDate');
+  if (!input) return;
+  try {
+    input.focus({ preventScroll: true });
+    if (typeof input.showPicker === 'function') input.showPicker();
+    else input.click();
+  } catch { input.click(); }
+}
 
 // ── Global handler surface for inline on* attributes ──────────────────────────
 
@@ -143,6 +175,8 @@ window.App = {
   // Time sheet (tap a time chip)
   timeStep,
   timeInput,
+  timeSlider,
+  timeWheel,
   timeReset,
 
   // defaults
@@ -201,7 +235,8 @@ window.App = {
   applyTradeDown: applyPendingTradeDown,
 
   // session
-  setDate: store.setDate,
+  setDate(v) { store.setDate(v); syncHdrDate(); },
+  openDatePicker,
   exportSession() {
     const s = store.getState();
     const blob = new Blob([persist.serialize(s)], { type: 'application/json' });
@@ -248,7 +283,7 @@ window.App = {
 
 // ── One-time DOM wiring ───────────────────────────────────────────────────────
 
-$('tipDate').value = state.meta.date;
+syncHdrDate();
 
 // Hide the tab bar when the software keyboard is open. Compare the visible
 // area to the layout viewport (innerHeight), not the screen: Safari's toolbars
