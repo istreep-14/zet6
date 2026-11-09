@@ -6,7 +6,6 @@ import { SheetShell } from './kit.js';
 const $ = id => document.getElementById(id);
 
 export const SHEETS = {
-  'sheet-settings': { title: 'Settings' },
   'sheet-defaults': { title: 'Default times' },
   'sheet-time': { title: 'Shift time' },
   'sheet-roster': { title: 'Quick add', tall: true, foot: true },
@@ -22,6 +21,8 @@ export function mountSheets(host) {
     .map(([id, o]) => String(SheetShell({ id, ...o })))
     .join('');
 }
+
+export const closeAllSheets = () => Object.keys(SHEETS).forEach(id => closeSheet(id));
 
 export const isOpen = id => !!$(id)?.classList.contains('open');
 export const sheetBody = id => $(id + '-body');

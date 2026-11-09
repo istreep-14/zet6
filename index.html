@@ -12,7 +12,7 @@
 <meta name="format-detection" content="telephone=no">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
-<meta name="theme-color" content="#0b0b10">
+<meta name="theme-color" content="#000000">
 <link rel="stylesheet" href="css/app.css">
 
 <!-- Design tokens. Every colour / font / radius here becomes a Tailwind
@@ -21,22 +21,23 @@
 <style type="text/tailwindcss">
 @theme static {
   /* surfaces, darkest → lightest */
-  --color-bg: #0b0b10;
-  --color-surface: #18181d;     /* cards */
-  --color-raised: #24242a;      /* cards inside sheets, pressed rows */
-  --color-high: #33333a;        /* selected segment, active chip */
-  --color-fill: rgb(120 120 135 / .24);     /* inputs, tonal buttons */
-  --color-fill-2: rgb(120 120 135 / .13);
-  --color-sep: rgb(84 84 92 / .55);
+  --color-bg: #000000;
+  --color-surface: #121215;     /* cards (opaque: swipe rows + sticky cells match it) */
+  --color-raised: #1e1e23;      /* cards inside sheets, pressed rows, table footers */
+  --color-high: #2e2e34;        /* selected segment, active chip */
+  --color-fill: rgb(130 130 145 / .22);     /* inputs, tonal buttons */
+  --color-fill-2: rgb(130 130 145 / .12);
+  --color-sep: rgb(255 255 255 / .08);
+  --color-edge: rgb(255 255 255 / .09);     /* glass hairline around cards */
 
   /* text */
   --color-ink: #ffffff;
-  --color-ink-2: rgb(235 235 245 / .62);
-  --color-ink-3: rgb(235 235 245 / .34);
+  --color-ink-2: rgb(235 235 245 / .7);
+  --color-ink-3: rgb(235 235 245 / .4);
 
   /* accent: gold = active + primary; green = rate; red = closers + errors */
-  --color-gold: #f5c842;
-  --color-gold-ink: #1d1600;
+  --color-gold: #ffd23f;
+  --color-gold-ink: #1a1300;
   --color-red: #ff453a;
   --color-red-soft: #ff8a80;
   --color-green: #30d158;
@@ -58,7 +59,7 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
   --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
 
-  --radius-card: 22px;
+  --radius-card: 20px;
 }
 </style>
 <!-- Tailwind v4 browser build, vendored: no CDN, no npm, no build step. -->
@@ -67,6 +68,9 @@
 <body>
 
 <header class="hdr">
+  <button type="button" class="hdr-menu" onclick="App.toggleDrawer()" aria-label="Sessions and settings" aria-controls="drawer">
+    <svg class="size-[22px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+  </button>
   <h1 class="hdr-title truncate font-bold" id="hdrTitle">Payout</h1>
   <div class="hdr-date-wrap">
     <button type="button" class="hdr-date-btn" id="hdrDateBtn" onclick="App.openDatePicker()" aria-label="Shift date">
@@ -75,9 +79,6 @@
     </button>
     <input type="date" class="hdr-date-input" id="tipDate" onchange="App.setDate(this.value)" aria-label="Shift date">
   </div>
-  <button class="grid size-10 shrink-0 place-items-center rounded-full bg-fill text-ink-2 active:bg-high" onclick="App.openSettings()" aria-label="Settings">
-    <svg class="size-[20px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-  </button>
 </header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
@@ -105,6 +106,22 @@
     <span class="tab-label">Payout</span><span class="tab-sub" id="tab-sub-payout"></span>
   </button>
 </nav>
+
+<!-- Side drawer: sessions + settings (src/render/drawer.js) -->
+<div class="drawer-scrim" id="drawerScrim" onclick="App.closeDrawer()"></div>
+<aside class="drawer" id="drawer" aria-label="Sessions and settings" aria-hidden="true">
+  <div class="drawer-head">
+    <img src="icon-192.png" alt="" class="size-9 rounded-[10px]">
+    <div class="min-w-0 flex-1">
+      <div class="truncate text-[22px] font-extrabold leading-none tracking-[-.03em]">Tip Pool</div>
+      <div class="mt-1 text-[12px] font-semibold uppercase tracking-[.09em] text-ink-3">Sessions &amp; settings</div>
+    </div>
+    <button type="button" class="grid size-11 place-items-center" onclick="App.closeDrawer()" aria-label="Close">
+      <span class="grid size-8 place-items-center rounded-full bg-fill text-ink-2"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></span>
+    </button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</aside>
 
 <!-- Bottom sheets are mounted here from src/ui/sheet.js -->
 <div id="sheets"></div>

@@ -179,17 +179,17 @@ export function deserialize(raw) {
 
 // ── Browser storage I/O ───────────────────────────────────────────────────────
 
-export function save(state, storage = globalThis.localStorage) {
+export function save(state, storage = globalThis.localStorage, key = STORAGE_KEY) {
   try {
-    storage.setItem(STORAGE_KEY, serialize(state));
+    storage.setItem(key, serialize(state));
   } catch (e) {
     console.warn('TipPool: localStorage unavailable', e);
   }
 }
 
-export function load(storage = globalThis.localStorage) {
+export function load(storage = globalThis.localStorage, key = STORAGE_KEY) {
   try {
-    const raw = storage.getItem(STORAGE_KEY);
+    const raw = storage.getItem(key);
     if (!raw) return null;
     return deserialize(raw);
   } catch {

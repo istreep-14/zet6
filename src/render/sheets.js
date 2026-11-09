@@ -1,12 +1,13 @@
-// Sheets that aren't owned by a tab: Person payout, Closer bonus, Default
-// times, and Settings. Each re-renders with the app while it's open.
+// Sheets that aren't owned by a tab: Person payout, Closer bonus and Default
+// times. Settings live in the side drawer (render/drawer.js). Each re-renders
+// with the app while it's open.
 
 import { DENOMS, fmtHrs } from '../util.js';
 import { fmtTimeAbs } from '../time.js';
 import { setBonuses, clearBonuses } from '../store.js';
 import { html, cx, mount } from '../ui/html.js';
 import {
-  Card, Button, Stepper, Avatar, Badge, Stat, Field, Label, SwitchRow, ListRow, Money, Denom,
+  Card, Button, Stepper, Avatar, Badge, Stat, Field, Label, Money, Denom,
   INPUT, ROLE_TEXT, SEP,
 } from '../ui/kit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, onSheetClose } from '../ui/sheet.js';
@@ -176,40 +177,9 @@ function renderDefaults(vm) {
   });
 }
 
-// ── Settings ─────────────────────────────────────────────────────────────────
-
-export function openSettings(vm) {
-  openSheet('sheet-settings');
-  renderSettings(vm);
-}
-
-function renderSettings(vm) {
-  if (!isOpen('sheet-settings')) return;
-  const s = vm.state;
-  const extraPools = s.pools.length > 1;
-  mount(sheetBody('sheet-settings'), html`
-    ${Card({ flush: true }, html`
-      ${SwitchRow({ id: 'set-allRoles', on: s.settings.allRoles, onclick: "App.toggleSetting('allRoles')", label: 'Servers & support', hint: 'Role sections, support tip-out, who-shares chips' })}
-      ${SwitchRow({ id: 'set-multiPool', on: s.settings.multiPool || extraPools, disabled: extraPools, onclick: "App.toggleSetting('multiPool')", label: 'Multiple pools',
-        hint: extraPools ? `On while ${s.pools.length} pools exist — remove extras to turn off` : 'Split tips by time window (e.g. lunch / dinner)' })}
-      ${SwitchRow({ id: 'set-clock24', on: s.settings.clock24, onclick: "App.toggleSetting('clock24')", label: '24-hour time', hint: 'Show 17:00 instead of 5:00p' })}`)}
-    ${Label('Tools')}
-    ${Card({ flush: true }, html`
-      ${ListRow({ icon: 'clock', onclick: 'App.openDefaults()' }, 'Default shift times')}
-      ${ListRow({ icon: 'gift', onclick: 'App.openBonus()' }, 'Closer bonus & chump')}
-      ${ListRow({ icon: 'sliders', onclick: 'App.openCloseTime()' }, 'Close-time what-if')}`)}
-    ${Label('Session')}
-    ${Card({ flush: true }, html`
-      ${ListRow({ icon: 'download', onclick: 'App.exportSession()', chevron: false }, 'Export JSON')}
-      ${ListRow({ icon: 'upload', onclick: 'App.triggerImport()', chevron: false }, 'Import JSON')}
-      ${ListRow({ icon: 'trash', tone: 'danger', onclick: 'App.clearSession()', chevron: false }, 'New session')}`)}
-    <p class="pt-1 text-center text-[13px] text-ink-3">New session clears the shift but keeps settings and saved names.</p>`);
-}
-
 // Re-render whichever of these sheets is open.
 export function renderSheets(vm) {
   renderPerson(vm);
   renderBonus(vm);
   renderDefaults(vm);
-  renderSettings(vm);
 }
