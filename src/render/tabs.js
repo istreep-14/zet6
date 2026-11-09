@@ -2,7 +2,7 @@
 // (rate / pool / chump while editing Staff & Tips).
 
 import { poolValue, fmtMoney, fmtMoneyShort } from '../util.js';
-import { html as shtml, cx } from '../ui/html.js';
+import { cx } from '../ui/html.js';
 import { html, render } from '../ui/preact.js';
 import { Icon } from '../ui/pkit.js';
 
@@ -157,15 +157,4 @@ function updateHud(vm, named, total, short) {
   hud.classList.toggle('is-empty', pristine);
   hud.classList.toggle('is-warn', !pristine && (!!vm.blocked || short));
   render(pristine ? null : html`<${Hud} vm=${vm} total=${total} short=${short} />`, hud);
-}
-
-// Same numbers as the HUD, for the top of a sheet.
-export function liveStrip(vm) {
-  if (!vm?.shares || !(vm.totalCash > 0)) return '';
-  const sh = vm.shares;
-  const st = (k, v, cls = '') => shtml`<span class="flex min-w-0 flex-col items-center gap-0.5 leading-tight">
-    <span class="text-[12px] font-medium text-ink-2">${k}</span>
-    <span class="${cx('font-rounded text-[18px] font-semibold tabular-nums', cls)}">${v}</span></span>`;
-  return shtml`<div class="flex justify-around rounded-2xl bg-raised px-2 py-3">
-    ${st('Rate', '$' + sh.rate.toFixed(2), 'text-green')}${st('Pool', fmtMoney(sh.totalCash))}${st('Chump', sh.leftover > 0 ? fmtMoney(sh.leftover) : '—', 'text-ink-2')}</div>`;
 }

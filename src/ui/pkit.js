@@ -135,3 +135,41 @@ export function ListRow({ onClick, icon, tone = '', chevron = true, aside, child
     ${chevron && html`<${Icon} name="chevR" class="size-4 text-ink-3" />`}
   </button>`;
 }
+
+export function Stepper({ value, onDec, onInc, decDisabled = false, incDisabled = false, on = false }) {
+  const b = 'grid size-11 place-items-center rounded-full text-[22px] text-ink transition active:bg-fill disabled:opacity-30';
+  return html`<div class="flex items-center rounded-full bg-fill">
+    <button class=${b} onClick=${onDec} disabled=${decDisabled} aria-label="Less">−</button>
+    <span class=${cx('min-w-8 text-center text-[15px] font-bold tabular-nums', on ? 'text-gold' : 'text-ink-2')}>${value}</span>
+    <button class=${b} onClick=${onInc} disabled=${incDisabled} aria-label="More">+</button>
+  </div>`;
+}
+
+export function Stat({ label, value, sub, tone = '', big = false }) {
+  return html`<div class="rounded-2xl bg-raised px-4 py-3.5">
+    <div class="text-[13px] font-medium text-ink-2">${label}</div>
+    <div class=${cx('font-rounded font-bold tracking-tight tabular-nums', big ? 'text-[34px]' : 'text-[24px]', tone)}>${value}</div>
+    ${sub && html`<div class="text-[13px] text-ink-3">${sub}</div>`}
+  </div>`;
+}
+
+export function Badge({ tone = 'muted', children }) {
+  const t = {
+    red: 'bg-red/15 text-red', green: 'bg-green/15 text-green', amber: 'bg-amber/15 text-amber',
+    gold: 'bg-gold/15 text-gold', muted: 'bg-fill text-ink-2',
+    bartender: ROLE_TINT.bartender, server: ROLE_TINT.server, support: ROLE_TINT.support,
+  }[tone];
+  return html`<span class=${cx('inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[12px] font-semibold capitalize', t)}>${children}</span>`;
+}
+
+// Rate · Pool · Chump strip for the top of a sheet.
+export function LiveStrip({ vm }) {
+  if (!vm?.shares || !(vm.totalCash > 0)) return null;
+  const sh = vm.shares;
+  const S = (k, v, c = '') => html`<span class="flex min-w-0 flex-col items-center gap-0.5 leading-tight">
+    <span class="text-[12px] font-medium text-ink-2">${k}</span>
+    <span class=${cx('font-rounded text-[18px] font-semibold tabular-nums', c)}>${v}</span></span>`;
+  const money = n => '$' + Number(n).toLocaleString('en-US');
+  return html`<div class="flex justify-around rounded-2xl bg-raised px-2 py-3">
+    ${S('Rate', '$' + sh.rate.toFixed(2), 'text-green')}${S('Pool', money(sh.totalCash))}${S('Chump', sh.leftover > 0 ? money(sh.leftover) : '—', 'text-ink-2')}</div>`;
+}
