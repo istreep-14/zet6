@@ -1,4 +1,4 @@
-// Bootstrap: load → subscribe → first render.
+// Bootstrap: load → mount sheets → subscribe → first render.
 // Update flow: input event → action mutates state → schedule(120ms) →
 // compute (buildViewModel) → render → persist.
 
@@ -6,7 +6,8 @@ import * as store from './store.js';
 import * as persist from './persist.js';
 import { buildViewModel } from './viewmodel.js';
 import { setClock24 } from './time.js';
-import { switchTab, updateTabIndicators } from './render/tabs.js';
+import { mountSheets, closeSheet, sheetBackdrop } from './ui/sheet.js';
+import { switchTab, updateTabIndicators, normalizeTab, TAB_ORDER } from './render/tabs.js';
 import {
   renderStaff, invalidateStaffList, staffTabNav,
   initStaffGestures, closeAllSwipes,
@@ -14,18 +15,12 @@ import {
   openRosterSheet, rosterPick, rosterSelectAll, rosterSelected, toggleRosterEdit,
 } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
-import { renderPools, invalidatePools } from './render/pools.js';
-import { renderSummary } from './render/summary.js';
+import { renderTips, invalidateTips } from './render/tips.js';
+import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
+import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
-  renderDist, openCloseTimeSidebar, closeCloseTimeSidebar, selectCloseTime,
-  applyPendingTradeUp, applyPendingTradeDown,
-} from './render/dist.js';
-import {
-  openModal, closeModal, modalBgClose,
-  openPersonModal, renderPersonModal,
-  openRemModal, renderRemModal, adjustRemBonus, resetRemBonuses,
-  renderDefaultsModal,
-} from './render/modals.js';
+  renderSheets, openPerson, openBonus, adjustBonus, resetBonuses, openDefaults, openSettings,
+} from './render/sheets.js';
 
 const $ = id => document.getElementById(id);
 
@@ -41,6 +36,9 @@ if (!state.meta.date) {
     + String(t.getMonth() + 1).padStart(2, '0') + '-'
     + String(t.getDate()).padStart(2, '0');
 }
+state.ui.activeTab = normalizeTab(state.ui.activeTab);
+
+mountSheets($('sheets'));
 
 // ── Render loop ───────────────────────────────────────────────────────────────
 
@@ -50,36 +48,12 @@ function render(s) {
   setClock24(s.settings.clock24);
   lastVm = buildViewModel(s);
   renderStaff(lastVm);
-  renderPools(lastVm);
-  renderSummary(lastVm);
-  renderDist(lastVm);
-  renderPersonModal(lastVm);
-  renderRemModal(lastVm);
-  renderDefaultsModal(lastVm);
+  renderTips(lastVm);
+  renderPayout(lastVm);
+  renderCloseTime(lastVm);
+  renderSheets(lastVm);
   updateTabIndicators(lastVm);
-  renderSettings(s);
   persist.save(s);
-}
-
-// Settings switches on the More tab. Multiple pools can't be switched off
-// while extra pools exist (that would hide entered cash) — remove them first.
-function renderSettings(s) {
-  const set = (id, on, disabled) => {
-    const el = $(id);
-    if (!el) return;
-    el.setAttribute('aria-checked', String(on));
-    el.disabled = !!disabled;
-  };
-  const extraPools = s.pools.length > 1;
-  set('set-allRoles', s.settings.allRoles);
-  set('set-multiPool', s.settings.multiPool || extraPools, extraPools);
-  set('set-clock24', s.settings.clock24);
-  const hint = $('set-multiPool-hint');
-  if (hint) {
-    hint.textContent = extraPools
-      ? 'On while ' + s.pools.length + ' pools exist — remove extras to turn off'
-      : 'Split tips by time window (e.g. lunch / dinner)';
-  }
 }
 
 store.subscribe(render);
@@ -87,6 +61,7 @@ store.subscribe(render);
 // ── Global handler surface for inline on* attributes ──────────────────────────
 
 const rolesOn = () => store.getState().settings.allRoles;
+const fromSettings = fn => (...a) => { closeSheet('sheet-settings'); fn(...a); };
 
 window.App = {
   // tabs
@@ -95,18 +70,29 @@ window.App = {
     store.setActiveTab(name);
   },
 
+  // sheets
+  closeSheet,
+  sheetBg: sheetBackdrop,
+  openSettings: () => openSettings(lastVm),
+  openDefaults: fromSettings(() => openDefaults(lastVm)),
+  openBonus: fromSettings(() => openBonus(lastVm)),
+  openCloseTime: fromSettings(() => openCloseTime(lastVm)),
+  personModal: id => openPerson(lastVm, id),
+
   // settings
   toggleSetting(key) {
     const s = store.getState();
     if (key === 'multiPool' && s.pools.length > 1) return;
     invalidateStaffList();
-    invalidatePools();
+    invalidateTips();
     store.setSetting(key, !s.settings[key]);
   },
 
   // staff
-  addStaff() {
-    store.addStaff(rolesOn() ? store.getState().ui.staffViewRole : 'bartender');
+  addStaff(role) {
+    const id = store.addStaff(rolesOn() ? role : 'bartender');
+    // Renders synchronously, so focus while still inside the tap (iOS keyboard).
+    document.querySelector(`[data-sid="${id}"] [data-field="name"]`)?.focus();
   },
   staffField: store.updateStaff,
   staffTab: staffTabNav,
@@ -133,18 +119,16 @@ window.App = {
     forgetName(name);
     render(store.getState());
   },
-
-  // Quick-add sheet: pick saved people (cards), add them all at once. Each
-  // fills the next blank row of their role, or gets a new row.
   openRoster: openRosterSheet,
   rosterPick,
   rosterAll: rosterSelectAll,
   rosterEdit: toggleRosterEdit,
+  // Each pick fills the next blank row of their role, or gets a new row.
   rosterAddSelected() {
     const picks = rosterSelected();
     if (!picks.length) return;
     const roles = rolesOn();
-    invalidateStaffList();                       // name inputs must show the new values
+    invalidateStaffList();
     store.mutate(st => {
       picks.forEach(({ name, role }) => {
         const r = roles ? role : 'bartender';
@@ -153,31 +137,18 @@ window.App = {
         else st.staff.push({ ...store.newStaff(r), name });
       });
     }, { immediate: true });
-    closeModal('rosterModal');
+    closeSheet('sheet-roster');
   },
 
-  // Time sheet (tap a time chip): steppers, typed entry, reset per field
+  // Time sheet (tap a time chip)
   timeStep,
   timeInput,
   timeReset,
-  switchRole(role) {
-    invalidateStaffList();
-    store.setStaffViewRole(role);
-  },
-  // Simple mode edits the whole-shift open/close; roles mode the role default.
-  roleDefaultInline(field, value) {
-    if (rolesOn()) store.setRoleDefault(store.getState().ui.staffViewRole, field, value.trim());
-    else store.setGlobalDefault(field, value.trim());
-  },
-  roleDefault(role, field, value) {
-    store.setRoleDefault(role, field, value.trim());
-  },
-  globalDefault(field, value) {
-    store.setGlobalDefault(field, value.trim());
-  },
-  supportDefault(value) {
-    store.setSupportDefault(value.trim());
-  },
+
+  // defaults
+  roleDefault: (role, field, value) => store.setRoleDefault(role, field, value.trim()),
+  globalDefault: (field, value) => store.setGlobalDefault(field, value.trim()),
+  supportDefault: value => store.setSupportDefault(value.trim()),
 
   // pools
   addPool: store.addPool,
@@ -185,18 +156,10 @@ window.App = {
   selectPool: store.selectPool,
   poolMode: store.setPoolEntryMode,
   poolRole: store.togglePoolRole,
-  poolLabel(id, value) {
-    store.updatePool(id, p => { p.label = value; });
-  },
-  poolWindow(id, field, value) {
-    store.updatePool(id, p => { p.window[field] = value; });
-  },
-  poolBill(id, denom, value) {
-    store.updatePool(id, p => { p.cash.billCounts[denom] = value; });
-  },
-  poolNet(id, value) {
-    store.updatePool(id, p => { p.cash.netTotal = value; });
-  },
+  poolLabel: (id, value) => store.updatePool(id, p => { p.label = value; }),
+  poolWindow: (id, field, value) => store.updatePool(id, p => { p.window[field] = value; }),
+  poolBill: (id, denom, value) => store.updatePool(id, p => { p.cash.billCounts[denom] = value; }),
+  poolNet: (id, value) => store.updatePool(id, p => { p.cash.netTotal = value; }),
   poolSupport(id, field, value) {
     store.updatePool(id, p => {
       p.support ||= { pct: '', rate: '', hours: {} };
@@ -214,45 +177,26 @@ window.App = {
   billStep(id, denom, delta) {
     const pool = store.getState().pools.find(p => p.id === id);
     if (!pool) return;
-    const cur = parseInt(pool.cash.billCounts[denom], 10) || 0;
-    const next = Math.max(0, cur + delta);
+    const next = Math.max(0, (parseInt(pool.cash.billCounts[denom], 10) || 0) + delta);
     store.updatePool(id, p => { p.cash.billCounts[denom] = next ? String(next) : ''; });
     const input = document.querySelector(`[data-pid="${id}"] [data-bill="${denom}"]`);
     if (input) input.value = next ? String(next) : '';
   },
-  // Enter / "next" key hops down the denomination rows ($100 → $50 → … → $1)
+  // Enter / "next" hops down the denomination rows ($100 → $50 → … → $1)
   billKey(e, poolId) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    const card = document.querySelector(`[data-pid="${poolId}"]`);
-    if (!card) return;
-    const inputs = [...card.querySelectorAll('[data-bill]')];
+    const inputs = [...document.querySelectorAll(`[data-pid="${poolId}"] [data-bill]`)];
     const next = inputs[inputs.indexOf(e.target) + 1];
-    if (next) { next.focus(); next.select?.(); }
-    else e.target.blur();
+    if (next) { next.focus(); next.select?.(); } else e.target.blur();
   },
 
-  // modals
-  openModal,
-  closeModal,
-  modalBg: modalBgClose,
-  personModal(id) {
-    openPersonModal(lastVm, id);
-  },
-  openRemModal() {
-    openRemModal(lastVm);
-  },
-  remBonus(id, delta) {
-    adjustRemBonus(lastVm, id, delta);
-  },
-  resetRemBonuses,
+  // bonus
+  remBonus: (id, delta) => adjustBonus(lastVm, id, delta),
+  resetRemBonuses: resetBonuses,
 
-  // close time sidebar
-  openCloseTime: openCloseTimeSidebar,
-  closeCloseTime: closeCloseTimeSidebar,
+  // close time + trades
   selectCloseTime,
-
-  // trades
   applyTradeUp: applyPendingTradeUp,
   applyTradeDown: applyPendingTradeDown,
 
@@ -281,8 +225,7 @@ window.App = {
     const resetInput = () => { if (input) input.value = ''; };
     reader.onload = e => {
       try {
-        const imported = persist.deserialize(e.target.result);
-        persist.save(imported);
+        persist.save(persist.deserialize(e.target.result));
         resetInput();
         location.reload();
       } catch (err) {
@@ -307,13 +250,11 @@ window.App = {
 
 $('tipDate').value = state.meta.date;
 
-// Hide the tab bar when the software keyboard is open.
+// Hide the tab bar when the software keyboard is open. Compare the visible
+// area to the layout viewport (innerHeight), not the screen: Safari's toolbars
+// alone are >120pt. The keyboard shrinks only the visual viewport, and only
+// while a text field has focus.
 if (window.visualViewport) {
-  // Compare the visible area to the layout viewport (innerHeight), not the
-  // physical screen: in regular Safari the address bar + toolbar alone are
-  // >120pt, which used to flag "keyboard open" and hide the tab bar while
-  // just scrolling. The keyboard shrinks only the visual viewport, and only
-  // while a text field has focus.
   const KEYBOARD_THRESHOLD = 150;
   const isTyping = () => {
     const el = document.activeElement;
@@ -329,11 +270,10 @@ if (window.visualViewport) {
   document.addEventListener('focusout', () => setTimeout(updateKeyboardState, 50));
 }
 
-// Home-screen app fill. iOS can hand a home-screen web app a viewport that is
-// shorter than the screen (e.g. 844 of 912pt): the page lays out to the short
-// height and the strip below shows as black (zooming in proves iOS can draw
-// there). So size <html> and <body> to the real screen height, lay the tab
-// bar / HUD / sheets out inside that box, and keep the window locked at the top.
+// Home-screen app fill. iOS can hand a home-screen web app a viewport shorter
+// than the screen (e.g. 844 of 912pt), leaving a black strip below the page.
+// Size <html>/<body> to the real screen height, lay the tab bar / HUD / sheets
+// out inside that box, and keep the window locked at the top.
 // Add ?pwa to the URL to force this in a desktop browser for testing.
 (() => {
   const root = document.documentElement;
@@ -349,12 +289,9 @@ if (window.visualViewport) {
   const fit = () => {
     if (typing()) return;                       // keyboard resizes are not the screen
     const landscape = window.innerWidth > window.innerHeight;
-    const screenH = landscape
-      ? Math.min(screen.width, screen.height)
-      : Math.max(screen.width, screen.height);
+    const screenH = landscape ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
     const h = Math.max(screenH, window.innerHeight);
-    const short = h - window.innerHeight > 1;
-    root.classList.toggle('fill-screen', short);
+    root.classList.toggle('fill-screen', h - window.innerHeight > 1);
     root.style.setProperty('--app-h', h + 'px');
     if (window.scrollY || window.scrollX) window.scrollTo(0, 0);
   };
@@ -362,15 +299,12 @@ if (window.visualViewport) {
   window.addEventListener('resize', fit);
   window.addEventListener('orientationchange', () => setTimeout(fit, 300));
   document.addEventListener('focusout', () => setTimeout(fit, 120));
-  // Lock the window at the top: the only scrolling is inside .content.
   window.addEventListener('scroll', () => {
     if (!typing() && (window.scrollY || window.scrollX)) window.scrollTo(0, 0);
   }, { passive: true });
 })();
 
-// Lock page zoom. iOS ignores user-scalable=no in places, and a pinched or
-// focus-zoomed page shifts the fixed tab bar off the bottom edge — so block
-// pinch gestures here; double-tap zoom is off via touch-action in app.css.
+// Lock page zoom: a pinched or focus-zoomed page shifts the fixed tab bar.
 (() => {
   const block = e => e.preventDefault();
   ['gesturestart', 'gesturechange', 'gestureend'].forEach(t => document.addEventListener(t, block, { passive: false }));
@@ -379,33 +313,28 @@ if (window.visualViewport) {
   }, { passive: false });
 })();
 
-// Swipe left/right on the content area to move between tabs. Ignored when the
-// gesture starts in a sideways-scrolling table, while typing, or when it's
-// mostly vertical (normal scrolling).
-const TAB_ORDER = ['summary', 'staff', 'cash', 'bills', 'more'];
+// Swipe left/right on the content to move between tabs. Ignored inside
+// sideways-scrolling areas and staff rows, while typing, or on vertical drags.
 (() => {
   const area = $('mainContent');
   let x0 = 0, y0 = 0, t0 = 0, tracking = false;
-
   area.addEventListener('touchstart', e => {
     if (e.touches.length !== 1) { tracking = false; return; }
     const t = e.target;
-    tracking = !t.closest('.tbl-wrap') && !t.closest('.staff-row')
+    tracking = !t.closest('.overflow-x-auto') && !t.closest('.staff-row')
       && !(t.matches('input') && t === document.activeElement)
       && !document.body.classList.contains('keyboard-open');
     x0 = e.touches[0].clientX;
     y0 = e.touches[0].clientY;
     t0 = Date.now();
   }, { passive: true });
-
   area.addEventListener('touchend', e => {
     if (!tracking) return;
     tracking = false;
     const dx = e.changedTouches[0].clientX - x0;
     const dy = e.changedTouches[0].clientY - y0;
     if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - t0 > 700) return;
-    const cur = TAB_ORDER.indexOf(store.getState().ui.activeTab || 'summary');
-    const next = TAB_ORDER[cur + (dx < 0 ? 1 : -1)];
+    const next = TAB_ORDER[TAB_ORDER.indexOf(store.getState().ui.activeTab) + (dx < 0 ? 1 : -1)];
     if (!next) return;
     document.activeElement?.blur?.();
     switchTab(next, { swipe: dx < 0 ? 'left' : 'right' });
@@ -415,25 +344,30 @@ const TAB_ORDER = ['summary', 'staff', 'cash', 'bills', 'more'];
 
 // ── First render ──────────────────────────────────────────────────────────────
 
-// Roster: load saved names and fold in anyone already on this shift.
 loadRoster();
 state.staff.forEach(p => rememberName(p.name, p.role));
 
-// Slide a time chip up/down (or tap it) to set In/Out; swipe a row left for its actions.
+switchTab(state.ui.activeTab);
+render(state);
+
+// Slide a time chip up/down (or tap it) to set In/Out; swipe a row left for
+// its actions. (After the first render: #staffList is built by renderStaff.)
 initStaffGestures({
   setTime: (id, field, raw) => store.updateStaff(id, field, raw),
   openTime: (id, field) => openTimeSheet(id, field),
 });
 
-switchTab(state.ui.activeTab || 'summary');
-render(state);
+// Reveal once Tailwind has styled the page (it compiles in the browser).
+(function reveal(tries = 0) {
+  const ready = getComputedStyle(document.documentElement).getPropertyValue('--color-surface').trim();
+  if (ready || tries > 60) document.documentElement.classList.add('ready');
+  else requestAnimationFrame(() => reveal(tries + 1));
+})();
 
-// Pulse-hint the first empty staff name field on a fresh session
+// Pulse-hint the first empty staff name on a fresh session
 const firstEmpty = document.querySelector('#staffList [data-field="name"]');
 if (firstEmpty && !firstEmpty.value.trim()) {
   const row = firstEmpty.closest('.staff-row');
-  if (row) {
-    row.classList.add('pulse');
-    setTimeout(() => row.classList.remove('pulse'), 1600);
-  }
+  row?.classList.add('pulse');
+  setTimeout(() => row?.classList.remove('pulse'), 1600);
 }

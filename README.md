@@ -8,17 +8,15 @@ No server, no login, no build step. Add it to your iPhone home screen and it run
 
 ## Using it
 
-The tab bar has five tabs:
+The tab bar has three tabs, in the order you use them:
 
 | Tab | What it's for |
 |---|---|
-| **Payout** | The answer: total pool and rate, then each person's shift (5:00p → 2:00a), hours and pay (red dot = closer). Tap **How the split was worked out** to see the maths step by step. Close time and Bonus tools sit below. |
-| **Staff** | Who worked. Quick add saved people, set In/Out times, mark closers. |
-| **Cash** | The tips: type one net total, or count each bill size with −/+ steppers. |
-| **Bills** | The envelopes: which bills each person takes (in the same order as Payout), plus fixes when the drawer can't make exact change. |
-| **More** | Settings (incl. 24-hour time), default times, export/import, new session. |
+| **Staff** | Who worked. Quick add saved people, set In/Out times, mark closers. With roles on, bartenders, servers and support each get their own section and default times. |
+| **Tips** | The tips: type one net total, or count each bill size with −/+ steppers. |
+| **Payout** | The answer: total pool and rate, then each person's shift, hours, pay **and the bills for their envelope**. If the drawer can't make exact change, a fix card shows the fewest swaps and **Apply** updates the cash count. **Show the working** explains the maths; Close time and Bonus tools sit below. |
 
-Swipe left or right on the page to move between tabs.
+The gear in the header opens **Settings** (servers & support, multiple pools, 24-hour time, default times, export/import, new session). Swipe left or right on the page to move between tabs.
 
 ### Staff
 
@@ -37,22 +35,22 @@ Swipe left or right on the page to move between tabs.
 3. The leftover dollars go to the closers (or however you set them in **Bonus**).
 4. Anything that still can't be split evenly stays in the drawer as the "chump".
 
-With **Multiple pools** turned on (More tab), tips can be split by time window — e.g. a lunch pool and a dinner pool, each shared only by the people working then.
+With **Multiple pools** turned on (Settings), tips can be split by time window — e.g. a lunch pool and a dinner pool, each shared only by the people working then.
 
 ### Bills
 
-The app works out which physical bills each person gets, keeping $100s/$50s proportional and spreading small bills evenly. If the drawer can't make exact change, the Bills tab shows the fewest swaps that fix it (e.g. "Break 1 × $20 into 2 × $10"), and **Apply** updates the cash counts.
+The app works out which physical bills each person gets, keeping $100s/$50s proportional and spreading small bills evenly. If the drawer can't make exact change, the Payout tab shows the fewest swaps that fix it (e.g. "Break 1 × $20 into 2 × $10"), and **Apply** updates the cash counts.
 
 ### Simple vs detailed
 
-By default the app is in simple mode: one staff list and one tip pool. On the More tab you can turn on **Servers & support** (separate bartender / server / support lists with their own default times) and **Multiple pools**.
+By default the app is in simple mode: one staff list and one tip pool. In Settings you can turn on **Servers & support** (separate bartender / server / support lists with their own default times) and **Multiple pools**.
 
 ---
 
 ## Saving
 
 - Everything auto-saves on the device (`localStorage`).
-- **Export JSON** on the More tab downloads the shift as a dated `.json` file; **Import JSON** loads one back.
+- **Export JSON** in Settings downloads the shift as a dated `.json` file; **Import JSON** loads one back.
 - **New session** clears the shift but keeps your settings and saved names.
 
 ---

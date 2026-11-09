@@ -14,206 +14,94 @@
 <link rel="icon" type="image/svg+xml" href="icon.svg">
 <meta name="theme-color" content="#0b0b10">
 <link rel="stylesheet" href="css/app.css">
+
+<!-- Design tokens. Every colour / font / radius here becomes a Tailwind
+     utility (bg-surface, text-ink-2, text-gold, rounded-card, font-rounded …)
+     and a CSS variable (--color-surface …) that css/app.css can use. -->
+<style type="text/tailwindcss">
+@theme static {
+  /* surfaces, darkest → lightest */
+  --color-bg: #0b0b10;
+  --color-surface: #18181d;     /* cards */
+  --color-raised: #24242a;      /* cards inside sheets, pressed rows */
+  --color-high: #33333a;        /* selected segment, active chip */
+  --color-fill: rgb(120 120 135 / .24);     /* inputs, tonal buttons */
+  --color-fill-2: rgb(120 120 135 / .13);
+  --color-sep: rgb(84 84 92 / .55);
+
+  /* text */
+  --color-ink: #ffffff;
+  --color-ink-2: rgb(235 235 245 / .62);
+  --color-ink-3: rgb(235 235 245 / .34);
+
+  /* accent: gold = active + primary; green = rate; red = closers + errors */
+  --color-gold: #f5c842;
+  --color-gold-ink: #1d1600;
+  --color-red: #ff453a;
+  --color-red-soft: #ff8a80;
+  --color-green: #30d158;
+  --color-amber: #ff9f0a;
+
+  /* roles */
+  --color-bar: #ff9f0a;
+  --color-srv: #3d9bff;
+  --color-sup: #c77dff;
+
+  /* bill sizes — one tint per denomination, only for bills */
+  --color-d100: #5fd4a8;
+  --color-d50: #ff8fa3;
+  --color-d20: #8fd16a;
+  --color-d10: #f0a35e;
+  --color-d5: #a99bf7;
+  --color-d1: #9aa7b3;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+
+  --radius-card: 22px;
+}
+</style>
+<!-- Tailwind v4 browser build, vendored: no CDN, no npm, no build step. -->
+<script src="vendor/tailwind-browser-4.3.3.js"></script>
 </head>
 <body>
 
 <header class="hdr">
-  <h1 class="hdr-title" id="hdrTitle">Payout</h1>
+  <h1 class="hdr-title truncate font-bold" id="hdrTitle">Payout</h1>
   <input type="date" class="hdr-date" id="tipDate" onchange="App.setDate(this.value)" aria-label="Shift date">
+  <button class="grid size-10 shrink-0 place-items-center rounded-full bg-fill text-ink-2 active:bg-high" onclick="App.openSettings()" aria-label="Settings">
+    <svg class="size-[20px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+  </button>
 </header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
+<!-- Each tab's content is rendered by its module in src/render/. -->
 <main class="content" id="mainContent">
-
-  <!-- PAYOUT -->
-  <section class="panel active" id="tab-summary">
-    <div id="summary-content"></div>
-  </section>
-
-  <!-- STAFF -->
-  <section class="panel" id="tab-staff">
-    <div class="seg seg--sticky" id="roleSeg" role="tablist">
-      <button class="seg-btn active" data-role="bartender" id="rb-bartender" onclick="App.switchRole('bartender')">Bartenders</button>
-      <button class="seg-btn" data-role="server" id="rb-server" onclick="App.switchRole('server')">Servers</button>
-      <button class="seg-btn" data-role="support" id="rb-support" onclick="App.switchRole('support')">Support</button>
-    </div>
-
-    <div class="card role-bar">
-      <span class="role-bar-count" id="role-view-count">0 bartenders</span>
-      <div class="role-bar-defs">
-        <label for="rdef-in">In</label>
-        <input id="rdef-in" inputmode="decimal" placeholder="—" oninput="App.roleDefaultInline('in',this.value)">
-        <label for="rdef-out">Out</label>
-        <input id="rdef-out" inputmode="decimal" placeholder="—" oninput="App.roleDefaultInline('out',this.value)">
-      </div>
-      <button class="icon-btn" onclick="App.openModal('defaultTimesModal')" aria-label="Default times">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-      </button>
-    </div>
-
-    <div class="staff-note" id="staff-section-summary"></div>
-
-    <div class="roster" id="roster"></div>
-    <div class="staff-list" id="staffList"></div>
-    <button class="btn btn--tonal btn--block" id="addStaffBtn" onclick="App.addStaff()">+ Add Bartender</button>
-    <p class="staff-legend"><b>Slide a time up or down</b> to change it 15 min at a time, or <b>tap it</b> to type or reset. Faded times use the defaults; a red Out marks a closer. <b>Swipe a row left</b> for Closer, Reset and Delete.</p>
-  </section>
-
-  <!-- CASH -->
-  <section class="panel" id="tab-cash">
-    <div class="msg msg--error" id="cash-error"></div>
-    <div id="pools-content" class="stack"></div>
-  </section>
-
-  <!-- BILLS -->
-  <section class="panel" id="tab-bills">
-    <div id="dist-content" class="stack"></div>
-  </section>
-
-  <!-- MORE -->
-  <section class="panel" id="tab-more">
-    <div class="section-title">Settings</div>
-    <div class="card list-card">
-      <button class="switch-row" id="set-allRoles" role="switch" aria-checked="false" onclick="App.toggleSetting('allRoles')">
-        <span class="switch-text"><span>Servers &amp; support</span><small>Separate role lists, support tip-out, who-shares chips</small></span>
-        <span class="switch"></span>
-      </button>
-      <button class="switch-row" id="set-multiPool" role="switch" aria-checked="false" onclick="App.toggleSetting('multiPool')">
-        <span class="switch-text"><span>Multiple pools</span><small id="set-multiPool-hint">Split tips by time window (e.g. lunch / dinner)</small></span>
-        <span class="switch"></span>
-      </button>
-      <button class="switch-row" id="set-clock24" role="switch" aria-checked="false" onclick="App.toggleSetting('clock24')">
-        <span class="switch-text"><span>24-hour time</span><small>Show 17:00 instead of 5:00p</small></span>
-        <span class="switch"></span>
-      </button>
-    </div>
-
-    <div class="section-title">Tools</div>
-    <div class="card list-card">
-      <button class="action" onclick="App.openRemModal()">Closer bonus &amp; chump</button>
-      <button class="action" onclick="App.openCloseTime()">Close-time what-if</button>
-      <button class="action" onclick="App.openModal('defaultTimesModal')">Default shift times</button>
-    </div>
-
-    <div class="section-title">Session</div>
-    <div class="card list-card">
-      <button class="action action--plain" onclick="App.exportSession()">Export JSON</button>
-      <button class="action action--plain" onclick="App.triggerImport()">Import JSON</button>
-      <button class="action action--danger" onclick="App.clearSession()">New session</button>
-    </div>
-  </section>
-
+  <section class="panel" id="tab-staff"><div id="staff-root"></div></section>
+  <section class="panel" id="tab-tips"><div id="tips-root"></div></section>
+  <section class="panel" id="tab-payout"><div id="payout-root"></div></section>
 </main>
 
-<!-- Live HUD — rate / pool / chump while editing Staff & Cash -->
-<button class="hud is-empty" id="pipHud" onclick="App.tab('summary')" aria-label="Open payout">
-  <span class="hud-vals" id="pipVals"></span>
-  <span class="hud-arrow">›</span>
-</button>
+<!-- Live HUD — rate / pool / chump while editing Staff & Tips -->
+<button class="hud is-empty" id="pipHud" onclick="App.tab('payout')" aria-label="Open payout"></button>
 
 <nav class="tabbar">
-  <button class="tab active" id="tb-summary" onclick="App.tab('summary')">
-    <svg viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-    <span class="tab-label">Payout</span>
-  </button>
   <button class="tab" id="tb-staff" onclick="App.tab('staff')">
     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-    <span class="tab-label">Staff<span class="tab-sub" id="tab-sub-staff"></span></span>
+    <span class="tab-label">Staff</span><span class="tab-sub" id="tab-sub-staff"></span>
   </button>
-  <button class="tab" id="tb-cash" onclick="App.tab('cash')">
+  <button class="tab" id="tb-tips" onclick="App.tab('tips')">
     <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>
-    <span class="tab-label">Cash<span class="tab-sub" id="tab-sub-cash"></span></span>
+    <span class="tab-label">Tips</span><span class="tab-sub" id="tab-sub-tips"></span>
   </button>
-  <button class="tab" id="tb-bills" onclick="App.tab('bills')">
-    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="10" rx="1.5"/><path d="M3 18h18M5 21h14"/><circle cx="12" cy="9" r="2"/></svg>
-    <span class="tab-label">Bills<span class="tab-sub" id="tab-sub-bills"></span></span>
-  </button>
-  <button class="tab" id="tb-more" onclick="App.tab('more')">
-    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>
-    <span class="tab-label">More</span>
+  <button class="tab" id="tb-payout" onclick="App.tab('payout')">
+    <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7l10 7 10-7"/></svg>
+    <span class="tab-label">Payout</span><span class="tab-sub" id="tab-sub-payout"></span>
   </button>
 </nav>
 
-<!-- SHEET: remainder split -->
-<div class="sheet-backdrop" id="remModal" onclick="App.modalBg(event,'remModal')">
-  <div class="sheet">
-    <div class="sheet-hdr"><span class="sheet-title">Closer bonus &amp; chump</span><button class="sheet-close" onclick="App.closeModal('remModal')" aria-label="Close"></button></div>
-    <div class="sheet-body" id="remModalBody"></div>
-  </div>
-</div>
-
-<!-- SHEET: close time what-if -->
-<div class="sheet-backdrop" id="closeTimeSidebar" onclick="if(event.target===this)App.closeCloseTime()">
-  <div class="sheet">
-    <div class="sheet-hdr"><span class="sheet-title">Close-time what-if</span><button class="sheet-close" onclick="App.closeCloseTime()" aria-label="Close"></button></div>
-    <div class="sheet-body" id="close-time-body"></div>
-  </div>
-</div>
-
-<!-- SHEET: default times -->
-<div class="sheet-backdrop" id="defaultTimesModal" onclick="App.modalBg(event,'defaultTimesModal')">
-  <div class="sheet">
-    <div class="sheet-hdr"><span class="sheet-title">Default shift times</span><button class="sheet-close" onclick="App.closeModal('defaultTimesModal')" aria-label="Close"></button></div>
-    <div class="sheet-body">
-
-      <div class="card stack">
-        <div class="eyebrow">Whole shift</div>
-        <div class="field-row">
-          <label class="field"><span>Open (in)</span><input id="gc-in" inputmode="decimal" placeholder="5" oninput="App.globalDefault('in',this.value)"></label>
-          <label class="field"><span>Close (out)</span><input id="gc-out" inputmode="decimal" placeholder="2" oninput="App.globalDefault('out',this.value)"></label>
-        </div>
-        <p class="hint">Fills any blank In/Out. Blank Outs inherit the close time, which also decides the auto closers.</p>
-      </div>
-
-      <div class="card stack">
-        <div class="eyebrow">Per role</div>
-        <div class="def-grid">
-          <span></span><span class="col-h">In</span><span class="col-h">Out</span>
-          <span class="lbl" data-role="bartender">Bar</span>
-          <input id="rdef-modal-bar-in" inputmode="decimal" placeholder="—" oninput="App.roleDefault('bartender','in',this.value)">
-          <input id="rdef-modal-bar-out" inputmode="decimal" placeholder="—" oninput="App.roleDefault('bartender','out',this.value)">
-          <span class="lbl" data-role="server">Server</span>
-          <input id="rdef-modal-srv-in" inputmode="decimal" placeholder="—" oninput="App.roleDefault('server','in',this.value)">
-          <input id="rdef-modal-srv-out" inputmode="decimal" placeholder="—" oninput="App.roleDefault('server','out',this.value)">
-          <span class="lbl" data-role="support">Sup</span>
-          <input id="rdef-modal-sup-in" inputmode="decimal" placeholder="—" oninput="App.roleDefault('support','in',this.value)">
-          <input id="rdef-modal-sup-out" inputmode="decimal" placeholder="—" oninput="App.roleDefault('support','out',this.value)">
-        </div>
-        <p class="hint">Role defaults win over the whole-shift times for that role.</p>
-      </div>
-
-      <div class="card stack">
-        <div class="eyebrow">Support tip-out</div>
-        <label class="field field--narrow"><span>% of each pool</span><input id="gc-sup-pct" inputmode="decimal" placeholder="10" oninput="App.supportDefault(this.value)"></label>
-        <p class="hint">Support $/hr = % × pool tips ÷ pool hours, paid off the top before the bar/server split. Each pool can override % or $/hr.</p>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-<!-- SHEET: person -->
-<div class="sheet-backdrop" id="timeModal" onclick="App.modalBg(event,'timeModal')">
-  <div class="sheet">
-    <div class="sheet-hdr"><span class="sheet-title" id="timeModalTitle">Shift time</span><button class="sheet-close" onclick="App.closeModal('timeModal')" aria-label="Close"></button></div>
-    <div class="sheet-body" id="timeModalBody"></div>
-  </div>
-</div>
-
-<div class="sheet-backdrop" id="rosterModal" onclick="App.modalBg(event,'rosterModal')">
-  <div class="sheet sheet--tall">
-    <div class="sheet-hdr"><span class="sheet-title">Quick add</span><button class="sheet-close" onclick="App.closeModal('rosterModal')" aria-label="Close"></button></div>
-    <div class="sheet-body" id="rosterModalBody"></div>
-    <div class="sheet-foot" id="rosterModalFoot"></div>
-  </div>
-</div>
-
-<div class="sheet-backdrop" id="personModal" onclick="App.modalBg(event,'personModal')">
-  <div class="sheet">
-    <div class="sheet-hdr"><span class="sheet-title" id="personModalLabel">Profile</span><button class="sheet-close" onclick="App.closeModal('personModal')" aria-label="Close"></button></div>
-    <div class="sheet-body" id="personModalBody"></div>
-  </div>
-</div>
+<!-- Bottom sheets are mounted here from src/ui/sheet.js -->
+<div id="sheets"></div>
 
 <script type="module" src="src/main.js"></script>
 </body>

@@ -1,29 +1,28 @@
-// Staff tab — a "Quick add" card that opens the saved-staff picker sheet, then
-// one compact row per person:
+// Staff tab — everyone on the shift on one page, grouped by role when roles
+// are on (one section per role, each with its default times and its own
+// "+ Add" row). Each person is one compact row:
 //   name · [In] [Out] · hours
-// Each time is its own chip: slide it up (later) or down (earlier) in 15-min
-// steps, or tap it for the time sheet (steppers, typed entry, reset to default).
-// Closer / Reset / Delete live behind a swipe-left on the row. A red Out chip
-// marks a closer.
+// Time chips slide up (later) / down (earlier) in 15-min steps, or tap for the
+// time sheet. Closer / Reset / Delete sit behind a swipe-left on the row.
 //
-// Rows re-render only on structural changes (add/remove/role switch) so typing
-// never loses focus; value-only updates patch labels and state classes.
+// Rows re-render only on structural changes (add / remove / role mode) so
+// typing never loses focus; value updates patch labels and state classes.
 
 import { ROLES } from '../store.js';
-import { escapeHTML, fmtHrs } from '../util.js';
+import { fmtHrs } from '../util.js';
 import {
   parseTime, fmtTimeAbs, resolveIn, nextAfter,
   absToInRaw, absToOutRaw, IN_MIN_ABS, IN_MAX_ABS,
 } from '../time.js';
 import { getRoster } from '../roster.js';
-import { openModal, closeModal } from './modals.js';
+import { html, cx, js, mount } from '../ui/html.js';
+import { icon } from '../ui/icons.js';
+import {
+  Card, Button, Avatar, Dot, Alert, ROLE_PLURAL, ROLE_ONE,
+} from '../ui/kit.js';
+import { openSheet, closeSheet, isOpen, sheetBody, sheetFoot, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
-
-const PLURAL = { bartender: 'bartenders', server: 'servers', support: 'support' };
-const SINGULAR = { bartender: 'bartender', server: 'server', support: 'support' };
-const ADD_LABEL = { bartender: '+ Add bartender', server: '+ Add server', support: '+ Add support' };
-const ROLE_TITLE = { bartender: 'Bartenders', server: 'Servers', support: 'Support' };
 
 const STEP = 0.25;          // 15 minutes
 const PX_PER_STEP = 14;     // vertical slide distance per 15-min step
@@ -31,6 +30,8 @@ const PX_PER_STEP = 14;     // vertical slide distance per 15-min step
 let lastSignature = '';
 let curVm = null;
 let callbacks = { setTime() {} };
+
+// ── Display model per row ────────────────────────────────────────────────────
 
 function rowDefaults(state, role) {
   const roleDef = state.defaults.byRole[role] || {};
@@ -40,19 +41,15 @@ function rowDefaults(state, role) {
   };
 }
 
-// Display-only mirror of the resolver — works for unnamed rows too. Same
-// fixed-axis rules as resolve.js: In via resolveIn, Out = next after In.
+// Display-only mirror of the resolver — works for unnamed rows too.
 function rowDisplay(state, person, vm) {
   const defs = rowDefaults(state, person.role);
-  const inRaw = person.in.trim() || defs.in;
-  const outRaw = person.out.trim() || defs.out;
-  const inParsed = parseTime(inRaw);
-  const outParsed = parseTime(outRaw);
+  const inParsed = parseTime(person.in.trim() || defs.in);
+  const outParsed = parseTime(person.out.trim() || defs.out);
   const resolved = vm?.resolved?.staff.find(p => p.id === person.id);
 
   const d = {
     person,
-    role: person.role,
     defIn: defs.in,
     defOut: defs.out,
     inSet: !!person.in.trim(),
@@ -79,8 +76,6 @@ function rowDisplay(state, person, vm) {
   return d;
 }
 
-// Fresh display for one person. Store actions mutate state synchronously, so
-// this is current even before the debounced render runs.
 function freshDisplay(id) {
   const state = curVm?.state;
   const p = state?.staff.find(x => x.id === id);
@@ -89,26 +84,37 @@ function freshDisplay(id) {
 
 const chipText = (abs, bad, field) => (bad ? '?' : abs != null ? fmtTimeAbs(abs) : field === 'in' ? 'In' : 'Out');
 
-const initials = name => name.split(/\s+/).filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '?';
+// "5:00p – 2:00a" for a section's default times.
+function defaultsLabel(defs) {
+  const i = parseTime(defs.in), o = parseTime(defs.out);
+  const inAbs = i.value != null ? resolveIn(i.value) : null;
+  const a = inAbs != null ? fmtTimeAbs(inAbs) : '—';
+  const b = o.value != null ? fmtTimeAbs(nextAfter(o.value, inAbs ?? 17)) : '—';
+  return a + ' – ' + b;
+}
 
-function rowHTML(person, idx, d) {
+// ── Markup ───────────────────────────────────────────────────────────────────
+
+function rowHTML(person, idx) {
   const id = person.id;
-  return `<div class="staff-row" data-sid="${id}">
-    <div class="sr-actions">
-      <button class="sr-act sr-act--closer" data-act-closer onclick="App.rowAction('closer','${id}')">${d.forced ? 'Unforce' : 'Closer'}</button>
-      <button class="sr-act sr-act--reset" onclick="App.rowAction('reset','${id}')">Reset</button>
-      <button class="sr-act sr-act--del" onclick="App.rowAction('delete','${id}')">Delete</button>
+  const act = 'w-[76px] text-[14px] font-semibold text-white';
+  return html`<div class="staff-row relative overflow-hidden" data-sid="${id}">
+    <div class="sr-actions absolute inset-y-0 right-0 flex">
+      <button class="${cx(act, 'bg-red')}" data-act-closer onclick="App.rowAction('closer','${id}')">Closer</button>
+      <button class="${cx(act, 'bg-[#636366]')}" onclick="App.rowAction('reset','${id}')">Reset</button>
+      <button class="${cx(act, 'bg-[#8e1d17]')}" onclick="App.rowAction('delete','${id}')">Delete</button>
     </div>
-    <div class="sr-main">
-      <input data-field="name" class="sr-name" value="${escapeHTML(person.name)}" placeholder="Name ${idx + 1}"
+    <div class="sr-main relative z-[1] grid h-[58px] grid-cols-[minmax(0,1fr)_auto_44px] items-center gap-2.5 bg-surface pl-4 pr-3 max-[400px]:gap-2">
+      <input data-field="name" class="h-10 w-full min-w-0 bg-transparent text-[17px] font-semibold text-ink outline-none placeholder:font-medium placeholder:text-ink-3"
+        value="${person.name}" placeholder="Name ${idx + 1}"
         autocomplete="off" autocorrect="off" autocapitalize="words" enterkeyhint="next" aria-label="Name"
-        onkeydown="App.staffTab(event,'name')" oninput="App.staffField('${id}','name',this.value)"
+        onkeydown="App.staffTab(event)" oninput="App.staffField('${id}','name',this.value)"
         onchange="App.rememberStaff('${id}')">
-      <div class="sr-times">
-        <button class="tchip" data-tf="in" aria-label="In time — slide up or down, or tap to edit"><span data-lin></span></button>
-        <button class="tchip" data-tf="out" aria-label="Out time — slide up or down, or tap to edit"><span data-lout></span></button>
+      <div class="flex gap-1.5">
+        <button class="tchip" data-tf="in" aria-label="In time — slide up or down, or tap to edit"><span></span></button>
+        <button class="tchip" data-tf="out" aria-label="Out time — slide up or down, or tap to edit"><span></span></button>
       </div>
-      <span class="hrs" data-hrs></span>
+      <span class="hrs text-right text-[15px] font-semibold text-ink-2 tabular-nums" data-hrs></span>
     </div>
   </div>`;
 }
@@ -121,20 +127,36 @@ function patchRow(rowEl, d) {
   if (hrs) hrs.textContent = d.hrsText;
   const act = rowEl.querySelector('[data-act-closer]');
   if (act) act.textContent = d.forced ? 'Unforce' : 'Closer';
-  const inChip = rowEl.querySelector('[data-tf="in"]');
-  const outChip = rowEl.querySelector('[data-tf="out"]');
-  if (inChip) {
-    inChip.firstElementChild.textContent = chipText(d.inAbs, d.inBad, 'in');
-    inChip.classList.toggle('is-set', d.inSet);
-    inChip.classList.toggle('is-blank', d.inAbs == null && !d.inBad);
-    inChip.classList.toggle('is-bad', d.inBad);
-  }
-  if (outChip) {
-    outChip.firstElementChild.textContent = chipText(d.outAbs, d.outBad, 'out');
-    outChip.classList.toggle('is-set', d.outSet);
-    outChip.classList.toggle('is-blank', d.outAbs == null && !d.outBad);
-    outChip.classList.toggle('is-bad', d.outBad);
-  }
+  [['in', d.inAbs, d.inBad, d.inSet], ['out', d.outAbs, d.outBad, d.outSet]].forEach(([f, abs, bad, set]) => {
+    const chip = rowEl.querySelector(`[data-tf="${f}"]`);
+    if (!chip) return;
+    chip.firstElementChild.textContent = chipText(abs, bad, f);
+    chip.classList.toggle('is-set', set);
+    chip.classList.toggle('is-blank', abs == null && !bad);
+    chip.classList.toggle('is-bad', bad);
+  });
+}
+
+// One section per role (roles on) or a single "On shift" section.
+function groups(state) {
+  if (!state.settings.allRoles) return [{ key: 'all', role: null, addRole: 'bartender', people: state.staff }];
+  return ROLES.map(role => ({ key: role, role, addRole: role, people: state.staff.filter(p => p.role === role) }));
+}
+
+function sectionHTML(g) {
+  const title = g.role ? ROLE_PLURAL[g.role] : 'On shift';
+  const add = g.role ? 'Add ' + ROLE_ONE[g.role] : 'Add person';
+  return Card({ flush: true, 'data-sec': g.key },
+    html`<div class="flex items-center gap-2 py-2.5 pl-4 pr-3">
+      ${g.role ? Dot(g.role) : ''}
+      <span class="text-[17px] font-semibold">${title}</span>
+      <span class="text-[15px] font-semibold text-ink-3 tabular-nums" data-sec-count></span>
+      <button class="ml-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-fill-2 px-3 text-[14px] font-semibold text-ink-2 transition active:bg-fill"
+        onclick="App.openDefaults()" aria-label="Default times">${icon('clock', 'size-4')}<span data-sec-def></span></button>
+    </div>
+    ${g.people.map((p, i) => rowHTML(p, i))}
+    <button class="flex h-12 w-full items-center gap-2 border-t border-sep px-4 text-[16px] font-semibold text-gold transition active:bg-raised" onclick="App.addStaff('${g.addRole}')">
+      ${icon('plus', 'size-[18px]')}${add}</button>`);
 }
 
 function noteHTML(vm) {
@@ -142,14 +164,14 @@ function noteHTML(vm) {
   const named = state.staff.filter(p => p.name.trim());
   if (!named.length) return '';
 
-  const parts = state.settings.allRoles ? [named.length + ' staff total'] : [];
+  const parts = [named.length + ' on shift'];
   const closeAbs = vm.resolved.closeAbs;
   if (closeAbs !== null) parts.push('close ' + fmtTimeAbs(closeAbs));
   const closers = vm.resolved.staff.filter(p => p.closer);
   if (closers.length) parts.push(closers.length + (closers.length === 1 ? ' closer' : ' closers'));
 
-  let html = parts.length ? `<span>${escapeHTML(parts.join(' · '))}</span>` : '';
   const warnings = [];
+  if (vm.inputError && vm.blocked) warnings.push(vm.blocked);
   if (closeAbs !== null) {
     vm.resolved.staff.forEach(p => {
       if (!p.usedDefaults.out && p.outAbs !== null && p.outAbs > closeAbs + 0.001) {
@@ -157,9 +179,8 @@ function noteHTML(vm) {
       }
     });
   }
-  if (vm.inputError && vm.blocked) warnings.unshift(vm.blocked);
-  warnings.forEach(w => { html += `<span class="warn">⚠ ${escapeHTML(w)}</span>`; });
-  return html;
+  return html`<div class="px-1 text-[14px] text-ink-2">${parts.join(' · ')}</div>
+    ${warnings.map(w => Alert({ tone: 'warn' }, w))}`;
 }
 
 // ── Quick add: entry card + saved-staff picker sheet ────────────────────────
@@ -167,95 +188,94 @@ function noteHTML(vm) {
 let rosterSel = new Set();          // lowercased names picked in the sheet
 let rosterEditing = false;
 
-function onShiftSet(state) {
-  return new Set(state.staff.map(p => p.name.trim().toLowerCase()).filter(Boolean));
-}
+const onShiftSet = state => new Set(state.staff.map(p => p.name.trim().toLowerCase()).filter(Boolean));
 
 function rosterEntryHTML(state) {
   const all = getRoster();
   if (!all.length) {
-    return '<div class="roster-hint">Names you enter are saved for quick adding next shift.</div>';
+    return html`<div class="px-1 text-[13px] text-ink-3">Names you enter are saved for quick adding next shift.</div>`;
   }
   const onShift = onShiftSet(state);
   const avail = all.filter(r => !onShift.has(r.name.toLowerCase()));
   const show = (avail.length ? avail : all).slice(0, 3);
-  const avs = show.map(r => `<span class="ro-av av--${r.role}">${escapeHTML(initials(r.name))}</span>`).join('');
   const sub = avail.length
     ? `${avail.length} saved ${avail.length === 1 ? 'person' : 'people'} not on shift`
     : 'Everyone saved is on this shift';
-  return `<button class="roster-open" onclick="App.openRoster()">
-    <span class="ro-avs">${avs}</span>
-    <span class="ro-main"><span class="ro-title">Quick add</span><span class="ro-sub">${sub}</span></span>
-    <span class="ro-chev" aria-hidden="true">›</span>
+  return html`<button class="flex min-h-16 w-full items-center gap-3 rounded-card bg-surface py-2.5 pl-3.5 pr-3 text-left transition active:scale-[.98] active:bg-raised" onclick="App.openRoster()">
+    <span class="flex shrink-0 -space-x-1.5">${show.map(r => html`<span class="rounded-full ring-2 ring-surface">${Avatar(r.name, r.role)}</span>`)}</span>
+    <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span class="text-[17px] font-semibold">Quick add</span>
+      <span class="text-[13px] text-ink-2">${sub}</span>
+    </span>
+    ${icon('chevR', 'size-5 text-ink-3')}
   </button>`;
 }
 
 function rosterGroups(state) {
   const all = getRoster();
   if (!state.settings.allRoles) return [{ role: null, people: all }];
-  const view = state.ui.staffViewRole;
-  const order = [view, ...ROLES.filter(r => r !== view)];
-  return order.map(role => ({ role, people: all.filter(r => r.role === role) }))
-    .filter(g => g.people.length);
+  return ROLES.map(role => ({ role, people: all.filter(r => r.role === role) })).filter(g => g.people.length);
 }
 
 function rcardHTML(r, onShift) {
   const key = r.name.toLowerCase();
   const on = onShift.has(key);
   const sel = rosterSel.has(key);
-  const arg = escapeHTML(JSON.stringify(r.name));
-  const cls = ['rcard', on && 'is-on', sel && 'is-sel', rosterEditing && 'is-edit'].filter(Boolean).join(' ');
-  const action = rosterEditing ? `App.forgetName(${arg})` : `App.rosterPick(${arg})`;
-  const sub = rosterEditing ? 'Remove' : on ? 'On shift' : (sel ? 'Selected' : '');
-  return `<button class="${cls}" onclick="${action}" ${on && !rosterEditing ? 'disabled' : ''} aria-pressed="${sel}">
-    <span class="rcard-mark" aria-hidden="true"></span>
-    <span class="rcard-av av--${r.role}">${escapeHTML(initials(r.name))}</span>
-    <span class="rcard-name">${escapeHTML(r.name)}</span>
-    <span class="rcard-sub">${sub}</span>
+  const action = rosterEditing ? html`App.forgetName(${js(r.name)})` : html`App.rosterPick(${js(r.name)})`;
+  const sub = rosterEditing ? 'Remove' : on ? 'On shift' : sel ? 'Selected' : '';
+  const mark = rosterEditing ? 'bg-red text-white' : sel ? 'bg-gold text-gold-ink' : on ? 'bg-ink-3 text-surface' : 'ring-[1.5px] ring-inset ring-ink-3';
+  return html`<button class="${cx(
+    'relative flex min-h-[116px] flex-col items-center justify-center gap-1.5 rounded-2xl px-2 py-2.5 transition active:scale-95',
+    sel ? 'bg-gold/15 ring-2 ring-inset ring-gold' : 'bg-raised',
+    on && !rosterEditing && 'opacity-45',
+  )}" onclick="${action}" ${on && !rosterEditing ? 'disabled' : ''} aria-pressed="${sel}">
+    <span class="${cx('absolute right-2 top-2 grid size-[22px] place-items-center rounded-full text-[12px] font-extrabold', mark)}" aria-hidden="true">${rosterEditing ? '✕' : sel || on ? '✓' : ''}</span>
+    ${Avatar(r.name, r.role, 'lg')}
+    <span class="line-clamp-2 max-w-full text-center text-[15px] font-semibold leading-tight [overflow-wrap:anywhere]">${r.name}</span>
+    <span class="${cx('min-h-3.5 text-[12px] leading-3.5', rosterEditing ? 'text-red' : sel ? 'text-gold' : 'text-ink-3')}">${sub}</span>
   </button>`;
 }
 
 export function openRosterSheet() {
   rosterSel = new Set();
   rosterEditing = false;
-  openModal('rosterModal');
+  openSheet('sheet-roster');
   renderRosterSheet();
 }
 
 export function renderRosterSheet() {
-  if (!curVm || !$('rosterModal')?.classList.contains('open')) return;
+  if (!curVm || !isOpen('sheet-roster')) return;
   const state = curVm.state;
-  const body = $('rosterModalBody');
-  const foot = $('rosterModalFoot');
+  const body = sheetBody('sheet-roster');
+  const foot = sheetFoot('sheet-roster');
   const onShift = onShiftSet(state);
   const all = getRoster();
-  // Drop picks that are no longer pickable (removed, or added meanwhile)
   rosterSel = new Set([...rosterSel].filter(k => all.some(r => r.name.toLowerCase() === k) && !onShift.has(k)));
   const avail = all.filter(r => !onShift.has(r.name.toLowerCase()));
   const allPicked = avail.length > 0 && avail.every(r => rosterSel.has(r.name.toLowerCase()));
 
   if (!all.length) {
-    body.innerHTML = '<div class="roster-empty">No saved names yet.<br>Names you enter on the Staff tab show up here.</div>';
-    foot.innerHTML = `<button class="btn btn--tonal btn--block" onclick="App.closeModal('rosterModal')">Close</button>`;
+    mount(body, html`<div class="px-4 py-6 text-center leading-relaxed text-ink-2">No saved names yet.<br>Names you enter on the Staff tab show up here.</div>`);
+    mount(foot, Button({ variant: 'plain', block: true, onclick: "App.closeSheet('sheet-roster')" }, 'Close'));
     return;
   }
 
-  const groups = rosterGroups(state).map(g => `
-    ${g.role ? `<div class="rgroup-title"><span class="dot dot--${g.role}"></span>${ROLE_TITLE[g.role]}</div>` : ''}
-    <div class="rgrid">${g.people.map(r => rcardHTML(r, onShift)).join('')}</div>`).join('');
-
-  body.innerHTML = `<div class="rsheet-bar">
+  const link = 'h-9 px-1 text-[16px] font-semibold text-gold disabled:text-ink-3';
+  mount(body, html`<div class="flex min-h-9 items-center justify-between">
       ${rosterEditing
-        ? '<span class="rsheet-note">Tap a name to forget it on this device</span>'
-        : `<button class="link-btn" onclick="App.rosterAll()" ${avail.length ? '' : 'disabled'}>${allPicked ? 'Clear' : 'Select all'}</button>`}
-      <button class="link-btn" onclick="App.rosterEdit()">${rosterEditing ? 'Done' : 'Edit'}</button>
-    </div>${groups}`;
+        ? html`<span class="text-[13px] text-ink-2">Tap a name to forget it on this device</span>`
+        : html`<button class="${link}" onclick="App.rosterAll()" ${avail.length ? '' : 'disabled'}>${allPicked ? 'Clear' : 'Select all'}</button>`}
+      <button class="${link}" onclick="App.rosterEdit()">${rosterEditing ? 'Done' : 'Edit'}</button>
+    </div>
+    ${rosterGroups(state).map(g => html`
+      ${g.role ? html`<div class="mt-2 flex items-center gap-2 text-[14px] font-semibold text-ink-2">${Dot(g.role)}${ROLE_PLURAL[g.role]}</div>` : ''}
+      <div class="grid auto-rows-fr grid-cols-3 gap-2.5">${g.people.map(r => rcardHTML(r, onShift))}</div>`)}`);
 
   const n = rosterSel.size;
-  foot.innerHTML = rosterEditing
-    ? `<button class="btn btn--tonal btn--block" onclick="App.rosterEdit()">Done</button>`
-    : `<button class="btn btn--primary btn--block" onclick="App.rosterAddSelected()" ${n ? '' : 'disabled'}>
-        ${n ? `Add ${n} ${n === 1 ? 'person' : 'people'}` : 'Select people to add'}</button>`;
+  mount(foot, rosterEditing
+    ? Button({ variant: 'plain', block: true, onclick: 'App.rosterEdit()' }, 'Done')
+    : Button({ variant: 'primary', block: true, onclick: 'App.rosterAddSelected()', disabled: !n },
+      n ? `Add ${n} ${n === 1 ? 'person' : 'people'}` : 'Select people to add'));
 }
 
 export function rosterPick(name) {
@@ -272,73 +292,64 @@ export function rosterSelectAll() {
   renderRosterSheet();
 }
 
-export function rosterSelected() {
-  return getRoster().filter(r => rosterSel.has(r.name.toLowerCase()));
-}
+export const rosterSelected = () => getRoster().filter(r => rosterSel.has(r.name.toLowerCase()));
 
 export function toggleRosterEdit() {
   rosterEditing = !rosterEditing;
   renderRosterSheet();
 }
 
+// ── Tab render ───────────────────────────────────────────────────────────────
+
+function ensureSkeleton(root) {
+  if (root.dataset.ready) return;
+  root.dataset.ready = '1';
+  mount(root, html`<div class="flex flex-col gap-3">
+    <div class="flex flex-col gap-2 empty:hidden" id="staff-note"></div>
+    <div id="roster" class="empty:hidden"></div>
+    <div id="staffList" class="flex flex-col gap-3"></div>
+    <p class="px-4 text-center text-[13px] leading-normal text-ink-3">
+      <b class="text-ink-2">Slide a time</b> up or down to move it 15 min, or <b class="text-ink-2">tap it</b> to type or reset.
+      Faded times are defaults; a red Out marks a closer. <b class="text-ink-2">Swipe a row left</b> for Closer, Reset and Delete.
+    </p>
+  </div>`);
+}
+
 export function renderStaff(vm) {
+  const root = $('staff-root');
+  if (!root) return;
+  ensureSkeleton(root);
   const state = vm.state;
-  // Simple mode (roles off): one flat list of everyone, and the inline In/Out
-  // edits the whole-shift open/close instead of a role default.
-  const rolesOn = state.settings.allRoles;
-  const viewRole = rolesOn ? state.ui.staffViewRole : 'bartender';
-
-  $('roleSeg')?.classList.toggle('hidden', !rolesOn);
-  ['bartender', 'server', 'support'].forEach(r => {
-    $('rb-' + r)?.classList.toggle('active', r === viewRole);
-  });
-
-  const def = rolesOn ? (state.defaults.byRole[viewRole] || {}) : state.defaults.global;
-  const rdefIn = $('rdef-in'), rdefOut = $('rdef-out');
-  if (rdefIn && document.activeElement !== rdefIn) rdefIn.value = def.in || '';
-  if (rdefOut && document.activeElement !== rdefOut) rdefOut.value = def.out || '';
-  if (rdefIn) rdefIn.placeholder = rolesOn ? (state.defaults.global.in || '—') : '5';
-  if (rdefOut) rdefOut.placeholder = rolesOn ? (state.defaults.global.out || '—') : '2';
-
-  const visible = rolesOn ? state.staff.filter(p => p.role === viewRole) : state.staff;
-  const named = visible.filter(p => p.name.trim()).length;
-  const countEl = $('role-view-count');
-  if (countEl) {
-    countEl.textContent = rolesOn
-      ? named + ' ' + (named === 1 ? SINGULAR[viewRole] : PLURAL[viewRole])
-      : named + ' on shift';
-  }
-
-  const addBtn = $('addStaffBtn');
-  if (addBtn) addBtn.textContent = rolesOn ? ADD_LABEL[viewRole] : '+ Add person';
-
-  const noteEl = $('staff-section-summary');
-  if (noteEl) noteEl.innerHTML = noteHTML(vm);
-
-  const rosterEl = $('roster');
-  if (rosterEl) rosterEl.innerHTML = rosterEntryHTML(state);
-
   curVm = vm;
+
+  mount($('staff-note'), noteHTML(vm));
+  mount($('roster'), rosterEntryHTML(state));
   renderTimeSheet();
   renderRosterSheet();
 
   const list = $('staffList');
-  if (!list) return;
-
-  const ds = visible.map(p => rowDisplay(state, p, vm));
-
-  const signature = (rolesOn ? viewRole : 'all') + '|' + visible.map(p => p.id).join(',');
+  const gs = groups(state);
+  const signature = (state.settings.allRoles ? 'R' : 'r') + '|' + state.staff.map(p => p.id + p.role[0]).join(',');
   if (signature !== lastSignature) {
     lastSignature = signature;
-    list.innerHTML = visible.map((p, i) => rowHTML(p, i, ds[i])).join('');
+    mount(list, gs.map(sectionHTML));
   }
-  visible.forEach((p, i) => {
-    const rowEl = list.querySelector(`[data-sid="${p.id}"]`);
-    if (rowEl) patchRow(rowEl, ds[i]);
+
+  gs.forEach(g => {
+    const sec = list.querySelector(`[data-sec="${g.key}"]`);
+    if (!sec) return;
+    const named = g.people.filter(p => p.name.trim()).length;
+    sec.querySelector('[data-sec-count]').textContent = named ? String(named) : '';
+    const def = sec.querySelector('[data-sec-def]');
+    const label = defaultsLabel(rowDefaults(state, g.addRole));
+    if (def.textContent !== label) def.textContent = label;
+    g.people.forEach(p => {
+      const rowEl = sec.querySelector(`[data-sid="${p.id}"]`);
+      if (rowEl) patchRow(rowEl, rowDisplay(state, p, vm));
+    });
   });
 }
 
-// Force the next render to rebuild rows (e.g. after restoring state).
 export function invalidateStaffList() {
   lastSignature = '';
 }
@@ -357,9 +368,8 @@ export function staffTabNav(e) {
 
 // ── Time edits: shared by chip sliding, the time sheet steppers and typing ──
 
-// Snap an absolute time to the 15-minute grid and turn it into the stored raw
-// string — or '' when it equals the inherited default, so sliding back to the
-// default resets the field to "uses default".
+// Snap to the 15-minute grid → stored raw string, or '' when it equals the
+// inherited default (sliding back to the default resets the field).
 function toRaw(field, abs, d) {
   if (field === 'in') {
     const raw = absToInRaw(abs);
@@ -392,7 +402,6 @@ function writeAbs(id, d, field, t) {
   return next;
 }
 
-// Repaint one person's row + the time sheet straight away (no debounce wait).
 function refreshNow(id) {
   const d = freshDisplay(id);
   if (!d) return;
@@ -401,47 +410,45 @@ function refreshNow(id) {
   renderTimeSheet();
 }
 
-let timeEdit = null;   // { id, field } while the time sheet is open
+// ── Time sheet ───────────────────────────────────────────────────────────────
 
-function chevron(up) {
-  return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${up ? 'M6 15l6-6 6 6' : 'M6 9l6 6 6-6'}"/></svg>`;
-}
+let timeEdit = null;   // { id, field } while the time sheet is open
+onSheetClose('sheet-time', () => { timeEdit = null; });
 
 function timeColHTML(field) {
-  return `<div class="tcol" data-tcol="${field}">
-    <span class="tcol-lbl">${field === 'in' ? 'In' : 'Out'}</span>
-    <button class="tstep" onclick="App.timeStep('${field}',1)" aria-label="15 minutes later">${chevron(true)}</button>
-    <div class="tval" data-tval="${field}" role="slider" aria-label="${field === 'in' ? 'In' : 'Out'} time — slide up or down"></div>
-    <button class="tstep" onclick="App.timeStep('${field}',-1)" aria-label="15 minutes earlier">${chevron(false)}</button>
-    <input class="tinput" data-tin="${field}" inputmode="decimal" autocomplete="off" enterkeyhint="done"
-      aria-label="Type ${field === 'in' ? 'in' : 'out'} time" oninput="App.timeInput('${field}',this.value)"
-      onkeydown="if(event.key==='Enter')this.blur()">
-    <button class="treset" data-treset="${field}" onclick="App.timeReset('${field}')"></button>
+  const name = field === 'in' ? 'In' : 'Out';
+  const step = 'grid h-11 place-items-center rounded-xl bg-fill-2 text-ink transition active:bg-fill';
+  return html`<div class="tcol flex flex-col gap-1.5 rounded-2xl bg-raised p-2.5" data-tcol="${field}">
+    <span class="text-center text-[14px] font-semibold text-ink-2">${name}</span>
+    <button class="${step}" onclick="App.timeStep('${field}',1)" aria-label="15 minutes later">${icon('chevU', 'size-[22px]')}</button>
+    <div class="tval grid h-16 place-items-center rounded-xl font-rounded text-[36px] font-bold tracking-tight tabular-nums" data-tval="${field}" role="slider" aria-label="${name} time — slide up or down"></div>
+    <button class="${step}" onclick="App.timeStep('${field}',-1)" aria-label="15 minutes earlier">${icon('chevD', 'size-[22px]')}</button>
+    <input class="mt-1 h-11 w-full min-w-0 rounded-xl bg-fill px-3 text-center text-[17px] font-semibold text-ink outline-none placeholder:text-ink-3 focus:ring-2 focus:ring-gold [&.is-invalid]:bg-red/15 [&.is-invalid]:ring-2 [&.is-invalid]:ring-red"
+      data-tin="${field}" inputmode="decimal" autocomplete="off" enterkeyhint="done" placeholder="Type a time"
+      aria-label="Type ${field} time" oninput="App.timeInput('${field}',this.value)" onkeydown="if(event.key==='Enter')this.blur()">
+    <button class="h-9 text-[14px] font-semibold text-gold disabled:text-ink-3 disabled:opacity-100" data-treset="${field}" onclick="App.timeReset('${field}')"></button>
   </div>`;
 }
 
 export function openTimeSheet(id, field) {
   timeEdit = { id, field };
-  const body = $('timeModalBody');
-  if (!body) return;
-  body.innerHTML = `<div class="tsheet">${timeColHTML('in')}${timeColHTML('out')}</div>
-    <div class="tsum" data-tsum></div>
-    <p class="tsheet-hint">Type 5 for 5:00, 10.5 for 10:30 (15-min steps). On the Staff list, slide a time up or down to nudge it.</p>`;
-  openModal('timeModal');
+  mount(sheetBody('sheet-time'), html`<div class="grid grid-cols-2 gap-2.5">${timeColHTML('in')}${timeColHTML('out')}</div>
+    <div class="min-h-5 text-center text-[15px] text-ink-2" data-tsum></div>
+    <p class="px-2 text-center text-[13px] leading-normal text-ink-3">Type 5 for 5:00, 10.5 for 10:30 (15-min steps). On the Staff list, slide a time up or down to nudge it.</p>`);
+  openSheet('sheet-time');
   renderTimeSheet();
 }
 
 export function renderTimeSheet() {
-  const modal = $('timeModal');
-  if (!modal?.classList.contains('open')) { timeEdit = null; return; }
-  if (!timeEdit) return;
+  if (!timeEdit || !isOpen('sheet-time')) return;
   const d = freshDisplay(timeEdit.id);
-  if (!d) { closeModal('timeModal'); timeEdit = null; return; }
+  if (!d) { closeSheet('sheet-time'); return; }
+  const body = sheetBody('sheet-time');
   const p = d.person;
-  $('timeModalTitle').textContent = p.name.trim() || 'Shift time';
+  setSheetTitle('sheet-time', p.name.trim() || 'Shift time');
 
   ['in', 'out'].forEach(field => {
-    const col = modal.querySelector(`[data-tcol="${field}"]`);
+    const col = body.querySelector(`[data-tcol="${field}"]`);
     if (!col) return;
     const abs = field === 'in' ? d.inAbs : d.outAbs;
     const bad = field === 'in' ? d.inBad : d.outBad;
@@ -455,25 +462,21 @@ export function renderTimeSheet() {
     if (field === 'out') val.classList.toggle('is-closer', d.closer);
     const input = col.querySelector('[data-tin]');
     if (document.activeElement !== input) input.value = p[field];
-    input.placeholder = 'Type a time';
     input.classList.toggle('is-invalid', bad);
     const reset = col.querySelector('[data-treset]');
-    const defParsed = parseTime(def);
-    const defLabel = defParsed.value != null
-      ? fmtTimeAbs(field === 'in' ? resolveIn(defParsed.value) : nextAfter(defParsed.value, d.inAbs ?? 17))
+    const dp = parseTime(def);
+    const defLabel = dp.value != null
+      ? fmtTimeAbs(field === 'in' ? resolveIn(dp.value) : nextAfter(dp.value, d.inAbs ?? 17))
       : '';
     reset.textContent = defLabel ? 'Default · ' + defLabel : 'Clear';
     reset.disabled = !set;
   });
 
-  const sum = modal.querySelector('[data-tsum]');
-  if (sum) {
-    const bits = [];
-    if (d.hrs != null) bits.push(`<b>${fmtHrs(d.hrs)}h</b> shift`);
-    else if (d.err) bits.push('<span class="bad">Check the times</span>');
-    if (d.closer) bits.push(`<span class="closer">${d.forced ? 'forced closer' : 'closer'}</span>`);
-    sum.innerHTML = bits.join(' · ');
-  }
+  const bits = [];
+  if (d.hrs != null) bits.push(html`<b class="text-ink">${fmtHrs(d.hrs)}h</b> shift`);
+  else if (d.err) bits.push(html`<span class="font-semibold text-red">Check the times</span>`);
+  if (d.closer) bits.push(html`<span class="font-semibold text-red">${d.forced ? 'forced closer' : 'closer'}</span>`);
+  mount(body.querySelector('[data-tsum]'), bits.map((b, i) => html`${i ? ' · ' : ''}${b}`));
 }
 
 export function timeStep(field, dir) {
@@ -483,11 +486,9 @@ export function timeStep(field, dir) {
   timeEdit.field = field;
   const b = baseTimes(d);
   const cur = field === 'in' ? b.inAbs : b.outAbs;
-  // A blank field's first tap lands on the starting value itself.
   const blank = field === 'in' ? d.inAbs == null : d.outAbs == null;
   writeAbs(timeEdit.id, d, field, blank ? cur : cur + dir * STEP);
-  const input = $('timeModal')?.querySelector(`[data-tin="${field}"]`);
-  if (input) input.blur();
+  sheetBody('sheet-time')?.querySelector(`[data-tin="${field}"]`)?.blur();
   refreshNow(timeEdit.id);
 }
 
@@ -501,7 +502,7 @@ export function timeInput(field, value) {
 export function timeReset(field) {
   if (!timeEdit) return;
   callbacks.setTime(timeEdit.id, field, '');
-  const input = $('timeModal')?.querySelector(`[data-tin="${field}"]`);
+  const input = sheetBody('sheet-time')?.querySelector(`[data-tin="${field}"]`);
   if (input) input.value = '';
   refreshNow(timeEdit.id);
 }
@@ -509,7 +510,7 @@ export function timeReset(field) {
 // ── Gestures: slide time chips, swipe rows for actions ──────────────────────
 
 const SWIPE_W = 228;   // width of the revealed action tray (3 × 76)
-let scrub = null;      // active vertical slide on a time chip / sheet value
+let scrub = null;
 let suppressClick = false;
 
 export function closeAllSwipes(except) {
@@ -610,8 +611,7 @@ export function initStaffGestures(cb) {
   });
 
   // The big values in the time sheet slide the same way.
-  const sheetBody = $('timeModalBody');
-  sheetBody?.addEventListener('pointerdown', e => {
+  sheetBody('sheet-time')?.addEventListener('pointerdown', e => {
     const val = e.target.closest('[data-tval]');
     if (!val || !timeEdit) return;
     const pid = e.pointerId;

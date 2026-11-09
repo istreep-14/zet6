@@ -1,11 +1,20 @@
 // Tab bar — panel switching, tab badges, and the floating live HUD
-// (rate / pool / chump while editing Staff & Cash).
+// (rate / pool / chump while editing Staff & Tips).
 
-import { poolValue, escapeHTML, fmtMoney, fmtMoneyShort } from '../util.js';
+import { poolValue, fmtMoney, fmtMoneyShort } from '../util.js';
+import { html, cx, mount } from '../ui/html.js';
+import { icon } from '../ui/icons.js';
 
 const $ = id => document.getElementById(id);
 
-const TITLES = { summary: 'Payout', staff: 'Staff', cash: 'Cash', bills: 'Bills', more: 'More' };
+export const TAB_ORDER = ['staff', 'tips', 'payout'];
+const TITLES = { staff: 'Staff', tips: 'Tips', payout: 'Payout' };
+
+// Older snapshots stored the five-tab names.
+export function normalizeTab(name) {
+  const legacy = { summary: 'payout', bills: 'payout', more: 'payout', cash: 'tips' };
+  return legacy[name] || (TAB_ORDER.includes(name) ? name : 'payout');
+}
 
 // opts.swipe = 'left' | 'right' slides the new panel in from that side and
 // skips the auto-focus (a swipe shouldn't pop the keyboard).
@@ -18,84 +27,69 @@ export function switchTab(name, opts = {}) {
   $('tb-' + name)?.classList.add('active');
   const title = $('hdrTitle');
   if (title) title.textContent = TITLES[name] || 'Tip Pool';
-  // The HUD duplicates Payout (and Bills' own live strip) — only float it over
-  // the input tabs.
-  $('pipHud')?.classList.toggle('is-off', name !== 'staff' && name !== 'cash');
+  $('pipHud')?.classList.toggle('is-off', name === 'payout');
   requestAnimationFrame(() => { $('mainContent').scrollTop = 0; });
 
   // Focus synchronously — still inside the click gesture chain (iOS Safari).
   if (name === 'staff' && !opts.swipe) {
-    const inputs = document.querySelectorAll('#staffList [data-field="name"]');
-    for (const inp of inputs) { if (!inp.value.trim()) { inp.focus(); break; } }
+    for (const inp of document.querySelectorAll('#staffList [data-field="name"]')) {
+      if (!inp.value.trim()) { inp.focus(); break; }
+    }
   }
 }
 
 // True when the computed distribution can't actually pay everyone out.
 export function distShort(vm) {
   if (!vm.dist) return false;
-  const unpaid = vm.people.reduce((s, p) =>
-    s + Math.max(0, p.final - poolValue(vm.dist.byPerson[p.id] || {})), 0);
-  const remOk = vm.shares.leftover === 0
-    || poolValue(vm.dist.remainderBills) === vm.shares.leftover;
+  const unpaid = vm.people.reduce((s, p) => s + Math.max(0, p.final - poolValue(vm.dist.byPerson[p.id] || {})), 0);
+  const remOk = vm.shares.leftover === 0 || poolValue(vm.dist.remainderBills) === vm.shares.leftover;
   return !!vm.dist.error || unpaid > 0 || !remOk;
+}
+
+function badge(id, text, tone) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = cx('tab-sub', tone);
 }
 
 export function updateTabIndicators(vm) {
   const total = vm.totalCash;
-  const cs = $('tab-sub-cash');
-  if (cs) {
-    cs.textContent = total > 0 ? fmtMoneyShort(total) : '';
-    cs.className = 'tab-sub' + (total > 0 ? ' ok' : '');
-  }
-
   const named = vm.state.staff.filter(p => p.name.trim()).length;
-  const ss = $('tab-sub-staff');
-  if (ss) {
-    ss.textContent = named > 0 ? String(named) : '';
-    ss.className = 'tab-sub' + (named > 0 && vm.inputError ? ' warn' : '');
-  }
-
-  const bs = $('tab-sub-bills');
-  if (bs) {
-    const short = !vm.blocked && distShort(vm);
-    bs.textContent = short ? '!' : '';
-    bs.className = 'tab-sub' + (short ? ' warn' : '');
-  }
-
-  updateHud(vm, named, total);
+  const short = !vm.blocked && distShort(vm);
+  badge('tab-sub-staff', named > 0 ? String(named) : '', named > 0 && vm.inputError ? 'warn' : '');
+  badge('tab-sub-tips', total > 0 ? fmtMoneyShort(total) : '', total > 0 ? 'ok' : '');
+  badge('tab-sub-payout', short ? '!' : '', short ? 'warn' : '');
+  updateHud(vm, named, total, short);
 }
 
-// HUD content: live numbers once the pipeline computes, the blocking reason
-// otherwise. Hidden entirely on a pristine session.
-function updateHud(vm, named, total) {
-  const hud = $('pipHud'), vals = $('pipVals');
-  if (!hud || !vals) return;
+function stats(shares) {
+  const s = (k, v, cls) => html`<span class="flex min-w-0 flex-col items-center gap-0.5 leading-tight">
+    <span class="text-[12px] font-medium text-ink-2">${k}</span>
+    <span class="${cx('font-rounded text-[18px] font-semibold tabular-nums', cls)}">${v}</span></span>`;
+  return html`${s('Rate', '$' + shares.rate.toFixed(2), 'text-green')}
+    ${s('Pool', fmtMoney(shares.totalCash))}
+    ${s('Chump', shares.leftover > 0 ? fmtMoney(shares.leftover) : '—', 'text-ink-2')}`;
+}
 
+// HUD: live numbers once the pipeline computes, the blocking reason otherwise.
+// Hidden on a pristine session.
+function updateHud(vm, named, total, short) {
+  const hud = $('pipHud');
+  if (!hud) return;
   const pristine = named === 0 && total === 0;
   hud.classList.toggle('is-empty', pristine);
   if (pristine) return;
-
-  const warn = !!vm.blocked || distShort(vm);
-  hud.classList.toggle('is-warn', warn);
-
-  if (vm.shares && total > 0 && !vm.blocked) {
-    vals.innerHTML = statsHTML(vm.shares)
-      + (distShort(vm) ? '<span class="hud-msg">bills short</span>' : '');
-  } else {
-    vals.innerHTML = `<span class="hud-msg">${escapeHTML(vm.blocked || 'Enter cash to calculate')}</span>`;
-  }
+  hud.classList.toggle('is-warn', !!vm.blocked || short);
+  const msg = t => html`<span class="truncate text-[14px] font-medium ${vm.blocked || short ? 'text-red' : 'text-ink-2'}">${t}</span>`;
+  mount(hud, html`<span class="flex min-w-0 flex-1 items-center justify-around gap-2">
+      ${vm.shares && total > 0 && !vm.blocked ? html`${stats(vm.shares)}${short && msg('bills short')}` : msg(vm.blocked || 'Enter cash to calculate')}
+    </span>
+    <span class="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-ink-2">${icon('chevR', 'size-[18px]')}</span>`);
 }
 
-function statsHTML(shares) {
-  return `
-    <span class="stat-inline"><span class="k">Rate</span><span class="v rate">$${shares.rate.toFixed(2)}</span></span>
-    <span class="stat-inline"><span class="k">Pool</span><span class="v pool">${fmtMoney(shares.totalCash)}</span></span>
-    <span class="stat-inline"><span class="k">Chump</span><span class="v chump">${shares.leftover > 0 ? fmtMoney(shares.leftover) : '—'}</span></span>`;
-}
-
-// Inline live strip for sheet tops — same numbers as the HUD, re-rendered with
-// its host on every state change so edits inside the sheet update it in place.
-export function pipStripHTML(vm) {
+// Same numbers as the HUD, for the top of a sheet.
+export function liveStrip(vm) {
   if (!vm?.shares || !(vm.totalCash > 0)) return '';
-  return `<div class="live-strip">${statsHTML(vm.shares)}</div>`;
+  return html`<div class="flex justify-around rounded-2xl bg-raised px-2 py-3">${stats(vm.shares)}</div>`;
 }
