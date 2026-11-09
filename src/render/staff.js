@@ -20,6 +20,7 @@ import { icon } from '../ui/icons.js';
 import {
   Card, Button, Avatar, Dot, Alert, ROLE_PLURAL, ROLE_ONE,
 } from '../ui/kit.js';
+import { activeSub } from './tabs.js';
 import { openSheet, closeSheet, isOpen, sheetBody, sheetFoot, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
@@ -152,7 +153,7 @@ function sectionHTML(g) {
       <span class="text-[17px] font-semibold">${title}</span>
       <span class="text-[15px] font-semibold text-ink-3 tabular-nums" data-sec-count></span>
       <button class="ml-auto inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-fill px-3.5 text-[15px] font-semibold tabular-nums text-ink transition active:scale-[.97] active:bg-high focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/60"
-        onclick="App.openDefaults()" aria-label="Default times">${icon('clock', 'size-4 text-ink-2')}<span data-sec-def></span></button>
+        onclick="App.openDefaults()" aria-label="Default times (this shift's settings)">${icon('clock', 'size-4 text-ink-2')}<span data-sec-def></span></button>
     </div>
     ${g.people.map((p, i) => rowHTML(p, i))}
     <button class="flex h-12 w-full items-center gap-2 border-t border-sep px-4 text-[16px] font-semibold text-gold transition active:bg-raised" onclick="App.addStaff('${g.addRole}')">
@@ -328,8 +329,10 @@ export function renderStaff(vm) {
   renderRosterSheet();
 
   const list = $('staffList');
-  const gs = groups(state);
-  const signature = (state.settings.allRoles ? 'R' : 'r') + '|' + state.staff.map(p => p.id + p.role[0]).join(',');
+  // Sub-tab (roles on): Everyone, or one role's section.
+  const sub = activeSub('staff', state);
+  const gs = groups(state).filter(g => !sub || sub === 'all' || g.key === sub);
+  const signature = (state.settings.allRoles ? 'R' : 'r') + (sub || '') + '|' + state.staff.map(p => p.id + p.role[0]).join(',');
   if (signature !== lastSignature) {
     lastSignature = signature;
     mount(list, gs.map(sectionHTML));

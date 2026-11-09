@@ -1,36 +1,25 @@
-// Side drawer — sessions + settings. Opens from the header menu button, a
-// swipe in from the left edge, or a right swipe on the first tab. Lists every
-// saved session (tap to switch), then the settings switches, tools and data.
-// Re-renders with the app while open.
+// Left panel — sessions + app-wide settings. Opens from the header menu
+// button, a drag in from the left edge, or a flick right past the first
+// sub-tab (ui/panels.js). Lists every saved session (tap to switch), then the
+// settings shared by all sessions. Shift-specific settings live in the right
+// panel (render/shiftpanel.js). Re-renders with the app while open.
 
 import { fmtMoney } from '../util.js';
 import { html, cx, mount } from '../ui/html.js';
 import { Card, Button, Label, SwitchRow, ListRow, SEP } from '../ui/kit.js';
 import { icon } from '../ui/icons.js';
 import { todayISO } from '../sessions.js';
+import { isPanelOpen, onPanel } from '../ui/panels.js';
 
 const $ = id => document.getElementById(id);
 
 let editing = false;
 let lastArgs = null;
 
-export const isDrawerOpen = () => document.documentElement.classList.contains('drawer-open');
-
-export function openDrawer() {
-  document.activeElement?.blur?.();
-  editing = false;
-  document.documentElement.classList.add('drawer-open');
-  $('drawer')?.setAttribute('aria-hidden', 'false');
-  if (lastArgs) renderDrawer(...lastArgs, true);
-  $('drawer-body')?.scrollTo?.(0, 0);
-}
-
-export function closeDrawer() {
-  if (!isDrawerOpen()) return;
-  document.documentElement.classList.remove('drawer-open');
-  $('drawer')?.setAttribute('aria-hidden', 'true');
-  editing = false;
-}
+onPanel('left', {
+  open() { editing = false; if (lastArgs) renderDrawer(...lastArgs, true); $('drawer-body')?.scrollTo?.(0, 0); },
+  close() { editing = false; },
+});
 
 export function toggleDrawerEdit() {
   editing = !editing;
@@ -96,7 +85,7 @@ function SessionRow(e, active) {
 // session's numbers come live from the view model, not the saved summary.
 export function renderDrawer(vm, sessions, currentId, force = false) {
   lastArgs = [vm, sessions, currentId];
-  if (!force && !isDrawerOpen()) return;
+  if (!force && !isPanelOpen('left')) return;
   const body = $('drawer-body');
   if (!body) return;
   const s = vm.state;
@@ -120,105 +109,15 @@ export function renderDrawer(vm, sessions, currentId, force = false) {
     ${Card({ flush: true }, rows.map(e => SessionRow(e, e.id === currentId)))}
     ${editing && html`<p class="px-1 text-[13px] leading-snug text-ink-3">Deleting a session can’t be undone. Export it first to keep a copy.</p>`}
 
-    ${Label('Settings')}
+    ${Label('App settings')}
     ${Card({ flush: true }, html`
       ${SwitchRow({ id: 'set-allRoles', on: s.settings.allRoles, onclick: "App.toggleSetting('allRoles')", label: 'Servers & support', hint: 'Role sections, support tip-out, who-shares chips' })}
       ${SwitchRow({ id: 'set-multiPool', on: s.settings.multiPool || extraPools, disabled: extraPools, onclick: "App.toggleSetting('multiPool')", label: 'Multiple pools',
         hint: extraPools ? `On while ${s.pools.length} pools exist — remove extras to turn off` : 'Split tips by time window (e.g. lunch / dinner)' })}
       ${SwitchRow({ id: 'set-clock24', on: s.settings.clock24, onclick: "App.toggleSetting('clock24')", label: '24-hour time', hint: 'Show 17:00 instead of 5:00p' })}`)}
 
-    ${Label('Tools')}
     ${Card({ flush: true }, html`
-      ${ListRow({ icon: 'clock', onclick: 'App.openDefaults()' }, 'Default shift times')}
-      ${ListRow({ icon: 'gift', onclick: 'App.openBonus()' }, 'Closer bonus & chump')}
-      ${ListRow({ icon: 'sliders', onclick: 'App.openCloseTime()' }, 'Close-time what-if')}`)}
-
-    ${Label('This session')}
-    ${Card({ flush: true }, html`
-      ${ListRow({ icon: 'download', onclick: 'App.exportSession()', chevron: false }, 'Export JSON')}
-      ${ListRow({ icon: 'upload', onclick: 'App.triggerImport()', chevron: false }, 'Import as new session')}
-      ${ListRow({ icon: 'trash', tone: 'danger', onclick: `App.deleteSession('${currentId}')`, chevron: false }, 'Delete session')}`)}
-    <p class="px-1 pt-1 text-center text-[13px] leading-snug text-ink-3">Settings and saved names are shared by every session.</p>`);
-}
-
-// ── Gestures ─────────────────────────────────────────────────────────────────
-// Drag in from the left edge to open (follows the finger), drag the drawer or
-// its scrim left to close. Vertical scrolls inside the drawer are untouched.
-
-export const EDGE = 24;
-
-export function initDrawerGestures({ canOpen }) {
-  const drawer = $('drawer');
-  const scrim = $('drawerScrim');
-  const root = document.documentElement;
-  let mode = null, dragging = false, x0 = 0, y0 = 0, t0 = 0, w = 1, p = 0;
-
-  const bodyLeft = () => document.body.getBoundingClientRect().left;
-  const set = prog => {
-    p = Math.max(0, Math.min(1, prog));
-    drawer.style.transform = `translateX(${(p - 1) * 100}%)`;
-    scrim.style.opacity = String(p);
-  };
-  const reset = () => {
-    root.classList.remove('drawer-dragging');
-    drawer.style.transform = '';
-    scrim.style.opacity = '';
-  };
-
-  document.addEventListener('touchstart', e => {
-    mode = null; dragging = false;
-    if (e.touches.length !== 1) return;
-    const t = e.touches[0];
-    if (isDrawerOpen()) {
-      if (drawer.contains(e.target) || e.target === scrim) mode = 'close';
-    } else if (t.clientX - bodyLeft() < EDGE && canOpen()) {
-      mode = 'open';
-    }
-    if (!mode) return;
-    x0 = t.clientX; y0 = t.clientY; t0 = Date.now();
-    w = drawer.offsetWidth || 300;
-  }, { passive: true });
-
-  document.addEventListener('touchmove', e => {
-    if (!mode) return;
-    const t = e.touches[0];
-    const dx = t.clientX - x0, dy = t.clientY - y0;
-    if (!dragging) {
-      const wanted = mode === 'open' ? dx > 8 : dx < -8;
-      if (wanted && Math.abs(dx) > Math.abs(dy) * 1.2) {
-        dragging = true;
-        root.classList.add('drawer-dragging');
-        if (mode === 'open') {
-          document.activeElement?.blur?.();
-          if (lastArgs) renderDrawer(...lastArgs, true);
-        }
-      } else if (Math.abs(dy) > 10 || (mode === 'open' && dx < -8)) {
-        mode = null;
-        return;
-      } else return;
-    }
-    e.preventDefault();
-    set(mode === 'open' ? dx / w : 1 + dx / w);
-  }, { passive: false });
-
-  const end = e => {
-    if (!mode) return;
-    const wasDragging = dragging;
-    const m = mode;
-    mode = null; dragging = false;
-    if (!wasDragging) return;
-    const dx = (e.changedTouches?.[0]?.clientX ?? x0) - x0;
-    const fast = Math.abs(dx) / Math.max(1, Date.now() - t0) > 0.5;
-    const open = m === 'open' ? (p > 0.4 || (fast && dx > 0)) : !(p < 0.6 || (fast && dx < 0));
-    reset();
-    if (open) openDrawer(); else closeDrawer();
-    // Swallow the click a finished drag would otherwise fire on a row.
-    const stop = ev => { ev.stopPropagation(); ev.preventDefault(); };
-    document.addEventListener('click', stop, { capture: true, once: true });
-    setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 350);
-  };
-  document.addEventListener('touchend', end, { passive: true });
-  document.addEventListener('touchcancel', end, { passive: true });
-
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+      ${ListRow({ icon: 'upload', onclick: 'App.triggerImport()', chevron: false }, 'Import a session (.json)')}
+      ${ListRow({ icon: 'sliders', onclick: "App.panel('right')" }, 'This shift’s settings')}`)}
+    <p class="px-1 pt-1 text-center text-[13px] leading-snug text-ink-3">Shared by every session. Swipe in from the right edge for this shift’s date, times and tools.</p>`);
 }

@@ -10,6 +10,66 @@ const $ = id => document.getElementById(id);
 export const TAB_ORDER = ['staff', 'tips', 'payout'];
 const TITLES = { staff: 'Staff', tips: 'Tips', payout: 'Payout' };
 
+// ── Sub-tabs: the swipeable headers inside a tab (X-style) ──────────────────
+// Bottom tabs are for the thumb (tap); horizontal swipes on the page move
+// between these instead. A tab with no sub-tabs shows no header.
+//   staff  → Everyone · Bar · Servers · Support      (roles on)
+//   tips   → Net total · Count bills                  (one pool: entry mode)
+//            one header per pool                       (several pools)
+//   payout → Summary · Bills · Working (Pools when several)
+
+export function subsFor(tab, state) {
+  if (tab === 'staff') {
+    return state.settings.allRoles
+      ? [{ v: 'all', label: 'Everyone' }, { v: 'bartender', label: 'Bar' }, { v: 'server', label: 'Servers' }, { v: 'support', label: 'Support' }]
+      : [];
+  }
+  if (tab === 'tips') {
+    return state.pools.length > 1
+      ? state.pools.map((p, i) => ({ v: p.id, label: p.label.trim() || 'Pool ' + (i + 1) }))
+      : [{ v: 'nettotal', label: 'Net total' }, { v: 'perbill', label: 'Count bills' }];
+  }
+  if (tab === 'payout') {
+    return [{ v: 'summary', label: 'Summary' }, { v: 'bills', label: 'Bills' },
+      { v: 'working', label: state.pools.length > 1 ? 'Pools' : 'Working' }];
+  }
+  return [];
+}
+
+export function activeSub(tab, state) {
+  const subs = subsFor(tab, state);
+  if (!subs.length) return null;
+  const v = tab === 'tips'
+    ? (state.pools.length > 1 ? state.ui.selectedPool : state.pools[0].cash.entryMode)
+    : state.ui.sub?.[tab];
+  return subs.some(x => x.v === v) ? v : subs[0].v;
+}
+
+// Small counts / alerts on a sub-tab label.
+function subAside(tab, v, vm, short) {
+  if (tab === 'staff') {
+    const n = vm.state.staff.filter(p => p.name.trim() && (v === 'all' || p.role === v)).length;
+    return n ? html`<span class="subtab-n">${n}</span>` : '';
+  }
+  if (tab === 'payout' && v === 'bills' && short) return html`<span class="subtab-dot" aria-label="needs attention"></span>`;
+  return '';
+}
+
+export function renderSubtabs(vm) {
+  const short = !vm.blocked && distShort(vm);
+  TAB_ORDER.forEach(tab => {
+    const host = $('subtabs-' + tab);
+    if (!host) return;
+    const subs = subsFor(tab, vm.state);
+    const cur = activeSub(tab, vm.state);
+    mount(host, subs.length ? html`<div class="subtabs-row" role="tablist">${subs.map(x => html`<button class="subtab" role="tab"
+      aria-selected="${String(x.v === cur)}" onclick="App.sub('${tab}','${x.v}')"><span class="truncate">${x.label}</span>${subAside(tab, x.v, vm, short)}</button>`)}</div>` : '');
+    // Keep the active header in view when the row scrolls sideways (many pools).
+    const row = host.firstElementChild, b = host.querySelector('[aria-selected="true"]');
+    if (row && b && b.offsetLeft + b.offsetWidth > row.clientWidth) row.scrollLeft = b.offsetLeft - 16;
+  });
+}
+
 // Older snapshots stored the five-tab names.
 export function normalizeTab(name) {
   const legacy = { summary: 'payout', bills: 'payout', more: 'payout', cash: 'tips' };

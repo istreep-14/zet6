@@ -1,12 +1,13 @@
-// Tips tab — one card per pool. A normal night is one pool (always open, no
-// window / label); with Multiple pools on, cards fold like an accordion and
-// each has its own time window, roles and cash. Structural changes re-render;
+// Tips tab — one pool's card at a time. A normal night is one pool; its
+// Net total / Count bills choice is the tab's swipeable sub-tab header. With
+// several pools, the header lists the pools (swipe between them) and each
+// card has its own entry mode, time window, roles and cash. Structural changes re-render;
 // keystrokes patch totals in place so inputs keep focus.
 
 import { DENOMS, parseWholeNumber, fmtHrs, fmtMoney } from '../util.js';
 import { fmtTimeAbs, overlapHours } from '../time.js';
 import { html, cx, mount } from '../ui/html.js';
-import { icon } from '../ui/icons.js';
+import { activeSub } from './tabs.js';
 import { Card, Seg, Chip, Field, Button, Denom, Alert, INPUT } from '../ui/kit.js';
 
 const $ = id => document.getElementById(id);
@@ -117,26 +118,24 @@ function netHTML(pool) {
 // What a card shows depends on the session's complexity:
 //   single pool             → always open, no window, no label
 //   roles off + single pool → no "Shared by" chips either (everyone shares)
-function cardHTML(pool, vm, isOpen, removable) {
+function cardHTML(pool, vm, removable) {
   const single = vm.state.pools.length === 1;
   const showChips = vm.state.settings.allRoles || !single;
-  if (single) isOpen = true;
   const vmPool = vm.pools.find(p => p.id === pool.id);
   const total = vmPool ? vmPool.total : 0;
   const mode = pool.cash.entryMode;
 
   return Card({ flush: true, 'data-pid': pool.id },
-    html`<button class="flex w-full items-center gap-3 px-4 pb-3 pt-4 text-left disabled:opacity-100" ${single ? 'disabled' : html`onclick="App.selectPool('${pool.id}')"`} aria-expanded="${isOpen}">
+    html`<div class="flex w-full items-center gap-3 px-4 pb-3 pt-4 text-left">
       <span class="flex min-w-0 flex-1 flex-col gap-0.5">
         <span class="truncate text-[17px] font-semibold" data-pool-name>${single ? 'Tonight’s tips' : pool.label}</span>
         <span class="text-[14px] text-ink-2" data-window-sub>${windowSub(pool, vmPool)}</span>
       </span>
       <span class="${cx('font-rounded text-[30px] font-bold tracking-tight tabular-nums', !total && 'text-ink-3')}" data-pool-total>${fmtMoney(total)}</span>
-      ${single ? '' : icon(isOpen ? 'chevU' : 'chevD', 'size-5 text-ink-3')}
-    </button>
-    ${isOpen && html`<div class="flex flex-col gap-5 px-4 pb-4 pt-1">
+    </div>
+    ${html`<div class="flex flex-col gap-5 px-4 pb-4 pt-1">
       <div class="${SUB}">
-        ${Seg({ items: [{ value: 'nettotal', label: 'Net total' }, { value: 'perbill', label: 'Count bills' }], value: mode, handler: v => `App.poolMode('${pool.id}','${v}')` })}
+        ${!single && Seg({ items: [{ value: 'nettotal', label: 'Net total' }, { value: 'perbill', label: 'Count bills' }], value: mode, handler: v => `App.poolMode('${pool.id}','${v}')` })}
         ${mode === 'perbill' ? billsHTML(pool) : netHTML(pool)}
       </div>
       ${showChips && chipsHTML(pool)}
@@ -175,16 +174,17 @@ export function renderTips(vm) {
   const signature = state.pools.map(p =>
     p.id + ':' + p.cash.entryMode + ':' + (p.roles.bartender ? 1 : 0) + (p.roles.server ? 1 : 0) + (p.includeSupport ? 1 : 0)
       + (p.includeSupport ? ':' + supIds : '')
-  ).join('|') + '|' + state.ui.selectedPool
+  ).join('|') + '|' + state.ui.selectedPool + '|' + activeSub('tips', state)
     + '|' + (state.settings.allRoles ? 'R' : 'r') + (state.settings.multiPool ? 'M' : 'm');
 
+  const sel = activeSub('tips', state);
   const err = vm.inputError && /total|count|window|support/i.test(vm.blocked) ? vm.blocked : '';
 
   if (signature !== lastSignature) {
     lastSignature = signature;
     mount(root, html`<div class="flex flex-col gap-3">
       <div id="tips-error" class="empty:hidden">${err && Alert({}, err)}</div>
-      ${state.pools.map(pool => cardHTML(pool, vm, state.ui.selectedPool === pool.id, state.pools.length > 1))}
+      ${state.pools.filter(p => state.pools.length === 1 || p.id === sel).map(pool => cardHTML(pool, vm, state.pools.length > 1))}
       ${(state.settings.multiPool || state.pools.length > 1) && Button({ variant: 'tonal', block: true, icon: 'plus', onclick: 'App.addPool()' }, 'Add pool')}
       <div id="tips-breakdown" class="empty:hidden">${breakdownHTML(vm)}</div>
     </div>`);

@@ -58,7 +58,7 @@ export function initialState() {
     // Simple mode by default: one staff list, one pool. allRoles exposes the
     // server/support split; multiPool exposes add-pool / windows / labels.
     settings: { allRoles: false, multiPool: false, clock24: false },
-    ui: { activeTab: 'summary', staffViewRole: 'bartender', selectedPool: pool.id },
+    ui: { activeTab: 'summary', staffViewRole: 'bartender', selectedPool: pool.id, sub: {} },
   };
   return state;
 }
@@ -226,6 +226,11 @@ export function setDate(date) {
 
 export function setActiveTab(tab) {
   mutate(s => { s.ui.activeTab = tab; }, { immediate: true });
+}
+
+// Active sub-tab inside a tab (staff role filter, payout view).
+export function setSub(tab, value) {
+  mutate(s => { s.ui.sub = { ...(s.ui.sub || {}), [tab]: value }; }, { immediate: true });
 }
 
 export function setStaffViewRole(role) {

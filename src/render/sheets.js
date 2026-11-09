@@ -1,5 +1,5 @@
-// Sheets that aren't owned by a tab: Person payout, Closer bonus and Default
-// times. Settings live in the side drawer (render/drawer.js). Each re-renders
+// Sheets that aren't owned by a tab: Person payout and Closer bonus.
+// Settings live in the side panels (render/drawer.js, render/shiftpanel.js). Each re-renders
 // with the app while it's open.
 
 import { DENOMS, fmtHrs } from '../util.js';
@@ -132,54 +132,8 @@ export function adjustBonus(vm, id, delta) {
 
 export const resetBonuses = () => clearBonuses();
 
-// ── Default times ────────────────────────────────────────────────────────────
-// Body is built on open; later renders only refresh values of unfocused inputs.
-
-export function openDefaults(vm) {
-  const rolesOn = vm.state.settings.allRoles;
-  const cell = (id, role, field) => html`<input id="${id}" class="${cx(INPUT, 'text-center font-semibold')}" inputmode="decimal" placeholder="—"
-    oninput="App.roleDefault('${role}','${field}',this.value)">`;
-  mount(sheetBody('sheet-defaults'), html`
-    ${Card({ class: 'flex flex-col gap-3' }, html`
-      <div class="text-[14px] font-medium text-ink-2">Whole shift</div>
-      <div class="flex gap-3">
-        ${Field({ label: 'Open (in)', id: 'gc-in', inputmode: 'decimal', placeholder: '5', oninput: "App.globalDefault('in',this.value)" })}
-        ${Field({ label: 'Close (out)', id: 'gc-out', inputmode: 'decimal', placeholder: '2', oninput: "App.globalDefault('out',this.value)" })}
-      </div>
-      <p class="text-[14px] leading-snug text-ink-3">Fills any blank In/Out. Blank Outs inherit the close time, which also decides the auto closers.</p>`)}
-    ${rolesOn && Card({ class: 'flex flex-col gap-3' }, html`
-      <div class="text-[14px] font-medium text-ink-2">Per role</div>
-      <div class="grid grid-cols-[72px_1fr_1fr] items-center gap-x-3 gap-y-2.5">
-        <span></span><span class="text-center text-[13px] font-medium text-ink-2">In</span><span class="text-center text-[13px] font-medium text-ink-2">Out</span>
-        ${['bartender', 'server', 'support'].map(r => html`
-          <span class="${cx('text-[15px] font-semibold', ROLE_TEXT[r])}">${{ bartender: 'Bar', server: 'Server', support: 'Support' }[r]}</span>
-          ${cell('rdef-' + r + '-in', r, 'in')}${cell('rdef-' + r + '-out', r, 'out')}`)}
-      </div>
-      <p class="text-[14px] leading-snug text-ink-3">Role defaults win over the whole-shift times for that role.</p>`)}
-    ${rolesOn && Card({ class: 'flex flex-col gap-3' }, html`
-      <div class="text-[14px] font-medium text-ink-2">Support tip-out</div>
-      ${Field({ label: '% of each pool', class: 'max-w-[150px]', id: 'gc-sup-pct', inputmode: 'decimal', placeholder: '10', oninput: 'App.supportDefault(this.value)' })}
-      <p class="text-[14px] leading-snug text-ink-3">Support $/hr = % × pool tips ÷ pool hours, paid off the top before the bar/server split. Each pool can override % or $/hr.</p>`)}`);
-  openSheet('sheet-defaults');
-  renderDefaults(vm);
-}
-
-function renderDefaults(vm) {
-  if (!isOpen('sheet-defaults')) return;
-  const d = vm.state.defaults;
-  const set = (id, v) => { const el = $(id); if (el && document.activeElement !== el) el.value = v ?? ''; };
-  set('gc-in', d.global.in);
-  set('gc-out', d.global.out);
-  set('gc-sup-pct', d.supportPct);
-  ['bartender', 'server', 'support'].forEach(r => {
-    set('rdef-' + r + '-in', d.byRole[r].in);
-    set('rdef-' + r + '-out', d.byRole[r].out);
-  });
-}
-
 // Re-render whichever of these sheets is open.
 export function renderSheets(vm) {
   renderPerson(vm);
   renderBonus(vm);
-  renderDefaults(vm);
 }

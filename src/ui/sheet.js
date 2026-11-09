@@ -6,7 +6,6 @@ import { SheetShell } from './kit.js';
 const $ = id => document.getElementById(id);
 
 export const SHEETS = {
-  'sheet-defaults': { title: 'Default times' },
   'sheet-time': { title: 'Shift time' },
   'sheet-roster': { title: 'Quick add', tall: true, foot: true },
   'sheet-person': { title: 'Payout' },

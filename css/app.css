@@ -104,10 +104,9 @@
   }
   .hdr-menu:active { background: var(--color-high); transform: scale(.94); }
   .hdr-title { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -.035em; margin-right: auto; }
-  /* Header date: pretty pill label; the invisible native <input type=date>
-     sits exactly over it so a tap opens iOS's native picker. */
-  .hdr-date-wrap { position: relative; flex-shrink: 0; }
+  /* Header date pill: opens the shift panel (calendar, times, tools). */
   .hdr-date-btn {
+    flex-shrink: 0;
     display: inline-flex; align-items: center; gap: 6px;
     height: 36px; padding: 0 12px;
     font-size: 15px; font-weight: 600;
@@ -120,12 +119,6 @@
   }
   .hdr-date-btn:active { background: var(--color-high); transform: scale(.97); }
   .hdr-date-btn:focus-visible { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-gold) 60%, transparent); }
-  .hdr-date-input {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-    margin: 0; padding: 0; border: 0; opacity: 0; cursor: pointer;
-    font-size: 16px; /* ≥16: iOS won't zoom when the hidden control is tapped */
-    -webkit-appearance: none; appearance: none; background: transparent;
-  }
   @media (max-width: 374px) {
     .hdr-title { font-size: 26px; }
     .hdr-date-btn { padding: 0 10px; font-size: 14px; }
@@ -163,7 +156,9 @@
   html.fill-screen .sheet-backdrop { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet { max-height: calc(var(--app-h) - var(--safe-t) - 16px); }
   html.fill-screen .sheet--tall { height: calc(var(--app-h) - var(--safe-t) - 40px); }
-  html.fill-screen .drawer, html.fill-screen .drawer-scrim { position: absolute; left: 0; top: 0; bottom: auto; height: var(--app-h); }
+  html.fill-screen .side, html.fill-screen .side-scrim { position: absolute; top: 0; bottom: auto; height: var(--app-h); }
+  html.fill-screen .side--left { left: 0; }
+  html.fill-screen .side--right { right: 0; }
 
   /* ── Floating tab bar ─────────────────────────────────────────────────── */
   .tabbar {
@@ -296,51 +291,107 @@
   /* cards inside a sheet sit one step brighter */
   .sheet .bg-surface { background-color: var(--color-raised) !important; }
 
-  /* ── Side drawer: sessions + settings (render/drawer.js) ────────────────
-     Slides in from the left over a dimmed scrim. While a finger drags it,
-     html.drawer-dragging drops the transitions and JS sets the transform. */
-  .drawer-scrim {
+  /* ── Side panels (ui/panels.js) ─────────────────────────────────────────
+     Left = sessions + app settings, right = this shift. Each slides in over
+     one shared scrim. While a finger drags one, html.panel-dragging drops the
+     transitions and JS sets its transform. */
+  .side-scrim {
     position: fixed; inset: 0; z-index: 90;
     background: rgb(0 0 0 / .55);
     opacity: 0; pointer-events: none;
     transition: opacity .3s ease;
   }
-  .drawer {
+  .side {
     position: fixed; top: 0; bottom: 0;
-    left: max(0px, calc(50vw - 240px));       /* the page column's left edge */
     width: min(86vw, 360px);
     z-index: 95;
     display: flex; flex-direction: column;
     background: rgb(16 16 20 / .86);
     -webkit-backdrop-filter: blur(40px) saturate(1.8);
     backdrop-filter: blur(40px) saturate(1.8);
-    box-shadow: inset -.5px 0 0 rgb(255 255 255 / .16), 24px 0 60px rgb(0 0 0 / .55);
-    border-radius: 0 28px 28px 0;
-    transform: translateX(-100%);
     visibility: hidden;
     touch-action: pan-y;
     transition: transform .34s cubic-bezier(.2, .9, .25, 1), visibility 0s linear .34s;
   }
-  html.drawer-open .drawer-scrim { opacity: 1; pointer-events: auto; }
-  html.drawer-open .drawer { transform: none; visibility: visible; transition: transform .34s cubic-bezier(.2, .9, .25, 1); }
-  html.drawer-dragging .drawer { visibility: visible; transition: none; }
-  html.drawer-dragging .drawer-scrim { transition: none; pointer-events: auto; }
-  .drawer-head {
+  .side--left {
+    left: max(0px, calc(50vw - 240px));       /* the page column's left edge */
+    border-radius: 0 28px 28px 0;
+    box-shadow: inset -.5px 0 0 rgb(255 255 255 / .16), 24px 0 60px rgb(0 0 0 / .55);
+    transform: translateX(-100%);
+  }
+  .side--right {
+    right: max(0px, calc(50vw - 240px));
+    border-radius: 28px 0 0 28px;
+    box-shadow: inset .5px 0 0 rgb(255 255 255 / .16), -24px 0 60px rgb(0 0 0 / .55);
+    transform: translateX(100%);
+  }
+  html.panel-open .side-scrim { opacity: 1; pointer-events: auto; }
+  html.left-open .side--left, html.right-open .side--right {
+    transform: none; visibility: visible;
+    transition: transform .34s cubic-bezier(.2, .9, .25, 1);
+  }
+  html.drag-left .side--left, html.drag-right .side--right { visibility: visible; transition: none; }
+  html.panel-dragging .side-scrim { transition: none; pointer-events: auto; }
+  .side-head {
     flex-shrink: 0;
     display: flex; align-items: center; gap: 12px;
     padding: calc(var(--safe-t) + 14px) 8px 10px calc(16px + var(--safe-l));
   }
-  html.standalone .drawer-head { padding-top: calc(var(--safe-t) + var(--hdr-gap)); }
-  .drawer-body {
+  .side--right .side-head { padding-left: 6px; padding-right: calc(16px + var(--safe-r)); gap: 6px; }
+  html.standalone .side-head { padding-top: calc(var(--safe-t) + var(--hdr-gap)); }
+  .side-body {
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
-    padding: 8px 16px calc(28px + var(--safe-b)) calc(16px + var(--safe-l));
+    padding: 8px 16px calc(28px + var(--safe-b));
     display: flex; flex-direction: column; gap: 10px;
   }
-  .drawer-body > * { flex-shrink: 0; }
-  .drawer .bg-surface { background-color: var(--color-raised) !important; }
+  .side--left .side-body { padding-left: calc(16px + var(--safe-l)); }
+  .side--right .side-body { padding-right: calc(16px + var(--safe-r)); }
+  .side-body > * { flex-shrink: 0; }
+  .side .bg-surface { background-color: var(--color-raised) !important; }
+
+  /* ── Sub-tabs: swipeable headers inside a tab (render/tabs.js) ─────────
+     Sticky under the page header; the page scrolls beneath them. */
+  .subtabs {
+    position: sticky; top: -8px; z-index: 6;
+    margin: -8px calc(-1 * var(--gutter)) 12px;
+    padding: 0 var(--gutter);
+    background: rgb(0 0 0 / .72);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+    backdrop-filter: blur(20px) saturate(1.6);
+    box-shadow: inset 0 -.5px 0 var(--color-sep);
+  }
+  .subtabs:empty { display: none; }
+  .subtabs-row { display: flex; overflow-x: auto; scrollbar-width: none; }
+  .subtabs-row::-webkit-scrollbar { display: none; }
+  .subtab {
+    position: relative;
+    flex: 1 0 auto;
+    min-width: 0; max-width: 60%;
+    height: 46px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 0 12px;
+    font-size: 16px; font-weight: 600;
+    color: var(--color-ink-3);
+    transition: color .15s;
+  }
+  .subtab[aria-selected="true"] { color: var(--color-ink); font-weight: 700; }
+  .subtab[aria-selected="true"]::after {
+    content: ''; position: absolute; bottom: 0; left: 50%;
+    width: min(56px, 70%); height: 3px; border-radius: 3px;
+    background: var(--color-gold); transform: translateX(-50%);
+  }
+  .subtab:active { color: var(--color-ink-2); }
+  .subtab-n {
+    min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+    font-size: 12px; font-weight: 700; line-height: 20px; text-align: center;
+    color: var(--color-ink-2); background: var(--color-fill);
+  }
+  .subtab-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--color-red); }
+  .sub-root.sub-in-right { animation: inRight .24s cubic-bezier(.2, .8, .3, 1); }
+  .sub-root.sub-in-left  { animation: inLeft .24s cubic-bezier(.2, .8, .3, 1); }
 
   /* ── Staff rows: swipe tray + sliding time chips ──────────────────────── */
   .staff-row { touch-action: pan-y; }

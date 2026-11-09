@@ -8,7 +8,7 @@ import * as sessions from './sessions.js';
 import { buildViewModel } from './viewmodel.js';
 import { setClock24 } from './time.js';
 import { mountSheets, closeSheet, closeAllSheets, sheetBackdrop } from './ui/sheet.js';
-import { switchTab, updateTabIndicators, normalizeTab, TAB_ORDER } from './render/tabs.js';
+import { switchTab, updateTabIndicators, normalizeTab, renderSubtabs, subsFor, activeSub } from './render/tabs.js';
 import {
   renderStaff, invalidateStaffList, staffTabNav,
   initStaffGestures, closeAllSwipes,
@@ -20,11 +20,13 @@ import { renderTips, invalidateTips } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
-  renderSheets, openPerson, openBonus, adjustBonus, resetBonuses, openDefaults,
+  renderSheets, openPerson, openBonus, adjustBonus, resetBonuses,
 } from './render/sheets.js';
+import { renderDrawer, toggleDrawerEdit } from './render/drawer.js';
+import { renderShiftPanel, calendarStep, scrollShiftTo } from './render/shiftpanel.js';
 import {
-  renderDrawer, openDrawer, closeDrawer, isDrawerOpen, toggleDrawerEdit, initDrawerGestures, EDGE,
-} from './render/drawer.js';
+  openPanel, closePanel, closePanels, togglePanel, isPanelOpen, initPanelGestures, EDGE,
+} from './ui/panels.js';
 
 const $ = id => document.getElementById(id);
 
@@ -56,7 +58,10 @@ function render(s) {
     total: lastVm.totalCash || 0,
     people: s.staff.filter(p => p.name.trim()).length,
   });
-  renderDrawer(lastVm, sessions.list(), sessions.currentId());
+  renderSubtabs(lastVm);
+  const list = sessions.list(), cur = sessions.currentId();
+  renderDrawer(lastVm, list, cur);
+  renderShiftPanel(lastVm, list, cur);
 }
 
 // ── Sessions: switch / create / delete without reloading ─────────────────────
@@ -80,7 +85,7 @@ function flushCurrent() {
   render(store.getState());
 }
 
-function activate(next, { keepDrawer = false } = {}) {
+function activate(next, { keepPanel = false } = {}) {
   carryPrefs(next);
   if (!next.meta.date) next.meta.date = sessions.todayISO();
   next.ui.activeTab = normalizeTab(next.ui.activeTab);
@@ -92,7 +97,7 @@ function activate(next, { keepDrawer = false } = {}) {
   switchTab(next.ui.activeTab);
   syncHdrDate();
   render(next);
-  if (!keepDrawer) closeDrawer();
+  if (!keepPanel) closePanels();
 }
 
 function freshState() {
@@ -104,9 +109,7 @@ function freshState() {
 
 store.subscribe(render);
 
-// ── Header date: formatted pill over the hidden native date input ─────────────
-// The pill shows "Sat, Nov 8"; the invisible input sits over it and opens
-// iOS's native picker on tap. Desktop/keyboard fall through to showPicker().
+// ── Header date pill: "Sat, Nov 8" — tap opens the shift panel (calendar) ────
 
 function fmtHdrDate(iso) {
   if (!iso) return 'Today';
@@ -118,28 +121,24 @@ function fmtHdrDate(iso) {
 }
 
 function syncHdrDate() {
-  const d = store.getState().meta.date;
-  const input = $('tipDate');
-  if (input && input.value !== d) input.value = d || '';
   const label = $('hdrDateLabel');
-  const text = fmtHdrDate(d);
+  const text = fmtHdrDate(store.getState().meta.date);
   if (label && label.textContent !== text) label.textContent = text;
 }
 
-function openDatePicker() {
-  const input = $('tipDate');
-  if (!input) return;
-  try {
-    input.focus({ preventScroll: true });
-    if (typeof input.showPicker === 'function') input.showPicker();
-    else input.click();
-  } catch { input.click(); }
+// Slide a sub-tab's content in from the side it came from.
+function slideIn(tab, dir) {
+  const r = $(tab + '-root');
+  if (!r) return;
+  r.classList.remove('sub-in-left', 'sub-in-right');
+  void r.offsetWidth;
+  r.classList.add(dir === 'left' ? 'sub-in-right' : 'sub-in-left');
 }
 
 // ── Global handler surface for inline on* attributes ──────────────────────────
 
 const rolesOn = () => store.getState().settings.allRoles;
-const fromDrawer = fn => (...a) => { closeDrawer(); fn(...a); };
+const fromPanel = fn => (...a) => { closePanels(); fn(...a); };
 
 window.App = {
   // tabs
@@ -148,18 +147,40 @@ window.App = {
     store.setActiveTab(name);
   },
 
+  // Sub-tab inside a tab (header tap or page swipe).
+  sub(tab, v) {
+    const st = store.getState();
+    const subs = subsFor(tab, st);
+    const from = subs.findIndex(x => x.v === activeSub(tab, st));
+    const to = subs.findIndex(x => x.v === v);
+    if (to < 0 || to === from) return;
+    document.activeElement?.blur?.();
+    if (tab === 'tips') {
+      if (st.pools.length > 1) store.selectPool(v);
+      else store.setPoolEntryMode(st.pools[0].id, v);
+    } else store.setSub(tab, v);
+    slideIn(tab, to > from ? 'left' : 'right');
+    const area = $('mainContent');
+    if (area.scrollTop > 0) area.scrollTop = 0;
+  },
+
   // sheets
   closeSheet,
   sheetBg: sheetBackdrop,
-  openDefaults: fromDrawer(() => openDefaults(lastVm)),
-  openBonus: fromDrawer(() => openBonus(lastVm)),
-  openCloseTime: fromDrawer(() => openCloseTime(lastVm)),
+  openBonus: fromPanel(() => openBonus(lastVm)),
+  openCloseTime: fromPanel(() => openCloseTime(lastVm)),
+  // Default times live in the shift panel now.
+  openDefaults() { App.panel('right'); scrollShiftTo('shift-times'); },
 
-  // side drawer (sessions + settings)
-  openDrawer() { closeAllSheets(); openDrawer(); },
-  closeDrawer,
-  toggleDrawer() { if (isDrawerOpen()) closeDrawer(); else App.openDrawer(); },
+  // side panels: left = sessions + app settings, right = this shift
+  panel(side) { closeAllSheets(); togglePanel(side); },
+  closePanels,
   drawerEdit: toggleDrawerEdit,
+  calMonth: calendarStep,
+  renameCurrent(name) {
+    sessions.rename(sessions.currentId(), name);
+    render(store.getState());
+  },
   personModal: id => openPerson(lastVm, id),
 
   // settings
@@ -287,8 +308,11 @@ window.App = {
   applyTradeDown: applyPendingTradeDown,
 
   // session
-  setDate(v) { store.setDate(v); syncHdrDate(); },
-  openDatePicker,
+  setDate(v) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+    store.mutate(s => { s.meta.date = v; }, { immediate: true });
+    syncHdrDate();
+  },
   exportSession() {
     const s = store.getState();
     const blob = new Blob([persist.serialize(s)], { type: 'application/json' });
@@ -333,7 +357,7 @@ window.App = {
     activate(freshState());
   },
   switchSession(id) {
-    if (id === sessions.currentId()) { closeDrawer(); return; }
+    if (id === sessions.currentId()) { closePanels(); return; }
     flushCurrent();
     const next = sessions.loadSession(id);
     if (!next) {
@@ -362,11 +386,11 @@ window.App = {
     // Open the next newest session, or start a fresh one.
     for (const other of sessions.list()) {
       const next = sessions.loadSession(other.id);
-      if (next) { sessions.setCurrent(other.id); activate(next, { keepDrawer: true }); return; }
+      if (next) { sessions.setCurrent(other.id); activate(next, { keepPanel: true }); return; }
       sessions.remove(other.id);
     }
     sessions.createId();
-    activate(freshState(), { keepDrawer: true });
+    activate(freshState(), { keepPanel: true });
   },
 };
 
@@ -437,20 +461,23 @@ if (window.visualViewport) {
   }, { passive: false });
 })();
 
-// Swipe left/right on the content to move between tabs. Ignored inside
-// sideways-scrolling areas and staff rows, while typing, or on vertical drags.
+// Swipe left/right on the page to move between the tab's SUB-tabs (bottom
+// tabs are tapped). Past the first sub-tab a right swipe opens the left
+// panel; past the last, a left swipe opens the shift panel. Ignored inside
+// sideways-scrolling areas and staff rows, at the screen edges (those drag
+// the panels), while typing, or on vertical drags.
 (() => {
   const area = $('mainContent');
   let x0 = 0, y0 = 0, t0 = 0, tracking = false;
   area.addEventListener('touchstart', e => {
     if (e.touches.length !== 1) { tracking = false; return; }
     const t = e.target;
-    // The left edge belongs to the drawer's drag-to-open.
-    tracking = e.touches[0].clientX - document.body.getBoundingClientRect().left >= EDGE
-      && !t.closest('.overflow-x-auto') && !t.closest('.staff-row')
+    const x = e.touches[0].clientX, box = document.body.getBoundingClientRect();
+    tracking = x - box.left >= EDGE && box.right - x >= EDGE
+      && !t.closest('.overflow-x-auto') && !t.closest('.staff-row') && !t.closest('.subtabs')
       && !(t.matches('input') && t === document.activeElement)
       && !document.body.classList.contains('keyboard-open');
-    x0 = e.touches[0].clientX;
+    x0 = x;
     y0 = e.touches[0].clientY;
     t0 = Date.now();
   }, { passive: true });
@@ -459,15 +486,14 @@ if (window.visualViewport) {
     tracking = false;
     const dx = e.changedTouches[0].clientX - x0;
     const dy = e.changedTouches[0].clientY - y0;
-    if (Math.abs(dx) < 70 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - t0 > 700) return;
-    const next = TAB_ORDER[TAB_ORDER.indexOf(store.getState().ui.activeTab) + (dx < 0 ? 1 : -1)];
-    if (!next) {
-      if (dx > 0) App.openDrawer();          // right swipe on the first tab
-      return;
-    }
-    document.activeElement?.blur?.();
-    switchTab(next, { swipe: dx < 0 ? 'left' : 'right' });
-    store.setActiveTab(next);
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - t0 > 700) return;
+    const st = store.getState();
+    const tab = st.ui.activeTab;
+    const subs = subsFor(tab, st);
+    const i = subs.findIndex(x => x.v === activeSub(tab, st));
+    const j = i + (dx < 0 ? 1 : -1);
+    if (subs.length && j >= 0 && j < subs.length) App.sub(tab, subs[j].v);
+    else openPanel(dx > 0 ? 'left' : 'right');
   }, { passive: true });
 })();
 
@@ -486,8 +512,8 @@ initStaffGestures({
   openTime: (id, field) => openTimeSheet(id, field),
 });
 
-// Drawer: drag in from the left edge, drag it back to close.
-initDrawerGestures({
+// Side panels: drag in from either screen edge, drag back to close.
+initPanelGestures({
   canOpen: () => !document.body.classList.contains('keyboard-open')
     && !document.querySelector('.sheet-backdrop.open'),
 });
