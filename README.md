@@ -23,7 +23,7 @@ The gear in the header opens **Settings** (servers & support, multiple pools, 24
 - **Quick add** opens a grid of everyone you've entered before. Tap people (or **Select all**), then **Add**. Names are remembered on this device, even after starting a new session. **Edit** removes saved names.
 - Each person has an **In** chip and an **Out** chip:
   - **Slide a chip up or down** to change it 15 minutes at a time (up = later).
-  - **Tap a chip** to open the time sheet: drag the slider, ▲/▼ steppers, type a time, or reset to the default.
+  - **Tap a chip** to open the time sheet: scroll the band (4:00 PM, 4:15 PM…), ▲/▼ steppers, type a time, or reset to the default.
 - Times are typed as decimal 12-hour clock: `5` = 5:00, `10.5` = 10:30, `2` = 2:00 (am or pm worked out from the shift). Quarter hours only (`.25`, `.5`, `.75`).
 - Faded times use the default for that role. A red Out time marks a closer.
 - **Swipe a row left** for Closer, Reset and Delete.

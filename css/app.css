@@ -312,40 +312,48 @@
   .tval.is-closer, .tval.is-bad { color: var(--color-red) !important; }
   .tval.is-scrubbing { background: color-mix(in srgb, var(--color-gold) 15%, transparent); color: var(--color-gold) !important; }
 
-  /* iOS-style horizontal slider (time sheet): white 28px thumb, gold fill.
-     --p (0–100%) is set from JS so webkit shows progress. */
-  .time-slider {
-    -webkit-appearance: none; appearance: none;
-    width: 100%; height: 32px; margin: 0; padding: 0;
-    background: transparent; cursor: pointer; touch-action: pan-y;
+  /* Band wheel (time sheet, UIDatePicker .wheels feel): one 15-min band
+     per column, snap-scrolling; the centre row is the selection. */
+  .band {
+    position: relative;
+    height: 120px;
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+    border-radius: 12px;
+    background: var(--color-fill);
+    touch-action: pan-y;
+    -webkit-overflow-scrolling: touch;
   }
-  .time-slider::-webkit-slider-runnable-track {
-    height: 4px; border-radius: 2px;
-    background: linear-gradient(to right, var(--color-gold) 0%, var(--color-gold) var(--p, 50%), var(--color-high) var(--p, 50%), var(--color-high) 100%);
+  .band::-webkit-scrollbar { display: none; }
+  .band-inner { padding: 40px 0; }   /* 1 row top/bottom so first/last can centre */
+  .band-item {
+    height: 40px;
+    display: grid; place-items: center;
+    scroll-snap-align: center;
+    font-size: 16px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-ink-3);
+    user-select: none; -webkit-user-select: none;
+    cursor: pointer;
+    transition: color .1s;
   }
-  .time-slider::-webkit-slider-thumb {
-    -webkit-appearance: none; appearance: none;
-    width: 28px; height: 28px; border-radius: 50%;
-    background: #fff; border: none; margin-top: -12px;
-    box-shadow: 0 2px 6px rgb(0 0 0 / .45), 0 0 0 .5px rgb(0 0 0 / .15);
+  .band-item.is-sel { color: var(--color-ink); }
+  .band-center {
+    position: absolute; left: 0; right: 0; top: 50%;
+    transform: translateY(-50%);
+    height: 40px; pointer-events: none;
+    border-top: 1px solid var(--color-sep);
+    border-bottom: 1px solid var(--color-sep);
+    background: color-mix(in srgb, var(--color-gold) 14%, transparent);
   }
-  .time-slider::-moz-range-track { height: 4px; border-radius: 2px; background: var(--color-high); }
-  .time-slider::-moz-range-progress { height: 4px; border-radius: 2px; background: var(--color-gold); }
-  .time-slider::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: #fff; border: none; box-shadow: 0 2px 6px rgb(0 0 0 / .45); }
-  .time-slider:focus-visible { outline: none; }
-  .time-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 2px 6px rgb(0 0 0 / .45), 0 0 0 3px color-mix(in srgb, var(--color-gold) 55%, transparent); }
-  .tcol.is-bad .time-slider, .tcol.is-bad .time-slider::-webkit-slider-thumb { opacity: .45; }
-
-  /* Native wheel test: the input itself opens UIDatePicker (.wheels) on iOS. */
-  .time-wheel {
-    width: 100%; height: 44px; padding: 0 10px;
-    border-radius: 12px; background: var(--color-fill);
-    color: var(--color-ink); text-align: center;
-    font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums;
-    outline: none; cursor: pointer;
+  .band-fade {
+    position: absolute; left: 0; right: 0; height: 40px;
+    pointer-events: none;
   }
-  .time-wheel:focus { box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-gold) 55%, transparent); }
-  .time-wheel::-webkit-calendar-picker-indicator { filter: invert(.7); }
+  .band-fade-t { top: 0; background: linear-gradient(to bottom, var(--color-raised), transparent); }
+  .band-fade-b { bottom: 0; background: linear-gradient(to top, var(--color-raised), transparent); }
+  .tcol.is-bad .band { opacity: .5; }
 
   /* ── Settings switch ──────────────────────────────────────────────────── */
   .switch { position: relative; flex-shrink: 0; width: 51px; height: 31px; border-radius: 999px; background: var(--color-fill); transition: background .25s; }

@@ -366,7 +366,7 @@ export function staffTabNav(e) {
   else if (isEnter) { e.preventDefault(); e.target.blur(); }
 }
 
-// ── Time edits: shared by chip sliding, the time sheet slider/steppers/typing ──
+// ── Time edits: shared by chip sliding, the time sheet band/steppers/typing ──
 
 // Snap to the 15-minute grid → stored raw string, or '' when it equals the
 // inherited default (sliding back to the default resets the field).
@@ -423,19 +423,12 @@ function timeColHTML(field) {
     <button class="${step}" onclick="App.timeStep('${field}',1)" aria-label="15 minutes later">${icon('chevU', 'size-[22px]')}</button>
     <div class="tval grid h-14 place-items-center rounded-xl font-rounded text-[36px] font-bold tracking-tight tabular-nums" data-tval="${field}" role="slider" aria-label="${name} time — slide up or down"></div>
     <div class="px-1">
-      <input type="range" class="time-slider" data-tslider="${field}"
-        min="9" max="20.75" step="0.25" value="17"
-        aria-label="${name} time slider — drag to set, 15-minute steps"
-        oninput="App.timeSlider('${field}',this.value)">
-      <div class="flex justify-between text-[11px] font-medium tabular-nums text-ink-3">
-        <span data-tsmin="${field}"></span><span data-tsmax="${field}"></span>
+      <div class="band" data-band="${field}" onscroll="App.bandScroll('${field}',this)" role="listbox" aria-label="${name} band picker — scroll, 15-minute steps">
+        <div class="band-center" aria-hidden="true"></div>
+        <div class="band-inner" data-bandinner="${field}"></div>
+        <div class="band-fade band-fade-t" aria-hidden="true"></div>
+        <div class="band-fade band-fade-b" aria-hidden="true"></div>
       </div>
-    </div>
-    <div class="flex flex-col gap-1 px-1">
-      <span class="text-center text-[11px] font-semibold uppercase tracking-wide text-ink-3">Wheel · test</span>
-      <input type="time" class="time-wheel" data-twheel="${field}" step="900"
-        aria-label="${name} wheel picker (iOS wheels style)"
-        onchange="App.timeWheel('${field}',this.value)">
     </div>
     <button class="${step}" onclick="App.timeStep('${field}',-1)" aria-label="15 minutes earlier">${icon('chevD', 'size-[22px]')}</button>
     <input class="mt-1 h-11 w-full min-w-0 rounded-xl bg-fill px-3 text-center text-[17px] font-semibold text-ink outline-none placeholder:text-ink-3 focus:ring-2 focus:ring-gold [&.is-invalid]:bg-red/15 [&.is-invalid]:ring-2 [&.is-invalid]:ring-red"
@@ -445,7 +438,7 @@ function timeColHTML(field) {
   </div>`;
 }
 
-// Absolute range for a field's slider, derived from the other field so In
+// Absolute range for a field's band, derived from the other field so In
 // always stays before Out and the span never exceeds 12h.
 function timeRange(field, d) {
   const b = baseTimes(d);
@@ -453,41 +446,60 @@ function timeRange(field, d) {
   return { min: b.inAbs + STEP, max: b.inAbs + 12, val: b.outAbs };
 }
 
-// ── Native UIDatePicker wheel (input type=time, .wheels on iOS) ────────────────
-// The wheel's value is a plain 24h clock ("17:30"). For In that clock is
-// already the absolute axis (9a–8:45p). For Out it wraps midnight, so the
-// clock reading is pushed to the next occurrence after the In time.
+// ── Band wheel (custom, UIDatePicker .wheels feel: one 15-min band) ─────────────
+// Each column is a vertical snap-scrolling band showing full times
+// ("4:00 PM", "4:15 PM", …; "17:00", "17:15" in 24h mode). The centre band
+// is the selection. Scrolling or tapping an item writes through writeAbs,
+// so In < Out ≤ In + 12h still holds.
 
-function fmtHHMM(abs) {
-  let h = ((abs % 24) + 24) % 24;
-  let hr = Math.floor(h), mn = Math.round((h - hr) * 60);
-  if (mn === 60) { hr = (hr + 1) % 24; mn = 0; }
-  return String(hr).padStart(2, '0') + ':' + String(mn).padStart(2, '0');
+const BAND_ITEM_H = 40;   // px per 15-min row; visible 3 rows (120px)
+let bandScrolling = { in: false, out: false };
+let bandTimers = { in: null, out: null };
+
+// "4:00p" → "4:00 PM"; 24h mode is already "17:00" via fmtTimeAbs.
+function fmtWheelTime(abs) {
+  const s = fmtTimeAbs(abs);
+  const m = /^(\d+:\d{2})([ap])$/.exec(s);
+  if (!m) return s;
+  return m[1] + ' ' + (m[2] === 'a' ? 'AM' : 'PM');
 }
 
-function parseHHMM(text) {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(text || '').trim());
-  if (!m) return null;
-  const h = Number(m[1]), mn = Number(m[2]);
-  if (h < 0 || h > 23 || mn < 0 || mn > 59) return null;
-  return { h, mn };
+function buildBandItems(field, r) {
+  const out = [];
+  for (let abs = r.min; abs <= r.max + 0.001; abs += STEP) {
+    const a = Math.round(abs * 4) / 4;
+    out.push(`<div class="band-item" data-abs="${a}" role="option" onclick="App.bandPick('${field}',${a})">${fmtWheelTime(a)}</div>`);
+  }
+  return out.join('');
 }
 
-function wheelToAbs(field, hhmm, inAbs) {
-  const p = parseHHMM(hhmm);
-  if (!p) return null;
-  if (field === 'in') return p.h + p.mn / 60;
-  const reading = ((p.h + 11) % 12) + 1 + p.mn / 60;
-  let abs = reading;
-  while (abs <= inAbs) abs += 12;
-  return abs;
+function syncBand(field, d, col, bad) {
+  const band = col.querySelector(`[data-band="${field}"]`);
+  const inner = col.querySelector(`[data-bandinner="${field}"]`);
+  if (!band || !inner) return;
+  const r = timeRange(field, d);
+  const clamped = Math.min(r.max, Math.max(r.min, r.val));
+  const sig = `${r.min.toFixed(2)}-${r.max.toFixed(2)}`;
+  if (band.dataset.sig !== sig) {
+    band.dataset.sig = sig;
+    inner.innerHTML = buildBandItems(field, r);
+  }
+  const idx = Math.round((clamped - r.min) / STEP);
+  const items = inner.querySelectorAll('.band-item');
+  items.forEach((it, i) => it.classList.toggle('is-sel', i === idx));
+  band.setAttribute('aria-activedescendant', `band-${field}-${idx}`);
+  items[idx]?.setAttribute('id', `band-${field}-${idx}`);
+  if (!bandScrolling[field]) {
+    const target = idx * BAND_ITEM_H;
+    if (Math.abs(band.scrollTop - target) > 0.5) band.scrollTop = target;
+  }
 }
 
 export function openTimeSheet(id, field) {
   timeEdit = { id, field };
   mount(sheetBody('sheet-time'), html`<div class="grid grid-cols-2 gap-2.5">${timeColHTML('in')}${timeColHTML('out')}</div>
     <div class="min-h-5 text-center text-[15px] text-ink-2" data-tsum></div>
-    <p class="px-2 text-center text-[13px] leading-normal text-ink-3">Wheel (test): tap to open the iOS wheels picker (15-min steps). Or drag the slider, or type 5 for 5:00, 10.5 for 10:30. On the Staff list, slide a time up or down to nudge it.</p>`);
+    <p class="px-2 text-center text-[13px] leading-normal text-ink-3">Scroll the band (15-min steps) to set the time, or type 5 for 5:00, 10.5 for 10:30. On the Staff list, slide a time up or down to nudge it.</p>`);
   openSheet('sheet-time');
   renderTimeSheet();
 }
@@ -513,30 +525,7 @@ export function renderTimeSheet() {
     val.textContent = bad ? '?' : abs != null ? fmtTimeAbs(abs) : '—';
     val.classList.toggle('is-bad', bad);
     if (field === 'out') val.classList.toggle('is-closer', d.closer);
-    const slider = col.querySelector('[data-tslider]');
-    if (slider) {
-      const r = timeRange(field, d);
-      const clamped = Math.min(r.max, Math.max(r.min, r.val));
-      slider.min = String(r.min);
-      slider.max = String(r.max);
-      if (document.activeElement !== slider) slider.value = String(clamped);
-      const pct = r.max > r.min ? ((clamped - r.min) / (r.max - r.min)) * 100 : 0;
-      slider.style.setProperty('--p', pct.toFixed(1) + '%');
-      slider.setAttribute('aria-valuetext', bad ? 'invalid' : fmtTimeAbs(clamped));
-      const lo = col.querySelector(`[data-tsmin="${field}"]`);
-      const hi = col.querySelector(`[data-tsmax="${field}"]`);
-      if (lo) lo.textContent = fmtTimeAbs(r.min);
-      if (hi) hi.textContent = fmtTimeAbs(r.max);
-    }
-    const wheel = col.querySelector('[data-twheel]');
-    if (wheel) {
-      const base = baseTimes(d);
-      const shown = abs ?? (field === 'in' ? base.inAbs : base.outAbs);
-      const hhmm = fmtHHMM(shown);
-      if (document.activeElement !== wheel && wheel.value !== hhmm) wheel.value = hhmm;
-      if (field === 'in') { wheel.min = '09:00'; wheel.max = '20:45'; }
-      else { wheel.min = ''; wheel.max = ''; }
-    }
+    syncBand(field, d, col, bad);
     const input = col.querySelector('[data-tin]');
     if (document.activeElement !== input) input.value = p[field];
     input.classList.toggle('is-invalid', bad);
@@ -576,33 +565,35 @@ export function timeInput(field, value) {
   refreshNow(timeEdit.id);
 }
 
-// iOS-style horizontal slider: drag to a 15-minute step. The range bounds
-// shift with the other field, so clamping here keeps In < Out ≤ In + 12h.
-export function timeSlider(field, value) {
+// Band wheel: scroll/tap to a 15-minute step ("4:00 PM", "4:15 PM", …).
+// Bounds shift with the other field, so writeAbs keeps In < Out ≤ In + 12h.
+export function timeBand(field, abs) {
   if (!timeEdit) return;
   const d = freshDisplay(timeEdit.id);
   if (!d) return;
+  const b = baseTimes(d);
+  const cur = field === 'in' ? b.inAbs : b.outAbs;
+  const blank = field === 'in' ? d.inAbs == null : d.outAbs == null;
+  if (!blank && Math.abs(abs - cur) < 0.001) return;
   timeEdit.field = field;
-  const v = Number(value);
-  if (!Number.isFinite(v)) return;
-  const snapped = Math.round(v * 4) / 4;
-  writeAbs(timeEdit.id, d, field, snapped);
+  writeAbs(timeEdit.id, d, field, abs);
   refreshNow(timeEdit.id);
 }
 
-// Native wheel (input type=time → UIDatePicker .wheels on iOS): "17:30" in,
-// and the resolved absolute time is written through the same path the
-// slider/steppers/typing use (writeAbs clamps In < Out ≤ In + 12h).
-export function timeWheel(field, value) {
+export function bandPick(field, abs) {
+  timeBand(field, abs);
+}
+
+export function bandScroll(field, el) {
   if (!timeEdit) return;
-  const d = freshDisplay(timeEdit.id);
-  if (!d) return;
-  timeEdit.field = field;
-  const inAbs = d.inAbs ?? baseTimes(d).inAbs;
-  const abs = wheelToAbs(field, value, inAbs);
-  if (abs == null) return;
-  writeAbs(timeEdit.id, d, field, abs);
-  refreshNow(timeEdit.id);
+  bandScrolling[field] = true;
+  clearTimeout(bandTimers[field]);
+  bandTimers[field] = setTimeout(() => { bandScrolling[field] = false; }, 140);
+  const items = el.querySelectorAll('.band-item');
+  if (!items.length) return;
+  const idx = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / BAND_ITEM_H)));
+  items.forEach((it, i) => it.classList.toggle('is-sel', i === idx));
+  timeBand(field, Number(items[idx].dataset.abs));
 }
 
 export function timeReset(field) {

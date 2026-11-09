@@ -11,7 +11,7 @@ import { switchTab, updateTabIndicators, normalizeTab, TAB_ORDER } from './rende
 import {
   renderStaff, invalidateStaffList, staffTabNav,
   initStaffGestures, closeAllSwipes,
-  openTimeSheet, timeStep, timeInput, timeSlider, timeWheel, timeReset,
+  openTimeSheet, timeStep, timeInput, timeBand, bandPick, bandScroll, timeReset,
   openRosterSheet, rosterPick, rosterSelectAll, rosterSelected, toggleRosterEdit,
 } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
@@ -175,8 +175,9 @@ window.App = {
   // Time sheet (tap a time chip)
   timeStep,
   timeInput,
-  timeSlider,
-  timeWheel,
+  timeBand,
+  bandPick,
+  bandScroll,
   timeReset,
 
   // defaults
