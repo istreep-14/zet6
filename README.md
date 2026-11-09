@@ -12,11 +12,11 @@ The tab bar has five tabs:
 
 | Tab | What it's for |
 |---|---|
-| **Payout** | The answer: total pool, rate per hour, what each person gets, and any warnings. Close time and Bonus tools live here. |
+| **Payout** | The answer: total pool and rate, then each person's shift (5:00p → 2:00a), hours and pay (red dot = closer). Tap **How the split was worked out** to see the maths step by step. Close time and Bonus tools sit below. |
 | **Staff** | Who worked. Quick add saved people, set In/Out times, mark closers. |
 | **Cash** | The tips: type one net total, or count each bill size with −/+ steppers. |
-| **Bills** | The envelopes: which bills each person takes, plus fixes when the drawer can't make exact change. |
-| **More** | Settings, default times, export/import, new session. |
+| **Bills** | The envelopes: which bills each person takes (in the same order as Payout), plus fixes when the drawer can't make exact change. |
+| **More** | Settings (incl. 24-hour time), default times, export/import, new session. |
 
 Swipe left or right on the page to move between tabs.
 

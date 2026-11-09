@@ -53,14 +53,19 @@ export function atOrAfter(t, fromAbs) {
 }
 
 // Format an absolute-axis time for display: "5p", "10:30a", "2a", "12a" (midnight).
+// Display clock: 12-hour "h:mma/p" (5:00p, 1:30a) or 24-hour "HH:MM" (17:00,
+// 01:30). Set once per render from state.settings.clock24 (main.js).
+let clock24 = false;
+export function setClock24(on) { clock24 = !!on; }
+
 export function fmtTimeAbs(tAbs) {
   let h = ((tAbs % 24) + 24) % 24;
   let hr = Math.floor(h), mn = Math.round((h - hr) * 60);
   if (mn === 60) { hr = (hr + 1) % 24; mn = 0; }
-  const am = hr < 12;
-  let h12 = hr % 12;
-  if (h12 === 0) h12 = 12;
-  return h12 + (mn > 0 ? ':' + (mn < 10 ? '0' : '') + mn : '') + (am ? 'a' : 'p');
+  const mm = (mn < 10 ? '0' : '') + mn;
+  if (clock24) return (hr < 10 ? '0' : '') + hr + ':' + mm;
+  const h12 = hr % 12 || 12;
+  return h12 + ':' + mm + (hr < 12 ? 'a' : 'p');
 }
 
 // Inverse of resolveIn: absolute IN time → the decimal string a person would

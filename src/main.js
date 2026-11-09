@@ -5,6 +5,7 @@
 import * as store from './store.js';
 import * as persist from './persist.js';
 import { buildViewModel } from './viewmodel.js';
+import { setClock24 } from './time.js';
 import { switchTab, updateTabIndicators } from './render/tabs.js';
 import {
   renderStaff, invalidateStaffList, staffTabNav,
@@ -46,6 +47,7 @@ if (!state.meta.date) {
 let lastVm = buildViewModel(state);
 
 function render(s) {
+  setClock24(s.settings.clock24);
   lastVm = buildViewModel(s);
   renderStaff(lastVm);
   renderPools(lastVm);
@@ -71,6 +73,7 @@ function renderSettings(s) {
   const extraPools = s.pools.length > 1;
   set('set-allRoles', s.settings.allRoles);
   set('set-multiPool', s.settings.multiPool || extraPools, extraPools);
+  set('set-clock24', s.settings.clock24);
   const hint = $('set-multiPool-hint');
   if (hint) {
     hint.textContent = extraPools

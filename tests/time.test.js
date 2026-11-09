@@ -1,5 +1,5 @@
 import assert from 'node:assert';
-import { parseTime, resolveIn, nextAfter, atOrAfter, fmtTimeAbs, overlapHours, absToInRaw, absToOutRaw } from '../src/time.js';
+import { parseTime, resolveIn, nextAfter, atOrAfter, fmtTimeAbs, setClock24, overlapHours, absToInRaw, absToOutRaw } from '../src/time.js';
 import { parseWholeNumber } from '../src/util.js';
 
 // parseWholeNumber (carried over from utils.test.js)
@@ -52,14 +52,19 @@ assert.strictEqual(atOrAfter(9, 17), 21);   // 9p
 assert.strictEqual(atOrAfter(2, 17), 26);   // 2a
 
 // Formatting on the true 24h+ axis (no anchor)
-assert.strictEqual(fmtTimeAbs(17), '5p');
+assert.strictEqual(fmtTimeAbs(17), '5:00p');
 assert.strictEqual(fmtTimeAbs(22.5), '10:30p');
-assert.strictEqual(fmtTimeAbs(26), '2a');
-assert.strictEqual(fmtTimeAbs(12), '12p');
-assert.strictEqual(fmtTimeAbs(24), '12a'); // midnight
-assert.strictEqual(fmtTimeAbs(10), '10a');
-assert.strictEqual(fmtTimeAbs(13), '1p');
-assert.strictEqual(fmtTimeAbs(18), '6p');
+assert.strictEqual(fmtTimeAbs(26), '2:00a');
+assert.strictEqual(fmtTimeAbs(12), '12:00p');
+assert.strictEqual(fmtTimeAbs(24), '12:00a'); // midnight
+assert.strictEqual(fmtTimeAbs(10), '10:00a');
+assert.strictEqual(fmtTimeAbs(13), '1:00p');
+assert.strictEqual(fmtTimeAbs(18), '6:00p');
+setClock24(true);
+assert.strictEqual(fmtTimeAbs(17), '17:00');
+assert.strictEqual(fmtTimeAbs(25.5), '01:30');
+assert.strictEqual(fmtTimeAbs(24), '00:00');
+setClock24(false);
 
 // Overlap math
 assert.strictEqual(overlapHours(5, 14, 5, 14), 9);

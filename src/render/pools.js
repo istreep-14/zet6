@@ -2,7 +2,7 @@
 // pool" appends another with its own window / roles / cash. Structural changes
 // re-render; keystrokes patch totals in place so inputs keep focus.
 
-import { DENOMS, escapeHTML, parseWholeNumber, fmtHrs } from '../util.js';
+import { DENOMS, escapeHTML, parseWholeNumber, fmtHrs, fmtMoney } from '../util.js';
 import { fmtTimeAbs, overlapHours } from '../time.js';
 
 const $ = id => document.getElementById(id);
@@ -80,7 +80,7 @@ function billSub(raw, d) {
   const parsed = parseWholeNumber(raw ?? '');
   const sub = parsed.valid ? parsed.value * d : 0;
   return {
-    text: !parsed.valid ? '!' : sub > 0 ? '$' + sub : '—',
+    text: !parsed.valid ? '!' : sub > 0 ? fmtMoney(sub) : '—',
     cls: 'bill-sub num' + (!parsed.valid ? ' err' : sub > 0 ? '' : ' zero'),
   };
 }
@@ -100,7 +100,7 @@ function cardHTML(pool, vm, isOpen, removable) {
     const v = pool.cash.billCounts[d] ?? '';
     const s = billSub(v, d);
     return `<div class="bill-row">
-      <span class="bill-denom">$${d}</span>
+      <span class="bill-denom"><span class="denom" data-d="${d}">$${d}</span></span>
       <div class="stepper bill-step">
         <button onclick="App.billStep('${pool.id}','${d}',-1)" aria-label="One fewer $${d}" tabindex="-1">−</button>
         <input type="number" min="0" step="1" placeholder="0" inputmode="numeric" enterkeyhint="next" data-bill="${d}"
@@ -123,7 +123,7 @@ function cardHTML(pool, vm, isOpen, removable) {
         <span class="pool-name" data-pool-name>${single ? 'Tips' : escapeHTML(pool.label)}</span>
         <span class="pool-sub" data-window-sub>${windowSub(pool, vmPool)}</span>
       </span>
-      <span class="pool-total${total ? '' : ' zero'}" data-pool-total>$${total}</span>
+      <span class="pool-total${total ? '' : ' zero'}" data-pool-total>${fmtMoney(total)}</span>
       ${single ? '' : '<span class="chev"></span>'}
     </button>
     ${isOpen ? `<div class="pool-body">
@@ -211,7 +211,7 @@ export function renderPools(vm) {
 
     const totalEl = card.querySelector('[data-pool-total]');
     if (totalEl) {
-      totalEl.textContent = '$' + total;
+      totalEl.textContent = fmtMoney(total);
       totalEl.className = 'pool-total' + (total ? '' : ' zero');
     }
     const nameEl = card.querySelector('[data-pool-name]');

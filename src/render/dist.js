@@ -1,6 +1,6 @@
 // Bills tab (distribution, small-bill needs, trades) + Close Time sidebar.
 
-import { DENOMS, escapeHTML, poolValue } from '../util.js';
+import { DENOMS, escapeHTML, poolValue, fmtMoney, payoutOrder } from '../util.js';
 import { parseTime } from '../time.js';
 import { planMakeChange, computeTradeUp, distribute } from '../engine.js';
 import { buildCloseTimeColumn } from '../viewmodel.js';
@@ -9,6 +9,8 @@ import { pipStripHTML } from './tabs.js';
 import { invalidatePools } from './pools.js';
 
 const $ = id => document.getElementById(id);
+
+const ROLE_PLURAL = { bartender: 'Bartenders', server: 'Servers', support: 'Support' };
 
 let currentVm = null;
 let pendingTradeUp = null;
@@ -55,17 +57,24 @@ export function renderDistTableMarkup(people, byPerson, options = {}) {
   const leftover = options.leftover || 0;
   const remBills = leftover > 0 ? (options.remainderBills || {}) : {};
 
-  const rows = people.map(p => {
+  // Same order as the Payout list; a role label row starts each group when
+  // more than one role is being paid.
+  const ordered = payoutOrder(people);
+  const grouped = new Set(ordered.map(p => p.role)).size > 1;
+  const rows = ordered.map((p, i) => {
     const bills = byPerson[p.id] || {};
-    return `<tr><td class="c-name${p.closer ? ' closer-dot' : ''}">${escapeHTML(p.name)}</td>`
+    const sect = grouped && (i === 0 || ordered[i - 1].role !== p.role)
+      ? `<tr class="row-sect row-role" data-role="${p.role}"><td colspan="${DENOMS.length + 2}">${ROLE_PLURAL[p.role] || p.role}</td></tr>`
+      : '';
+    return sect + `<tr><td class="c-name${p.closer ? ' closer-dot' : ''}">${escapeHTML(p.name)}</td>`
       + DENOMS.map(d => countCell(bills[d] || 0)).join('')
-      + `<td class="c-tot">$${poolValue(bills)}</td></tr>`;
+      + `<td class="c-tot">${fmtMoney(poolValue(bills))}</td></tr>`;
   }).join('');
 
   const remRow = leftover > 0
     ? `<tr class="row-chump"><td class="c-name">Chump</td>`
       + DENOMS.map(d => (remBills[d] || 0) > 0 ? `<td>${remBills[d]}</td>` : '<td class="z">—</td>').join('')
-      + `<td class="c-tot">$${leftover}</td></tr>`
+      + `<td class="c-tot">${fmtMoney(leftover)}</td></tr>`
     : '';
 
   const colTotals = DENOMS.map(d => {
@@ -76,9 +85,9 @@ export function renderDistTableMarkup(people, byPerson, options = {}) {
 
   return `<div class="section-title">${options.preview ? 'After the swap' : 'Envelopes'}</div>
     <div class="tbl-wrap"><table class="tbl tbl--bills">
-      <thead><tr><th class="c-name">Name</th>${DENOMS.map(d => `<th>$${d}</th>`).join('')}<th class="c-tot">Total</th></tr></thead>
+      <thead><tr><th class="c-name">Name</th>${DENOMS.map(d => `<th class="d-col" data-d="${d}">$${d}</th>`).join('')}<th class="c-tot">Total</th></tr></thead>
       <tbody>${rows}${remRow}</tbody>
-      <tfoot><tr><td class="c-name">Drawer</td>${colTotals}<td class="c-tot">$${grand}</td></tr></tfoot>
+      <tfoot><tr><td class="c-name">Drawer</td>${colTotals}<td class="c-tot">${fmtMoney(grand)}</td></tr></tfoot>
     </table></div>`;
 }
 
@@ -90,7 +99,7 @@ function tradeTableHTML(nowPool, deltas, afterPool) {
   const rows = DENOMS.filter(d => (nowPool[d] || 0) || (afterPool[d] || 0) || (deltas[d] || 0)).map(d => {
     const v = deltas[d] || 0;
     const delta = v === 0 ? '<span class="z">—</span>' : `<span class="${v > 0 ? 'pos' : 'neg'}">${v > 0 ? '+' : '−'}${Math.abs(v)}</span>`;
-    return `<div class="swap-row${v ? ' changed' : ''}"><span class="d">$${d}</span><span>${nowPool[d] || 0}</span>${delta}<span class="a">${afterPool[d] || 0}</span></div>`;
+    return `<div class="swap-row${v ? ' changed' : ''}"><span class="d"><span class="denom" data-d="${d}">$${d}</span></span><span>${nowPool[d] || 0}</span>${delta}<span class="a">${afterPool[d] || 0}</span></div>`;
   }).join('');
   return `<div class="swap">
     <div class="swap-row swap-head"><span>Bill</span><span>Now</span><span>Swap</span><span>After</span></div>
@@ -135,18 +144,8 @@ function tradesEnabled(vm) {
   return vm.state.pools.length === 1;
 }
 
-// Actionable break-bills card for the Summary warn box — same preview the
-// dist modal computes, so the Apply button (wired to pendingTradeDown, set by
-// renderDist in the same render pass) resolves to identical counts.
-export function tradeSuggestionHTML(vm) {
-  if (!vm.dist || !tradesEnabled(vm)) return '';
-  const preview = breakPlan(vm);
-  return preview ? renderTradeDownCard(preview, vm.bills) : '';
-}
-
 // Fewest bill-breaks that make exact change (any denomination), falling back
-// to the older small-bill heuristic. Memoized per view model — Summary and the
-// dist sheet both ask during the same render.
+// to the older small-bill heuristic. Memoized per view model.
 const planCache = new WeakMap();
 function breakPlan(vm) {
   if (!planCache.has(vm)) {

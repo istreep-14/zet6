@@ -57,7 +57,7 @@ export function initialState() {
     overrides: { bonuses: {} },
     // Simple mode by default: one staff list, one pool. allRoles exposes the
     // server/support split; multiPool exposes add-pool / windows / labels.
-    settings: { allRoles: false, multiPool: false },
+    settings: { allRoles: false, multiPool: false, clock24: false },
     ui: { activeTab: 'summary', staffViewRole: 'bartender', selectedPool: pool.id },
   };
   return state;
@@ -206,6 +206,7 @@ export function normalizeSettings(state) {
   state.settings = {
     allRoles: typeof s.allRoles === 'boolean' ? s.allRoles : usesRoles,
     multiPool: typeof s.multiPool === 'boolean' ? s.multiPool : state.pools.length > 1,
+    clock24: typeof s.clock24 === 'boolean' ? s.clock24 : false,
   };
   return state;
 }

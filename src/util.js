@@ -44,3 +44,27 @@ export function escapeHTML(v) {
 export function fmtHrs(h) {
   return parseFloat(h.toFixed(2)).toString();
 }
+
+// Whole dollars with thousands separators: 1037 → "$1,037".
+export function fmtMoney(n) {
+  const v = Math.round(n);
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString('en-US');
+}
+
+// Tight form for badges: 980 → "$980", 1037 → "$1k", 1580 → "$1.6k".
+export function fmtMoneyShort(n) {
+  if (n < 1000) return '$' + Math.round(n);
+  const k = n / 1000;
+  return '$' + (k >= 10 ? Math.round(k) : parseFloat(k.toFixed(1))) + 'k';
+}
+
+const ROLE_ORDER = { bartender: 0, server: 1, support: 2 };
+
+// Display order for payouts and envelopes: by role (bar · srv · sup), then
+// largest payout first, then name. Returns a new array.
+export function payoutOrder(people) {
+  return [...people].sort((a, b) =>
+    (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9)
+    || (b.final ?? 0) - (a.final ?? 0)
+    || String(a.name).localeCompare(String(b.name)));
+}

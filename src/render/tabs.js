@@ -1,7 +1,7 @@
 // Tab bar — panel switching, tab badges, and the floating live HUD
 // (rate / pool / chump while editing Staff & Cash).
 
-import { poolValue, escapeHTML } from '../util.js';
+import { poolValue, escapeHTML, fmtMoney, fmtMoneyShort } from '../util.js';
 
 const $ = id => document.getElementById(id);
 
@@ -44,7 +44,7 @@ export function updateTabIndicators(vm) {
   const total = vm.totalCash;
   const cs = $('tab-sub-cash');
   if (cs) {
-    cs.textContent = total > 0 ? '$' + total : '';
+    cs.textContent = total > 0 ? fmtMoneyShort(total) : '';
     cs.className = 'tab-sub' + (total > 0 ? ' ok' : '');
   }
 
@@ -89,8 +89,8 @@ function updateHud(vm, named, total) {
 function statsHTML(shares) {
   return `
     <span class="stat-inline"><span class="k">Rate</span><span class="v rate">$${shares.rate.toFixed(2)}</span></span>
-    <span class="stat-inline"><span class="k">Pool</span><span class="v pool">$${shares.totalCash}</span></span>
-    <span class="stat-inline"><span class="k">Chump</span><span class="v chump">${shares.leftover > 0 ? '$' + shares.leftover : '—'}</span></span>`;
+    <span class="stat-inline"><span class="k">Pool</span><span class="v pool">${fmtMoney(shares.totalCash)}</span></span>
+    <span class="stat-inline"><span class="k">Chump</span><span class="v chump">${shares.leftover > 0 ? fmtMoney(shares.leftover) : '—'}</span></span>`;
 }
 
 // Inline live strip for sheet tops — same numbers as the HUD, re-rendered with
