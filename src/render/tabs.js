@@ -2,8 +2,9 @@
 // (rate / pool / chump while editing Staff & Tips).
 
 import { poolValue, fmtMoney, fmtMoneyShort } from '../util.js';
-import { html, cx, mount } from '../ui/html.js';
-import { icon } from '../ui/icons.js';
+import { html as shtml, cx } from '../ui/html.js';
+import { html, render } from '../ui/preact.js';
+import { Icon } from '../ui/pkit.js';
 
 const $ = id => document.getElementById(id);
 
@@ -47,13 +48,21 @@ export function activeSub(tab, state) {
 }
 
 // Small counts / alerts on a sub-tab label.
-function subAside(tab, v, vm, short) {
+function SubAside({ tab, v, vm, short }) {
   if (tab === 'staff') {
     const n = vm.state.staff.filter(p => p.name.trim() && (v === 'all' || p.role === v)).length;
-    return n ? html`<span class="subtab-n">${n}</span>` : '';
+    return n ? html`<span class="subtab-n">${n}</span>` : null;
   }
   if (tab === 'payout' && v === 'bills' && short) return html`<span class="subtab-dot" aria-label="needs attention"></span>`;
-  return '';
+  return null;
+}
+
+function Subtabs({ tab, vm, short }) {
+  const subs = subsFor(tab, vm.state);
+  if (!subs.length) return null;
+  const cur = activeSub(tab, vm.state);
+  return html`<div class="subtabs-row" role="tablist">${subs.map(x => html`<button key=${x.v} class="subtab" role="tab"
+    aria-selected=${String(x.v === cur)} onClick=${() => App.sub(tab, x.v)}><span class="truncate">${x.label}</span><${SubAside} tab=${tab} v=${x.v} vm=${vm} short=${short} /></button>`)}</div>`;
 }
 
 export function renderSubtabs(vm) {
@@ -61,13 +70,10 @@ export function renderSubtabs(vm) {
   TAB_ORDER.forEach(tab => {
     const host = $('subtabs-' + tab);
     if (!host) return;
-    const subs = subsFor(tab, vm.state);
-    const cur = activeSub(tab, vm.state);
-    mount(host, subs.length ? html`<div class="subtabs-row" role="tablist">${subs.map(x => html`<button class="subtab" role="tab"
-      aria-selected="${String(x.v === cur)}" onclick="App.sub('${tab}','${x.v}')"><span class="truncate">${x.label}</span>${subAside(tab, x.v, vm, short)}</button>`)}</div>` : '');
+    render(html`<${Subtabs} tab=${tab} vm=${vm} short=${short} />`, host);
     // Keep the active header in view when the row scrolls sideways (many pools).
     const row = host.firstElementChild, b = host.querySelector('[aria-selected="true"]');
-    if (row && b && b.offsetLeft + b.offsetWidth > row.clientWidth) row.scrollLeft = b.offsetLeft - 16;
+    if (row && b && (b.offsetLeft + b.offsetWidth > row.scrollLeft + row.clientWidth || b.offsetLeft < row.scrollLeft)) row.scrollLeft = b.offsetLeft - 16;
   });
 }
 
@@ -124,33 +130,42 @@ export function updateTabIndicators(vm) {
   updateHud(vm, named, total, short);
 }
 
-function stats(shares) {
-  const s = (k, v, cls) => html`<span class="flex min-w-0 flex-col items-center gap-0.5 leading-tight">
-    <span class="text-[12px] font-medium text-ink-2">${k}</span>
-    <span class="${cx('font-rounded text-[18px] font-semibold tabular-nums', cls)}">${v}</span></span>`;
-  return html`${s('Rate', '$' + shares.rate.toFixed(2), 'text-green')}
-    ${s('Pool', fmtMoney(shares.totalCash))}
-    ${s('Chump', shares.leftover > 0 ? fmtMoney(shares.leftover) : '—', 'text-ink-2')}`;
+const S = ({ k, v, cls }) => html`<span class="flex min-w-0 flex-col items-center gap-0.5 leading-tight">
+  <span class="text-[12px] font-medium text-ink-2">${k}</span>
+  <span class=${cx('font-rounded text-[18px] font-semibold tabular-nums', cls)}>${v}</span></span>`;
+
+function Stats({ shares }) {
+  return html`<${S} k="Rate" v=${'$' + shares.rate.toFixed(2)} cls="text-green" />
+    <${S} k="Pool" v=${fmtMoney(shares.totalCash)} />
+    <${S} k="Chump" v=${shares.leftover > 0 ? fmtMoney(shares.leftover) : '—'} cls="text-ink-2" />`;
 }
 
 // HUD: live numbers once the pipeline computes, the blocking reason otherwise.
 // Hidden on a pristine session.
+function Hud({ vm, total, short }) {
+  const msg = t => html`<span class=${cx('truncate text-[14px] font-medium', vm.blocked || short ? 'text-red' : 'text-ink-2')}>${t}</span>`;
+  return html`<span class="flex min-w-0 flex-1 items-center justify-around gap-2">
+      ${vm.shares && total > 0 && !vm.blocked ? html`<${Stats} shares=${vm.shares} />${short && msg('bills short')}` : msg(vm.blocked || 'Enter cash to calculate')}
+    </span>
+    <span class="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-ink-2"><${Icon} name="chevR" class="size-[18px]" /></span>`;
+}
+
 function updateHud(vm, named, total, short) {
   const hud = $('pipHud');
   if (!hud) return;
   const pristine = named === 0 && total === 0;
   hud.classList.toggle('is-empty', pristine);
-  if (pristine) return;
-  hud.classList.toggle('is-warn', !!vm.blocked || short);
-  const msg = t => html`<span class="truncate text-[14px] font-medium ${vm.blocked || short ? 'text-red' : 'text-ink-2'}">${t}</span>`;
-  mount(hud, html`<span class="flex min-w-0 flex-1 items-center justify-around gap-2">
-      ${vm.shares && total > 0 && !vm.blocked ? html`${stats(vm.shares)}${short && msg('bills short')}` : msg(vm.blocked || 'Enter cash to calculate')}
-    </span>
-    <span class="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-ink-2">${icon('chevR', 'size-[18px]')}</span>`);
+  hud.classList.toggle('is-warn', !pristine && (!!vm.blocked || short));
+  render(pristine ? null : html`<${Hud} vm=${vm} total=${total} short=${short} />`, hud);
 }
 
 // Same numbers as the HUD, for the top of a sheet.
 export function liveStrip(vm) {
   if (!vm?.shares || !(vm.totalCash > 0)) return '';
-  return html`<div class="flex justify-around rounded-2xl bg-raised px-2 py-3">${stats(vm.shares)}</div>`;
+  const sh = vm.shares;
+  const st = (k, v, cls = '') => shtml`<span class="flex min-w-0 flex-col items-center gap-0.5 leading-tight">
+    <span class="text-[12px] font-medium text-ink-2">${k}</span>
+    <span class="${cx('font-rounded text-[18px] font-semibold tabular-nums', cls)}">${v}</span></span>`;
+  return shtml`<div class="flex justify-around rounded-2xl bg-raised px-2 py-3">
+    ${st('Rate', '$' + sh.rate.toFixed(2), 'text-green')}${st('Pool', fmtMoney(sh.totalCash))}${st('Chump', sh.leftover > 0 ? fmtMoney(sh.leftover) : '—', 'text-ink-2')}</div>`;
 }

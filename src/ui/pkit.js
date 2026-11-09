@@ -87,3 +87,51 @@ export function Blocked({ vm }) {
     <${Alert} action=${{ label: 'Fix →', onClick: () => App.tab(goTips ? 'tips' : 'staff') }}>${vm.blocked}<//>
   </div>`;
 }
+
+export const INPUT = 'h-12 w-full min-w-0 rounded-xl bg-fill px-3 text-[17px] text-ink outline-none transition placeholder:text-ink-3 focus:ring-2 focus:ring-gold';
+
+// Segmented control: items [{ value, label }], onChange(value).
+export function Seg({ items, value, onChange, size = 'md', class: cls = '' }) {
+  const h = size === 'sm' ? 'h-8 text-[14px]' : 'h-10 text-[15px]';
+  return html`<div class=${cx('flex gap-1 rounded-xl bg-fill-2 p-1', cls)} role="tablist">
+    ${items.map(it => html`<button key=${it.value} role="tab" aria-selected=${String(it.value === value)} class=${cx(
+      'flex-1 rounded-lg px-3 font-semibold transition', h,
+      it.value === value ? 'bg-high text-ink shadow-[0_2px_8px_rgb(0_0_0/.4),inset_0_1px_0_rgb(255_255_255/.08)]' : 'text-ink-2',
+    )} onClick=${() => onChange(it.value)}>${it.label}</button>`)}
+  </div>`;
+}
+
+export function Chip({ on, role, onClick, children }) {
+  return html`<button class=${cx(
+    'inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-[15px] font-semibold transition',
+    on ? 'bg-high text-ink shadow-[inset_0_0_0_1px_rgb(255_255_255/.1)]' : 'bg-fill-2 text-ink-2',
+  )} aria-pressed=${String(!!on)} onClick=${onClick}>
+    <span class=${cx('size-2 rounded-full', on ? ROLE_DOT[role] : 'bg-ink-3')}></span>${children}</button>`;
+}
+
+// Labelled input. Extra props (value, onInput, inputMode …) go to the <input>.
+export function Field({ label, class: cls = '', inputClass = '', ...input }) {
+  return html`<label class=${cx('flex min-w-0 flex-1 flex-col gap-1.5', cls)}>
+    <span class="text-[14px] font-medium text-ink-2">${label}</span>
+    <input class=${cx(INPUT, inputClass)} ...${input} />
+  </label>`;
+}
+
+export const SEP = 'border-t border-sep first:border-t-0';
+
+export function SwitchRow({ on, disabled, onClick, label, hint }) {
+  return html`<button class=${cx('switch-row flex min-h-16 w-full items-center gap-4 px-4 py-2.5 text-left disabled:opacity-60', SEP)}
+    role="switch" aria-checked=${String(!!on)} disabled=${disabled} onClick=${onClick}>
+    <span class="flex flex-1 flex-col gap-0.5 text-[17px]">${label}${hint && html`<small class="text-[13px] leading-snug text-ink-2">${hint}</small>`}</span>
+    <span class="switch"></span>
+  </button>`;
+}
+
+export function ListRow({ onClick, icon, tone = '', chevron = true, aside, children }) {
+  return html`<button class=${cx('flex min-h-[54px] w-full items-center gap-3 px-4 text-left text-[17px] transition active:bg-raised', SEP, tone === 'danger' && 'text-red')} onClick=${onClick}>
+    ${icon && html`<span class=${cx('grid size-8 place-items-center rounded-lg', tone === 'danger' ? 'bg-red/15' : 'bg-white/8 text-ink')}><${Icon} name=${icon} class="size-[18px]" /></span>`}
+    <span class="flex-1">${children}</span>
+    ${aside && html`<span class="text-[15px] text-ink-2">${aside}</span>`}
+    ${chevron && html`<${Icon} name="chevR" class="size-4 text-ink-3" />`}
+  </button>`;
+}
