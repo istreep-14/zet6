@@ -187,6 +187,16 @@ body.keyboard-open .content { padding-bottom: var(--sp-6); }
 @keyframes inRight { from { opacity: .4; transform: translateX(32px); } to { opacity: 1; transform: none; } }
 @keyframes inLeft  { from { opacity: .4; transform: translateX(-32px); } to { opacity: 1; transform: none; } }
 
+/* Home-screen app with a short viewport (see main.js): the page box is the
+   real screen height, and the bottom-anchored layers sit inside that box
+   instead of the short viewport. */
+html.fill-screen, html.fill-screen body { height: var(--app-h); }
+html.fill-screen body { position: relative; }
+html.fill-screen .tabbar, html.fill-screen .hud, html.fill-screen .sheet-backdrop { position: absolute; }
+html.fill-screen .sheet-backdrop { height: var(--app-h); bottom: auto; }
+html.fill-screen .sheet, html.fill-screen .sheet--tall { max-height: calc(var(--app-h) - var(--safe-t) - 16px); }
+html.fill-screen .sheet--tall { height: calc(var(--app-h) - var(--safe-t) - 40px); }
+
 /* ── Shell: floating glass tab bar ──────────────────────────────────────── */
 .tabbar {
   position: fixed;

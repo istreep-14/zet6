@@ -328,6 +328,45 @@ if (window.visualViewport) {
   document.addEventListener('focusout', () => setTimeout(updateKeyboardState, 50));
 }
 
+// Home-screen app fill. iOS can hand a home-screen web app a viewport that is
+// shorter than the screen (e.g. 844 of 912pt): the page lays out to the short
+// height and the strip below shows as black (zooming in proves iOS can draw
+// there). So size <html> and <body> to the real screen height, lay the tab
+// bar / HUD / sheets out inside that box, and keep the window locked at the top.
+// Add ?pwa to the URL to force this in a desktop browser for testing.
+(() => {
+  const root = document.documentElement;
+  const standalone = navigator.standalone === true
+    || window.matchMedia?.('(display-mode: standalone)').matches
+    || new URLSearchParams(location.search).has('pwa');
+  if (!standalone) return;
+  root.classList.add('standalone');
+  const typing = () => {
+    const el = document.activeElement;
+    return !!el && (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT');
+  };
+  const fit = () => {
+    if (typing()) return;                       // keyboard resizes are not the screen
+    const landscape = window.innerWidth > window.innerHeight;
+    const screenH = landscape
+      ? Math.min(screen.width, screen.height)
+      : Math.max(screen.width, screen.height);
+    const h = Math.max(screenH, window.innerHeight);
+    const short = h - window.innerHeight > 1;
+    root.classList.toggle('fill-screen', short);
+    root.style.setProperty('--app-h', h + 'px');
+    if (window.scrollY || window.scrollX) window.scrollTo(0, 0);
+  };
+  fit();
+  window.addEventListener('resize', fit);
+  window.addEventListener('orientationchange', () => setTimeout(fit, 300));
+  document.addEventListener('focusout', () => setTimeout(fit, 120));
+  // Lock the window at the top: the only scrolling is inside .content.
+  window.addEventListener('scroll', () => {
+    if (!typing() && (window.scrollY || window.scrollX)) window.scrollTo(0, 0);
+  }, { passive: true });
+})();
+
 // Lock page zoom. iOS ignores user-scalable=no in places, and a pinched or
 // focus-zoomed page shifts the fixed tab bar off the bottom edge — so block
 // pinch gestures here; double-tap zoom is off via touch-action in app.css.
