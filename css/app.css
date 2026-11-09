@@ -317,7 +317,7 @@
      Rows curve in 3D (top/bottom slant away like a drum) via JS tilt. */
   .band {
     position: relative;
-    height: 120px;
+    height: 224px;
     overflow-y: auto;
     scroll-snap-type: y mandatory;
     scrollbar-width: none;
@@ -329,12 +329,12 @@
     perspective-origin: 50% 50%;
   }
   .band::-webkit-scrollbar { display: none; }
-  .band-inner { padding: 40px 0; transform-style: preserve-3d; }   /* 1 row top/bottom so first/last can centre */
+  .band-inner { padding: 96px 0; transform-style: preserve-3d; }   /* 3 rows top/bottom so first/last can centre */
   .band-item {
-    height: 40px;
+    height: 32px;
     display: grid; place-items: center;
     scroll-snap-align: center;
-    font-size: 16px; font-weight: 600;
+    font-size: 15px; font-weight: 600;
     font-variant-numeric: tabular-nums;
     color: var(--color-ink-3);
     user-select: none; -webkit-user-select: none;
@@ -351,24 +351,24 @@
   .band-center {
     position: absolute; left: 0; right: 0; top: 50%;
     transform: translateY(-50%);
-    height: 40px; pointer-events: none;
+    height: 32px; pointer-events: none;
     border-top: 1px solid var(--color-sep);
     border-bottom: 1px solid var(--color-sep);
     background: color-mix(in srgb, var(--color-gold) 14%, transparent);
   }
   .band-fade {
-    position: absolute; left: 0; right: 0; height: 40px;
+    position: absolute; left: 0; right: 0; height: 48px;
     pointer-events: none;
   }
   .band-fade-t { top: 0; background: linear-gradient(to bottom, var(--color-raised), transparent); }
   .band-fade-b { bottom: 0; background: linear-gradient(to top, var(--color-raised), transparent); }
   .tcol.is-bad .band { opacity: .5; }
 
-  /* Hold-slide preview: floating 5-row wheel (32px rows) in front of a
+  /* Hold-slide preview: floating 7-row wheel (32px rows) in front of a
      scrubbing tchip, raised card around the rows + centre mark. */
   .chip-band {
     position: fixed;
-    width: 176px; height: 160px;
+    width: 176px; height: 224px;
     border-radius: 16px;
     background: var(--color-raised);
     box-shadow: 0 12px 32px rgb(0 0 0 / .55), inset 0 0 0 .5px rgb(255 255 255 / .12);
@@ -389,12 +389,14 @@
     color: var(--color-ink-3);
     backface-visibility: hidden;
   }
-  .chip-band-m2 { transform-origin: 50% 100%; transform: rotateX(44deg) scale(.84); opacity: .35; }
-  .chip-band-m1 { transform-origin: 50% 100%; transform: rotateX(22deg) scale(.92); opacity: .62; }
+  .chip-band-m3 { transform-origin: 50% 100%; transform: rotateX(58deg) scale(.78); opacity: .22; }
+  .chip-band-m2 { transform-origin: 50% 100%; transform: rotateX(40deg) scale(.86); opacity: .42; }
+  .chip-band-m1 { transform-origin: 50% 100%; transform: rotateX(20deg) scale(.93); opacity: .68; }
   .chip-band-now { color: var(--color-ink); }
   .chip-band-now.is-closer { color: var(--color-red); }
-  .chip-band-p1 { transform-origin: 50% 0%; transform: rotateX(-22deg) scale(.92); opacity: .62; }
-  .chip-band-p2 { transform-origin: 50% 0%; transform: rotateX(-44deg) scale(.84); opacity: .35; }
+  .chip-band-p1 { transform-origin: 50% 0%; transform: rotateX(-20deg) scale(.93); opacity: .68; }
+  .chip-band-p2 { transform-origin: 50% 0%; transform: rotateX(-40deg) scale(.86); opacity: .42; }
+  .chip-band-p3 { transform-origin: 50% 0%; transform: rotateX(-58deg) scale(.78); opacity: .22; }
   .chip-band-center {
     position: absolute; left: 0; right: 0; top: 50%;
     transform: translateY(-50%);
@@ -404,7 +406,7 @@
     background: color-mix(in srgb, var(--color-gold) 12%, transparent);
   }
   @media (prefers-reduced-motion: reduce) {
-    .chip-band-m2, .chip-band-m1, .chip-band-p1, .chip-band-p2 { transform: none; opacity: .7; }
+    .chip-band-m3, .chip-band-m2, .chip-band-m1, .chip-band-p1, .chip-band-p2, .chip-band-p3 { transform: none; opacity: .7; }
   }
 
   /* ── Settings switch ──────────────────────────────────────────────────── */

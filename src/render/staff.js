@@ -452,7 +452,7 @@ function timeRange(field, d) {
 // is the selection. Scrolling or tapping an item writes through writeAbs,
 // so In < Out ≤ In + 12h still holds.
 
-const BAND_ITEM_H = 40;   // px per 15-min row; visible 3 rows (120px)
+const BAND_ITEM_H = 32;   // px per 15-min row; visible 7 rows (224px)
 let bandScrolling = { in: false, out: false };
 let bandTimers = { in: null, out: null };
 
@@ -481,9 +481,10 @@ function tiltBand(band) {
   const pos = band.scrollTop / BAND_ITEM_H;
   items.forEach((it, i) => {
     const d = i - pos;
-    const ad = Math.min(Math.abs(d), 1.6);
-    it.style.transform = `rotateX(${(-d * 26).toFixed(1)}deg) scale(${(1 - ad * 0.1).toFixed(3)})`;
-    it.style.opacity = (1 - ad * 0.3).toFixed(3);
+    const ad = Math.min(Math.abs(d), 2);
+    const angle = Math.max(-52, Math.min(52, -d * 22));
+    it.style.transform = `rotateX(${angle.toFixed(1)}deg) scale(${(1 - ad * 0.08).toFixed(3)})`;
+    it.style.opacity = (1 - ad * 0.22).toFixed(3);
   });
 }
 
@@ -634,10 +635,10 @@ export function closeAllSwipes(except) {
   });
 }
 
-// Hold-slide band preview: while scrubbing a tchip, a floating 5-row wheel
-// (-30m / -15m / now / +15m / +30m, 32px rows) appears above/below the chip
-// with the same 3D tilt as the Time-sheet band. No box — just the rows
-// floating in front of the chip. Contents update live as the chip slides.
+// Hold-slide band preview: while scrubbing a tchip, a floating 7-row wheel
+// (-45m … +45m in 15m steps, 32px rows) appears in front of the chip with
+// the same 3D tilt as the Time-sheet band. Contents update live as the
+// chip slides; also opens on long-press (see initStaffGestures).
 let chipBandEl = null;
 
 function ensureChipBand() {
@@ -647,11 +648,13 @@ function ensureChipBand() {
   el.className = 'chip-band';
   el.setAttribute('aria-hidden', 'true');
   el.hidden = true;
-  el.innerHTML = '<div class="chip-band-item chip-band-m2"></div>'
+  el.innerHTML = '<div class="chip-band-item chip-band-m3"></div>'
+    + '<div class="chip-band-item chip-band-m2"></div>'
     + '<div class="chip-band-item chip-band-m1"></div>'
     + '<div class="chip-band-item chip-band-now"></div>'
     + '<div class="chip-band-item chip-band-p1"></div>'
     + '<div class="chip-band-item chip-band-p2"></div>'
+    + '<div class="chip-band-item chip-band-p3"></div>'
     + '<div class="chip-band-center"></div>';
   document.body.appendChild(el);
   chipBandEl = el;
@@ -660,19 +663,21 @@ function ensureChipBand() {
 
 function updateChipBand(curAbs, closer) {
   const el = ensureChipBand();
-  const [m2, m1, now, p1, p2] = el.children;
+  const [m3, m2, m1, now, p1, p2, p3] = el.children;
+  m3.textContent = fmtWheelTime(curAbs - STEP * 3);
   m2.textContent = fmtWheelTime(curAbs - STEP * 2);
   m1.textContent = fmtWheelTime(curAbs - STEP);
   now.textContent = fmtWheelTime(curAbs);
   p1.textContent = fmtWheelTime(curAbs + STEP);
   p2.textContent = fmtWheelTime(curAbs + STEP * 2);
+  p3.textContent = fmtWheelTime(curAbs + STEP * 3);
   now.classList.toggle('is-closer', !!closer);
 }
 
 function showChipBand(chipEl, curAbs, closer) {
   const el = ensureChipBand();
   const r = chipEl.getBoundingClientRect();
-  const w = 176, h = 160;
+  const w = 176, h = 224;
   const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
   // In front of the chip (centred on it), clamped to the viewport.
   const top = Math.max(8, Math.min(r.top + r.height / 2 - h / 2, window.innerHeight - h - 8));
@@ -736,18 +741,34 @@ export function initStaffGestures(cb) {
     const wasOpen = row.classList.contains('is-open');
     closeAllSwipes(row);
 
+    // Long-press a chip (hold ~450ms) to pop the band wheel up for scrubbing,
+    // even before you drag. A quick tap still opens the time sheet.
+    let longTimer = chip && !wasOpen ? setTimeout(() => {
+      if (start.mode) return;
+      start.mode = 'scrub';
+      suppressClick = true;
+      try { row.setPointerCapture(start.pid); } catch { /* ok */ }
+      beginScrub(start.id, chip.dataset.tf, chip, start.y);
+      try { navigator.vibrate?.(8); } catch { /* opt out */ }
+    }, 450) : null;
+
     const onMove = ev => {
       if (ev.pointerId !== start.pid) return;
       const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
+      if (longTimer && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+        clearTimeout(longTimer); longTimer = null;
+      }
       if (!start.mode) {
         const vertical = Math.abs(dy) > Math.abs(dx);
         if (chip && !wasOpen && vertical && Math.abs(dy) >= 6) {
           start.mode = 'scrub';
+          if (longTimer) { clearTimeout(longTimer); longTimer = null; }
           beginScrub(start.id, chip.dataset.tf, chip, start.y);
         } else if (vertical && Math.abs(dy) > 10) {
           return finish();                                   // page scroll
         } else if (Math.abs(dx) >= 6) {
           start.mode = 'swipe';
+          if (longTimer) { clearTimeout(longTimer); longTimer = null; }
         } else return;
         suppressClick = true;
         try { row.setPointerCapture(start.pid); } catch { /* ok */ }
@@ -763,6 +784,7 @@ export function initStaffGestures(cb) {
       finish();
     };
     const finish = () => {
+      if (longTimer) { clearTimeout(longTimer); longTimer = null; }
       list.removeEventListener('pointermove', onMove);
       list.removeEventListener('pointerup', onUp);
       list.removeEventListener('pointercancel', finish);
