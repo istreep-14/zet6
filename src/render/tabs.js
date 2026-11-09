@@ -7,8 +7,8 @@ import { icon } from '../ui/icons.js';
 
 const $ = id => document.getElementById(id);
 
-export const TAB_ORDER = ['staff', 'tips', 'payout'];
-const TITLES = { staff: 'Staff', tips: 'Tips', payout: 'Payout' };
+export const TAB_ORDER = ['summary', 'staff', 'tips', 'payout'];
+const TITLES = { summary: 'Summary', staff: 'Staff', tips: 'Tips', payout: 'Payout' };
 
 // ── Sub-tabs: the swipeable headers inside a tab (X-style) ──────────────────
 // Bottom tabs are for the thumb (tap); horizontal swipes on the page move
@@ -16,7 +16,8 @@ const TITLES = { staff: 'Staff', tips: 'Tips', payout: 'Payout' };
 //   staff  → Everyone · Bar · Servers · Support      (roles on)
 //   tips   → Net total · Count bills                  (one pool: entry mode)
 //            one header per pool                       (several pools)
-//   payout → Summary · Bills · Working (Pools when several)
+//   payout → Bills · Working (Pools when several)
+//   summary has none
 
 export function subsFor(tab, state) {
   if (tab === 'staff') {
@@ -30,7 +31,7 @@ export function subsFor(tab, state) {
       : [{ v: 'nettotal', label: 'Net total' }, { v: 'perbill', label: 'Count bills' }];
   }
   if (tab === 'payout') {
-    return [{ v: 'summary', label: 'Summary' }, { v: 'bills', label: 'Bills' },
+    return [{ v: 'bills', label: 'Bills' },
       { v: 'working', label: state.pools.length > 1 ? 'Pools' : 'Working' }];
   }
   return [];
@@ -72,8 +73,8 @@ export function renderSubtabs(vm) {
 
 // Older snapshots stored the five-tab names.
 export function normalizeTab(name) {
-  const legacy = { summary: 'payout', bills: 'payout', more: 'payout', cash: 'tips' };
-  return legacy[name] || (TAB_ORDER.includes(name) ? name : 'payout');
+  const legacy = { bills: 'payout', more: 'payout', cash: 'tips' };
+  return legacy[name] || (TAB_ORDER.includes(name) ? name : 'summary');
 }
 
 // opts.swipe = 'left' | 'right' slides the new panel in from that side and
@@ -87,7 +88,7 @@ export function switchTab(name, opts = {}) {
   $('tb-' + name)?.classList.add('active');
   const title = $('hdrTitle');
   if (title) title.textContent = TITLES[name] || 'Tip Pool';
-  $('pipHud')?.classList.toggle('is-off', name === 'payout');
+  $('pipHud')?.classList.toggle('is-off', name === 'payout' || name === 'summary');
   requestAnimationFrame(() => { $('mainContent').scrollTop = 0; });
 
   // Focus synchronously — still inside the click gesture chain (iOS Safari).

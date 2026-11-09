@@ -83,15 +83,20 @@
 
 <!-- Each tab's content is rendered by its module in src/render/. -->
 <main class="content" id="mainContent">
+  <section class="panel" id="tab-summary"><div class="subtabs" id="subtabs-summary"></div><div class="sub-root" id="summary-root"></div></section>
   <section class="panel" id="tab-staff"><div class="subtabs" id="subtabs-staff"></div><div class="sub-root" id="staff-root"></div></section>
   <section class="panel" id="tab-tips"><div class="subtabs" id="subtabs-tips"></div><div class="sub-root" id="tips-root"></div></section>
   <section class="panel" id="tab-payout"><div class="subtabs" id="subtabs-payout"></div><div class="sub-root" id="payout-root"></div></section>
 </main>
 
 <!-- Live HUD — rate / pool / chump while editing Staff & Tips -->
-<button class="hud is-empty" id="pipHud" onclick="App.tab('payout')" aria-label="Open payout"></button>
+<button class="hud is-empty" id="pipHud" onclick="App.tab('summary')" aria-label="Open summary"></button>
 
 <nav class="tabbar">
+  <button class="tab" id="tb-summary" onclick="App.tab('summary')">
+    <svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"/></svg>
+    <span class="tab-label">Summary</span><span class="tab-sub" id="tab-sub-summary"></span>
+  </button>
   <button class="tab" id="tb-staff" onclick="App.tab('staff')">
     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
     <span class="tab-label">Staff</span><span class="tab-sub" id="tab-sub-staff"></span>

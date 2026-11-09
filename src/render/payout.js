@@ -1,6 +1,5 @@
-// Payout tab — three swipeable sub-tabs:
-//   Summary  tally (total · rate · hours) → who gets what: name · shift · hrs
-//            · pay, chump, total → key → tools. No bills.
+// Payout tab — the cash side (the people side is the Summary tab,
+// render/summary.js). Two swipeable sub-tabs:
 //   Bills    status (exact change ✓ / fix card with Apply) → envelope table:
 //            name · one column per bill size · pay, chump, drawer totals
 //            → "Tidy the drawer".
@@ -82,29 +81,6 @@ export function applyPendingTradeDown() {
 
 // ── Pieces ───────────────────────────────────────────────────────────────────
 
-function dateLabel(state) {
-  const [, mo, dy] = state.meta.date ? state.meta.date.split('-') : [];
-  return mo && dy ? `${parseInt(mo)}/${parseInt(dy)}` : '';
-}
-
-function tallyHTML(vm) {
-  const s = vm.shares;
-  const date = dateLabel(vm.state);
-  const paid = s.perPerson.filter(p => p.final > 0).length;
-  // One pool: the bar/server rate the worksheet derives (support is paid apart).
-  const rate = vm.state.pools.length === 1 && s.perPool[0] ? s.perPool[0].rate : s.rate;
-  return html`<div class="flex items-end justify-between gap-3 px-1">
-    <div class="flex min-w-0 flex-col">
-      <span class="text-[13px] font-semibold text-ink-2">Total pool${date ? ' · ' + date : ''}</span>
-      <span class="mt-1 font-rounded text-[60px] font-extrabold leading-none tracking-[-.045em] max-[374px]:text-[46px]">${fmtMoney(s.totalCash)}</span>
-    </div>
-    <div class="flex flex-col items-end pb-1.5 text-right">
-      <span class="font-rounded text-[22px] font-bold text-green">$${rate.toFixed(2)}<small class="ml-px text-[13px] font-medium text-ink-2">/hr</small></span>
-      <span class="mt-0.5 whitespace-nowrap text-[14px] text-ink-2">${fmtHrs(s.totalHours)}h · ${paid} ${paid === 1 ? 'person' : 'people'}</span>
-    </div>
-  </div>`;
-}
-
 // ── Payout table: one tight line per person ──────────────────────────────────
 // Name · Shift · Hrs · one equal column per bill size in use · Pay.
 // Chump row, then a Total row with hours, the drawer's bill counts and the
@@ -174,22 +150,6 @@ function payoutTableHTML(vm, byPerson, remBills, note, { bills: withBills = true
         <td class="${payTd}">${Money(grand, 'font-rounded text-[13px] font-bold text-gold')}</td>
       </tr></tfoot>
     </table>`);
-}
-
-function keyHTML(people) {
-  const parts = [];
-  const bonuses = people.filter(p => p.bonus > 0);
-  if (bonuses.length) {
-    const same = bonuses.every(p => p.closer && p.bonus === bonuses[0].bonus);
-    parts.push(same ? `closer pay includes +${fmtMoney(bonuses[0].bonus)} bonus` : 'pay includes bonuses');
-  }
-  if (new Set(people.map(p => p.role)).size > 1) {
-    parts.push(html`<span class="inline-flex items-center gap-1">${['bartender', 'server', 'support'].map(r =>
-      html`<i class="${cx('ml-1 size-[7px] rounded-full', ROLE_DOT[r])}"></i>${r === 'bartender' ? 'bar' : r === 'server' ? 'srv' : 'sup'} `)}</span>`);
-  }
-  return parts.length
-    ? html`<p class="-mt-1 flex flex-wrap items-center justify-center gap-1.5 text-[12px] text-ink-3">${parts.map((x, i) => html`${i ? ' · ' : ''}${x}`)}</p>`
-    : '';
 }
 
 // ── Fix card: drawer can't make exact change ─────────────────────────────────
@@ -350,15 +310,6 @@ function poolsHTML(vm) {
     </div>`))}`;
 }
 
-function toolsHTML() {
-  const tool = 'flex h-16 items-center gap-3 whitespace-nowrap rounded-card bg-surface px-4 text-[16px] font-semibold transition active:scale-[.96] active:bg-raised max-[374px]:h-14 max-[374px]:gap-2 max-[374px]:px-3 max-[374px]:text-[15px]';
-  const ic = 'grid size-9 place-items-center rounded-full bg-white/8 text-ink';
-  return html`<div class="grid grid-cols-2 gap-2">
-    <button class="${tool}" onclick="App.openCloseTime()"><span class="${ic}">${icon('clock')}</span>Close time</button>
-    <button class="${tool}" onclick="App.openBonus()"><span class="${ic}">${icon('gift')}</span>Bonus</button>
-  </div>`;
-}
-
 // ── Render ───────────────────────────────────────────────────────────────────
 
 export function renderPayout(vm) {
@@ -386,21 +337,6 @@ export function renderPayout(vm) {
   const sub = activeSub('payout', vm.state);
   const warnings = pools.map(p => p.warning).filter(Boolean).map(w => Alert({}, w));
 
-  if (sub === 'bills') {
-    // Bill columns: the real envelopes, else the swap preview, else none.
-    const bills = !errMsg && vm.dist
-      ? { ...vm.dist, note: 'tap a name for details' }
-      : pendingTradeDown
-        ? { ...pendingTradeDown, note: 'shown after the swap' }
-        : { byPerson: {}, remainderBills: {}, note: 'bills don’t work out yet' };
-    mount(root, html`<div class="flex flex-col gap-4">
-      ${errMsg ? fixHTML(vm, errMsg) : okHTML(vm)}
-      ${payoutTableHTML(vm, bills.byPerson, bills.remainderBills, bills.note)}
-      ${tradeUpHTML(vm)}
-    </div>`);
-    return;
-  }
-
   if (sub === 'working') {
     mount(root, html`<div class="flex flex-col gap-4">
       ${warnings}
@@ -409,17 +345,17 @@ export function renderPayout(vm) {
     return;
   }
 
+  // Bills. Columns: the real envelopes, else the swap preview, else none.
+  const bills = !errMsg && vm.dist
+    ? { ...vm.dist, note: 'tap a name for details' }
+    : pendingTradeDown
+      ? { ...pendingTradeDown, note: 'shown after the swap' }
+      : { byPerson: {}, remainderBills: {}, note: 'bills don’t work out yet' };
   mount(root, html`<div class="flex flex-col gap-4">
-    ${tallyHTML(vm)}
     ${warnings}
-    ${errMsg && html`<button class="flex min-h-14 w-full items-center gap-3 rounded-card bg-red/12 px-4 text-left ring-1 ring-red/30 transition active:scale-[.98]" onclick="App.sub('payout','bills')">
-      <span class="grid size-8 shrink-0 place-items-center rounded-full bg-red/20 text-red">${icon('alert', 'size-4')}</span>
-      <span class="flex-1"><span class="block text-[15px] font-semibold">Bills don’t work out yet</span><span class="text-[13px] text-red-soft">See the fix on Bills</span></span>
-      ${icon('chevR', 'size-5 text-red-soft')}
-    </button>`}
-    ${payoutTableHTML(vm, {}, {}, 'tap a name for details', { bills: false })}
-    ${keyHTML(payoutOrder(vm.shares.perPerson))}
-    ${toolsHTML()}
+    ${errMsg ? fixHTML(vm, errMsg) : okHTML(vm)}
+    ${payoutTableHTML(vm, bills.byPerson, bills.remainderBills, bills.note)}
+    ${tradeUpHTML(vm)}
   </div>`);
 }
 

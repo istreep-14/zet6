@@ -76,6 +76,15 @@
   }
   @media (max-width: 374px) { :root { --gutter: 12px; } }
 
+  /* Summary hero: the shift's headline card, warmed with a gold glow. */
+  .summary-hero {
+    background:
+      radial-gradient(120% 90% at 0% 0%, rgb(255 210 63 / .16), transparent 60%),
+      radial-gradient(90% 80% at 100% 100%, rgb(48 209 88 / .08), transparent 60%),
+      var(--color-surface);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / .08), 0 0 0 .5px var(--color-edge), 0 14px 40px rgb(0 0 0 / .45);
+  }
+
   /* ── Header: large title, date, settings ─────────────────────────────── */
   .hdr {
     flex-shrink: 0;

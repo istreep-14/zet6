@@ -16,7 +16,7 @@ The tab bar has three tabs, in the order you use them:
 | **Tips** | The tips: type one net total, or count each bill size with −/+ steppers. |
 | **Payout** | The answer: total pool and rate, then each person's shift, hours, pay **and the bills for their envelope**. If the drawer can't make exact change, a fix card shows the fewest swaps and **Apply** updates the cash count. **Show the working** explains the maths; Close time and Bonus tools sit below. |
 
-Tap the bottom tabs (Staff · Tips · Payout) to move between steps. Inside a tab, swipe left or right to move between its sub-tabs — e.g. Payout's **Summary** (who gets what), **Bills** (envelopes and any bill swaps) and **Working** (how the split was worked out).
+Tap the bottom tabs to move around: **Summary** (the shift at a glance — total, rate, and what everyone takes home), **Staff**, **Tips** and **Payout** (the cash side). Inside a tab, swipe left or right to move between its sub-tabs — e.g. Payout's **Bills** (envelopes and any bill swaps) and **Working** (how the split was worked out).
 
 The menu button — or a swipe in from the left edge — opens the **sessions panel**: every saved shift (tap one to switch, Edit to rename or delete), **New session**, and app settings (servers & support, multiple pools, 24-hour time, import). The date in the header — or a swipe in from the right edge — opens **this shift's panel**: name, a calendar to set the date, default shift times, closer bonus, close-time what-if, export and delete.
 

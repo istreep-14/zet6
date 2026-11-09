@@ -18,6 +18,7 @@ import {
 import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderTips, invalidateTips } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
+import { renderSummary } from './render/summary.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
   renderSheets, openPerson, openBonus, adjustBonus, resetBonuses,
@@ -51,6 +52,7 @@ function render(s) {
   renderStaff(lastVm);
   renderTips(lastVm);
   renderPayout(lastVm);
+  renderSummary(lastVm, sessions.list().find(e => e.id === sessions.currentId())?.name || '');
   renderCloseTime(lastVm);
   renderSheets(lastVm);
   updateTabIndicators(lastVm);
