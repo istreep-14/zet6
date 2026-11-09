@@ -18,7 +18,7 @@ import { fmtHrs } from '../util.js';
 import { parseTime, fmtTimeAbs, resolveIn, nextAfter, absToInRaw, absToOutRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { getRoster } from '../roster.js';
 import { html, render, useState, useRef, useLayoutEffect } from '../ui/preact.js';
-import { cx, Icon, Card, Button, Avatar, Alert, Seg, SwitchRow, INPUT, ROLE_DOT, ROLE_PLURAL } from '../ui/pkit.js';
+import { cx, Icon, Card, Button, Avatar, Alert, Seg, SwitchRow, Section, Row, INPUT, ROLE_DOT, ROLE_PLURAL } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 import { activeSub } from './tabs.js';
 
@@ -145,36 +145,26 @@ function AddCard({ vm, sub }) {
 
 function PersonRow({ vm, p }) {
   const t = times(vm.state, p, vm);
-  return html`<button data-staff-row class="flex min-h-[64px] w-full items-center gap-3 border-t border-sep px-4 py-2 text-left transition first:border-t-0 active:bg-raised"
-    onClick=${() => App.editStaff(p.id)}>
-    <${Avatar} name=${p.name} role=${p.role} />
-    <span class="flex min-w-0 flex-1 flex-col">
-      <span class="flex min-w-0 items-center gap-1.5">
-        <span class="truncate text-[17px] font-semibold">${p.name}</span>
-        ${t.forced && html`<span class="size-1.5 shrink-0 rounded-full bg-red" title="forced closer"></span>`}
-      </span>
-      <span class="text-[14px] tabular-nums text-ink-2">${t.bad ? html`<span class="text-red">check times</span>` : html`
-        <span class=${t.inSet ? 'text-ink' : ''}>${t.inAbs != null ? fmtTimeAbs(t.inAbs) : 'In'}</span> – <span class=${cx(t.outSet && 'text-ink', t.closer && 'font-semibold text-red')}>${t.outAbs != null ? fmtTimeAbs(t.outAbs) : 'Out'}</span>`}</span>
-    </span>
-    <span class=${cx('font-rounded text-[17px] font-semibold tabular-nums', t.hrs == null ? 'text-red' : 'text-ink-2')}>${t.hrs != null ? fmtHrs(t.hrs) + 'h' : '?'}</span>
-    <${Icon} name="chevR" class="size-4 text-ink-3" />
-  </button>`;
+  const sub = t.bad
+    ? html`<span class="text-red">check times</span>`
+    : html`<span class="tabular-nums"><span class=${t.inSet ? 'text-ink' : ''}>${t.inAbs != null ? fmtTimeAbs(t.inAbs) : 'In'}</span> – <span class=${cx(t.outSet && 'text-ink', t.closer && 'font-semibold text-red')}>${t.outAbs != null ? fmtTimeAbs(t.outAbs) : 'Out'}</span></span>`;
+  return html`<${Row} onClick=${() => App.editStaff(p.id)}
+    lead=${html`<${Avatar} name=${p.name} role=${p.role} />`}
+    title=${html`<span class="truncate">${p.name}</span>${t.forced && html`<span class="size-1.5 shrink-0 rounded-full bg-red" title="forced closer"></span>`}`}
+    sub=${sub}
+    trail=${html`<span class=${cx('font-rounded text-[17px] font-semibold tabular-nums', t.hrs == null ? 'text-red' : 'text-ink-2')}>${t.hrs != null ? fmtHrs(t.hrs) + 'h' : '?'}</span>`} />`;
 }
 
 function Group({ vm, role, people, title }) {
   const def = roleDefaults(vm.state, role || 'bartender');
-  return html`<${Card} flush>
-    <div class="flex items-center gap-2 py-2.5 pl-4 pr-3">
-      ${role && html`<span class=${cx('size-2 rounded-full', ROLE_DOT[role])}></span>`}
-      <span class="text-[17px] font-semibold">${title}</span>
-      <span class="text-[15px] font-semibold tabular-nums text-ink-3">${people.length || ''}</span>
-      <button class="ml-auto inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-fill px-3 text-[14px] font-semibold tabular-nums text-ink-2 active:bg-high"
-        onClick=${() => App.openDefaults()} aria-label="Default times"><${Icon} name="clock" class="size-4" />${defaultsLabel(def)}</button>
-    </div>
+  const heading = html`${role && html`<span class=${cx('size-2 rounded-full', ROLE_DOT[role])}></span>`}${title}${people.length > 0 && html`<span class="text-ink-3">${people.length}</span>`}`;
+  const defaults = html`<button class="inline-flex h-8 items-center gap-1.5 rounded-full bg-fill px-3 text-[13px] font-semibold tabular-nums text-ink-2 active:bg-high"
+    onClick=${() => App.openDefaults()} aria-label="Default times"><${Icon} name="clock" class="size-3.5" />${defaultsLabel(def)}</button>`;
+  return html`<${Section} title=${heading} aside=${defaults}><${Card} flush>
     ${people.length
       ? people.map(p => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} />`)
-      : html`<div class="border-t border-sep px-4 py-4 text-[15px] text-ink-3">No ${role ? ROLE_PLURAL[role].toLowerCase() : 'one'} yet.</div>`}
-  <//>`;
+      : html`<div class="px-4 py-4 text-[15px] text-ink-3">No ${role ? ROLE_PLURAL[role].toLowerCase() : 'one'} yet.</div>`}
+  <//><//>`;
 }
 
 function Staff({ vm }) {
@@ -186,7 +176,7 @@ function Staff({ vm }) {
     : ROLES.filter(r => !sub || sub === 'all' || sub === r)
       .map(r => ({ role: r, title: ROLE_PLURAL[r], people: named.filter(p => p.role === r) }))
       .filter(g => g.people.length || sub === g.role);
-  return html`<div class="flex flex-col gap-3">
+  return html`<div class="flex flex-col gap-4" data-has-staff=${named.length > 0 ? '' : undefined}>
     <${Note} vm=${vm} />
     <${AddCard} vm=${vm} sub=${sub} />
     ${groups.map(g => html`<${Group} key=${g.role || 'all'} vm=${vm} ...${g} />`)}

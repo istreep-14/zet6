@@ -142,6 +142,9 @@ window.App = {
     store.setActiveTab(name);
   },
 
+  // HUD: from Staff / Tips → Summary; from Summary → Payout (the bills).
+  hudTap() { App.tab(store.getState().ui.activeTab === 'summary' ? 'payout' : 'summary'); },
+
   // Sub-tab inside a tab (header tap or page swipe).
   sub(tab, v) {
     const st = store.getState();

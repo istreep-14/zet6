@@ -93,12 +93,12 @@ export function switchTab(name, opts = {}) {
   $('tb-' + name)?.classList.add('active');
   const title = $('hdrTitle');
   if (title) title.textContent = TITLES[name] || 'Tip Pool';
-  $('pipHud')?.classList.toggle('is-off', name === 'payout' || name === 'summary');
+  $('pipHud')?.classList.toggle('is-off', name === 'payout');
   requestAnimationFrame(() => { $('mainContent').scrollTop = 0; });
 
   // Nobody on shift yet: focus the add field (synchronously, inside the tap,
   // so iOS raises the keyboard).
-  if (name === 'staff' && !opts.swipe && !document.querySelector('[data-staff-row]')) $('staffAdd')?.focus();
+  if (name === 'staff' && !opts.swipe && !document.querySelector('[data-has-staff]')) $('staffAdd')?.focus();
 }
 
 // True when the computed distribution can't actually pay everyone out.

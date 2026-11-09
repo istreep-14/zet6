@@ -11,7 +11,7 @@ import { fmtTimeAbs } from '../time.js';
 import { planMakeChange, computeTradeUp, distribute } from '../engine.js';
 import { updatePool } from '../store.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Button, Alert, Label, Money, Denom, Blocked } from '../ui/pkit.js';
+import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, Row } from '../ui/pkit.js';
 import { invalidateTips } from './tips.js';
 import { activeSub } from './tabs.js';
 
@@ -95,14 +95,10 @@ function Envelopes({ vm, byPerson, remBills, note }) {
   const payTd = cx(V, 'py-2.5 pl-0.5 pr-3 text-right');
   const Bill = ({ n }) => html`<td class=${cx(V, 'px-0 py-2.5 text-center font-rounded', n > 0 ? 'font-bold' : 'text-ink-3/40')}>${n > 0 ? n : '–'}</td>`;
 
-  return html`<${Card} flush>
-    <div class="flex items-baseline justify-between gap-2 px-3 pb-2 pt-3">
-      <span class="text-[17px] font-bold tracking-tight">Envelopes</span>
-      <span class="truncate text-[12px] font-medium text-ink-2">${note}</span>
-    </div>
+  return html`<${Section} title="Envelopes" aside=${note}><${Card} flush>
     <table class="w-full table-fixed border-collapse whitespace-nowrap text-[15px] tabular-nums max-[374px]:text-[13px]">
       <colgroup><col class="w-[28%]" />${cols.map(d => html`<col key=${d} />`)}<col class="w-[20%]" /></colgroup>
-      <thead><tr class="border-t border-sep text-[11px] font-semibold uppercase tracking-wide text-ink-3">
+      <thead><tr class="text-[11px] font-semibold uppercase tracking-wide text-ink-3">
         <th class=${cx(nameTd, 'py-1.5 font-semibold')}>Name</th>
         ${cols.map(d => html`<th key=${d} class=${cx(V, 'bill-col py-1.5 text-center text-[11px] normal-case tracking-tight')} data-d=${d}>${d}</th>`)}
         <th class=${cx(payTd, 'py-1.5 font-semibold')}>Pay</th>
@@ -128,18 +124,14 @@ function Envelopes({ vm, byPerson, remBills, note }) {
         <td class=${payTd}><${Money} value=${grand} class="font-rounded text-[14px] font-bold text-gold" /></td>
       </tr></tfoot>
     </table>
-  <//>`;
+  <//><//>`;
 }
 
 // ── Status: exact change, or the fix card ────────────────────────────────────
 
 function ExactChange({ vm }) {
   const notes = DENOMS.reduce((t, d) => t + (vm.bills[d] || 0), 0);
-  return html`<div class="flex items-center gap-3 rounded-card bg-green/10 px-4 py-3 ring-1 ring-green/25">
-    <span class="grid size-8 shrink-0 place-items-center rounded-full bg-green/20 text-green"><${Icon} name="check" class="size-4" /></span>
-    <span class="flex-1 text-[15px]"><span class="block font-semibold">Exact change for everyone</span>
-      <span class="text-[13px] text-ink-2">${notes} bills · ${fmtMoney(poolValue(vm.bills))} in the drawer</span></span>
-  </div>`;
+  return html`<${Banner} tone="ok" title="Exact change for everyone" sub=${`${notes} bills · ${fmtMoney(poolValue(vm.bills))} in the drawer`} />`;
 }
 
 function SmallBills({ req, pool }) {
@@ -179,14 +171,7 @@ function SwapTable({ now, deltas, after }) {
 }
 
 function FixCard({ vm, errMsg, plan }) {
-  return html`<${Card} tone="error" class="flex flex-col gap-3">
-    <div class="flex items-start gap-3">
-      <span class="grid size-9 shrink-0 place-items-center rounded-full bg-red/20 text-red"><${Icon} name="alert" class="size-[18px]" /></span>
-      <div class="flex-1">
-        <div class="text-[17px] font-bold">Bills don’t work out yet</div>
-        <div class="mt-0.5 text-[14px] leading-snug text-red-soft">${errMsg}</div>
-      </div>
-    </div>
+  return html`<${Banner} tone="error" title="Bills don’t work out yet" sub=${errMsg}>
     ${smallBillsShort(vm.req) && html`<${SmallBills} req=${vm.req} pool=${vm.bills} />`}
     ${plan
       ? html`<div class="text-[14px] font-semibold text-ink-2">Fewest bills to swap at the bar:</div>
@@ -265,30 +250,21 @@ function Worksheet({ vm }) {
       <div class=${V}>${where}</div>`);
   }
 
-  return html`<div class="rounded-card bg-surface">
-    <div class="flex min-h-[52px] items-center gap-2 px-4 pt-1 font-semibold">
-      <span class="grid size-8 place-items-center rounded-lg bg-white/8 text-ink"><${Icon} name="calc" class="size-[18px]" /></span>
-      <span class="flex-1">How the split works</span>
-      <span class="font-rounded font-bold text-green">$${pool.rate.toFixed(2)}/hr</span>
-    </div>
-    <ol class="flex flex-col gap-4 px-4 pb-4 pt-1">
+  return html`<${Section} title="How the split works" aside=${html`<span class="font-rounded text-[15px] font-bold text-green">$${pool.rate.toFixed(2)}/hr</span>`}>
+  <${Card}>
+    <ol class="flex flex-col gap-4">
       ${steps.map((st, i) => html`<li key=${i} class="grid grid-cols-[22px_minmax(0,1fr)] gap-2.5">
         <span class="grid size-[22px] place-items-center rounded-full bg-gold text-[12px] font-bold text-gold-ink">${i + 1}</span>
         <div class="flex min-w-0 flex-col gap-1"><div class="text-[14px] font-semibold">${st.label}</div>${st.body}</div>
       </li>`)}
     </ol>
-  </div>`;
+  <//><//>`;
 }
 
 function PoolsList({ vm }) {
-  return html`<${Label}>Pools<//>
-    <${Card} flush>${vm.shares.perPool.map(p => html`<div key=${p.id} class="flex items-center gap-3 border-t border-sep px-4 py-3.5 first:border-t-0">
-      <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span class="text-[17px] font-semibold">${p.label}</span>
-        <span class="text-[14px] text-ink-2">${fmtTimeAbs(p.startAbs)}–${fmtTimeAbs(p.endAbs)} · ${fmtHrs(p.hours)}h${p.hours > 0 ? ' · $' + (p.total / p.hours).toFixed(2) + '/hr' : ''}</span>
-      </div>
-      <span class="font-rounded text-[22px] font-bold tracking-tight">${fmtMoney(p.total)}</span>
-    </div>`)}<//>`;
+  return html`<${Section} title="Pools"><${Card} flush>${vm.shares.perPool.map(p => html`<${Row} key=${p.id} title=${p.label}
+    sub=${`${fmtTimeAbs(p.startAbs)}–${fmtTimeAbs(p.endAbs)} · ${fmtHrs(p.hours)}h${p.hours > 0 ? ' · $' + (p.total / p.hours).toFixed(2) + '/hr' : ''}`}
+    trail=${html`<span class="font-rounded text-[22px] font-bold tracking-tight">${fmtMoney(p.total)}</span>`} />`)}<//><//>`;
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────

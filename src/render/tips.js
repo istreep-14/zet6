@@ -78,12 +78,12 @@ function BillRow({ pool, d }) {
   const v = pool.cash.billCounts[d] ?? '';
   const parsed = parseWholeNumber(v);
   const sub = parsed.valid ? parsed.value * d : 0;
-  const step = 'grid size-[46px] shrink-0 place-items-center rounded-full text-[24px] active:bg-fill';
-  return html`<div class="grid grid-cols-[56px_minmax(0,1fr)_76px] items-center gap-3 py-1.5 max-[400px]:grid-cols-[50px_minmax(0,1fr)_64px] max-[400px]:gap-2.5">
+  const step = 'grid size-[42px] shrink-0 place-items-center rounded-full text-[22px] text-ink-2 active:bg-high active:text-ink';
+  return html`<div class="grid grid-cols-[56px_minmax(0,1fr)_76px] items-center gap-3 py-2 max-[400px]:grid-cols-[50px_minmax(0,1fr)_64px] max-[400px]:gap-2.5">
     <${Denom} d=${d} />
     <div class="flex items-center rounded-full bg-fill focus-within:ring-2 focus-within:ring-gold">
       <button class=${step} onClick=${() => App.billStep(pool.id, String(d), -1)} aria-label=${'One fewer $' + d} tabindex="-1">−</button>
-      <input class="h-[46px] w-full min-w-0 bg-transparent text-center text-[20px] font-semibold text-ink outline-none placeholder:text-ink-3"
+      <input class="h-[42px] w-full min-w-0 bg-transparent text-center text-[20px] font-semibold text-ink outline-none placeholder:text-ink-3"
         type="number" min="0" step="1" placeholder="0" inputmode="numeric" enterkeyhint="next" data-bill=${d}
         aria-label=${'$' + d + ' bills'} value=${v} onInput=${e => App.poolBill(pool.id, String(d), e.target.value)}
         onKeyDown=${e => App.billKey(e, pool.id)} />
@@ -126,7 +126,7 @@ function PoolCard({ pool, vm }) {
         ${!single && html`<${Seg} items=${[{ value: 'nettotal', label: 'Net total' }, { value: 'perbill', label: 'Count bills' }]}
           value=${mode} onChange=${v => App.poolMode(pool.id, v)} />`}
         ${mode === 'perbill'
-          ? html`<div class="flex flex-col divide-y divide-sep rounded-2xl bg-fill-2 px-3.5 py-1">${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} d=${d} />`)}</div>`
+          ? html`<div class="flex flex-col divide-y divide-sep">${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} d=${d} />`)}</div>`
           : html`<${NetTotal} pool=${pool} />`}
       </div>
       ${showChips && html`<${SharedBy} pool=${pool} />`}

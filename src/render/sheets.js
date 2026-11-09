@@ -2,7 +2,7 @@
 // Settings live in the side panels (render/drawer.js, render/shiftpanel.js).
 // Each re-renders with the app while it's open.
 
-import { DENOMS, fmtHrs } from '../util.js';
+import { DENOMS, fmtHrs, fmtMoney } from '../util.js';
 import { fmtTimeAbs } from '../time.js';
 import { setBonuses, clearBonuses } from '../store.js';
 import { html, render } from '../ui/preact.js';
@@ -102,10 +102,10 @@ function Bonus({ vm }) {
       </div>`)}
     </div>
     <div class="flex flex-col gap-2.5 rounded-2xl bg-raised p-4 text-[15px]">
-      ${sum('Rounded-down shares', '$' + floored)}
-      ${sum('Remainder', '$' + remainder)}
-      ${sum('Given as bonus', bonusSum > 0 ? '$' + bonusSum : '—')}
-      ${sum('Chump (stays in drawer)', leftover > 0 ? '$' + leftover : '—', 'text-gold')}
+      ${sum('Rounded-down shares', fmtMoney(floored))}
+      ${sum('Remainder', fmtMoney(remainder))}
+      ${sum('Given as bonus', bonusSum > 0 ? fmtMoney(bonusSum) : '—')}
+      ${sum('Chump (stays in drawer)', leftover > 0 ? fmtMoney(leftover) : '—', 'text-gold')}
     </div>
     ${manual && html`<${Button} block onClick=${() => App.resetRemBonuses()}>↺ Reset to auto (closers split)<//>`}`;
 }

@@ -31,9 +31,11 @@ export function Card({ class: cls = '', flush = false, tone = '', children, ...r
   return html`<div class=${cx('rounded-card', toneCls, flush ? 'overflow-hidden' : 'p-4', cls)} ...${rest}>${children}</div>`;
 }
 
+// Standalone section heading (same look as <${Section}>'s title row).
 export function Label({ children, aside }) {
-  return html`<div class="flex items-baseline justify-between gap-2 px-1 pt-3 text-[12px] font-bold uppercase tracking-[.09em] text-ink-3">
-    <span>${children}</span>${aside && html`<span class="normal-case tracking-normal font-medium">${aside}</span>`}</div>`;
+  return html`<div class="flex min-h-7 items-center justify-between gap-3 px-1 pt-2">
+    <span class="text-[13px] font-bold uppercase tracking-[.08em] text-ink-2">${children}</span>
+    ${aside && html`<span class="shrink-0 text-[14px] font-medium text-ink-3">${aside}</span>`}</div>`;
 }
 
 const BTN_VARIANT = {
@@ -174,16 +176,16 @@ export function Badge({ tone = 'muted', children }) {
   return html`<span class=${cx('inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full px-2 text-[12px] font-semibold capitalize', t)}>${children}</span>`;
 }
 
-// Rate · Pool · Chump strip for the top of a sheet.
+// Rate · Pool · Chump tiles for the top of a sheet.
 export function LiveStrip({ vm }) {
   if (!vm?.shares || !(vm.totalCash > 0)) return null;
   const sh = vm.shares;
-  const S = (k, v, c = '') => html`<span class="flex min-w-0 flex-col items-center gap-0.5 leading-tight">
-    <span class="text-[12px] font-medium text-ink-2">${k}</span>
-    <span class=${cx('font-rounded text-[18px] font-semibold tabular-nums', c)}>${v}</span></span>`;
   const money = n => '$' + Number(n).toLocaleString('en-US');
-  return html`<div class="flex justify-around rounded-2xl bg-raised px-2 py-3">
-    ${S('Rate', '$' + sh.rate.toFixed(2), 'text-green')}${S('Pool', money(sh.totalCash))}${S('Chump', sh.leftover > 0 ? money(sh.leftover) : '—', 'text-ink-2')}</div>`;
+  return html`<${Stats} items=${[
+    { label: 'per hour', value: '$' + sh.rate.toFixed(2), tone: 'text-green' },
+    { label: 'pool', value: money(sh.totalCash) },
+    { label: 'chump', value: sh.leftover > 0 ? money(sh.leftover) : '—', tone: 'text-ink-2' },
+  ]} />`;
 }
 
 // Bottom-sheet shell: backdrop + sliding sheet with a title and close button;
@@ -201,5 +203,66 @@ export function SheetShell({ id, title, tall = false, foot = false }) {
       <div class="sheet-body" id=${id + '-body'}></div>
       ${foot && html`<div class="sheet-foot" id=${id + '-foot'}></div>`}
     </div>
+  </div>`;
+}
+
+// ── Layout building blocks (use these before reaching for raw markup) ───────
+
+// A titled group: small uppercase heading (+ optional aside) above its content.
+export function Section({ title, aside, class: cls = '', children }) {
+  return html`<section class=${cx('flex flex-col gap-2', cls)}>
+    ${(title || aside) && html`<div class="flex min-h-7 items-center justify-between gap-3 px-1">
+      <span class="flex min-w-0 items-center gap-2 text-[13px] font-bold uppercase tracking-[.08em] text-ink-2">${title}</span>
+      ${aside && html`<span class="shrink-0 text-[14px] font-medium text-ink-3">${aside}</span>`}
+    </div>`}
+    ${children}
+  </section>`;
+}
+
+// One list row: lead (avatar / icon) · title over sub · trail · chevron.
+// A button when it has onClick. Put rows inside <${Card} flush>.
+export function Row({ lead, title, sub, trail, onClick, chevron, class: cls = '' }) {
+  const Tag = onClick ? 'button' : 'div';
+  return html`<${Tag} class=${cx('flex min-h-[60px] w-full items-center gap-3 px-4 py-2.5 text-left', SEP, onClick && 'transition active:bg-raised', cls)} onClick=${onClick}>
+    ${lead}
+    <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span class="flex min-w-0 items-center gap-1.5 text-[17px] font-semibold leading-tight">${title}</span>
+      ${sub && html`<span class="truncate text-[14px] text-ink-2">${sub}</span>`}
+    </span>
+    ${trail}
+    ${(chevron ?? !!onClick) && html`<${Icon} name="chevR" class="size-4 text-ink-3" />`}
+  <//>`;
+}
+
+// Status card: ok (green) / error (red) / warn (amber). Tappable with onClick;
+// children render under the headline (e.g. the fix steps).
+const BANNER = {
+  ok: ['bg-green/10 ring-green/25', 'bg-green/20 text-green', 'check', 'text-ink-2'],
+  error: ['bg-red/12 ring-red/30', 'bg-red/20 text-red', 'alert', 'text-red-soft'],
+  warn: ['bg-amber/10 ring-amber/25', 'bg-amber/20 text-amber', 'alert', 'text-amber'],
+};
+export function Banner({ tone = 'ok', icon, title, sub, onClick, children }) {
+  const [box, dot, ic, subTone] = BANNER[tone];
+  const Tag = onClick ? 'button' : 'div';
+  return html`<${Tag} class=${cx('flex w-full flex-col gap-3 rounded-card px-4 py-3.5 text-left ring-1', box, onClick && 'transition active:scale-[.98]')} onClick=${onClick}>
+    <span class="flex w-full items-center gap-3">
+      <span class=${cx('grid size-9 shrink-0 place-items-center rounded-full', dot)}><${Icon} name=${icon || ic} class="size-[18px]" /></span>
+      <span class="min-w-0 flex-1">
+        <span class="block text-[16px] font-semibold leading-snug text-ink">${title}</span>
+        ${sub && html`<span class=${cx('block text-[14px] leading-snug', subTone)}>${sub}</span>`}
+      </span>
+      ${onClick && html`<${Icon} name="chevR" class="size-5 text-ink-3" />`}
+    </span>
+    ${children}
+  <//>`;
+}
+
+// A row of equal stat tiles: items [{ label, value, tone }].
+export function Stats({ items, class: cls = '' }) {
+  return html`<div class=${cx('grid gap-2', cls)} style=${{ gridTemplateColumns: `repeat(${items.length}, minmax(0, 1fr))` }}>
+    ${items.map(it => html`<div key=${it.label} class="flex min-w-0 flex-col items-center gap-0.5 rounded-2xl bg-white/[.06] px-2 py-2.5">
+      <span class=${cx('max-w-full truncate font-rounded text-[20px] font-bold leading-tight tabular-nums', it.tone)}>${it.value}</span>
+      <span class="text-[12px] font-medium text-ink-2">${it.label}</span>
+    </div>`)}
   </div>`;
 }
