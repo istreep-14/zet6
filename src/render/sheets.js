@@ -7,7 +7,7 @@ import { fmtTimeAbs } from '../time.js';
 import { setBonuses, clearBonuses } from '../store.js';
 import { html, render } from '../ui/preact.js';
 import {
-  cx, Button, Stepper, Avatar, Badge, Stat, Field, Label, Money, Denom, LiveStrip, SEP,
+  cx, staffIndex, Button, Stepper, Avatar, Badge, Stat, Field, Label, Money, Denom, LiveStrip, SEP,
 } from '../ui/pkit.js';
 import { closeSheet, isOpen, openSheet, sheetBody, onSheetClose } from '../ui/sheet.js';
 
@@ -29,7 +29,7 @@ function Person({ vm, p }) {
   const hasBills = bills && DENOMS.some(d => (bills[d] || 0) > 0);
   return html`
     <div class="flex items-center gap-3.5 py-1">
-      <${Avatar} name=${p.name} role=${p.role} size="xl" />
+      <${Avatar} name=${p.name} index=${staffIndex(vm.state, p.id)} size="xl" />
       <div class="min-w-0">
         <div class="flex flex-wrap items-center gap-2 text-[24px] font-bold tracking-tight">${p.name}
           ${p.closer && html`<${Badge} tone="red">closer<//>`}<${Badge} tone=${p.role}>${p.role}<//></div>

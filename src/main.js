@@ -9,7 +9,7 @@ import { buildViewModel } from './viewmodel.js';
 import { setClock24 } from './time.js';
 import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
 import { switchTab, updateTabIndicators, normalizeTab, renderSubtabs, subsFor, activeSub } from './render/tabs.js';
-import { renderStaff, openStaffEditor } from './render/staff.js';
+import { renderStaff, openStaffEditor, openTimeEditor, openRosterSheet, rosterSelected } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderTips, invalidateTips } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
@@ -202,6 +202,23 @@ window.App = {
     rememberName(n, r);
   },
   editStaff: id => openStaffEditor(id),
+  // "+ Add bartender": a new blank person, editor open with the name focused
+  // (synchronously, inside the tap, so iOS raises the keyboard).
+  addBlank(role = 'bartender') {
+    const r = rolesOn() ? role : 'bartender';
+    // Reuse a blank row of that role (fresh sessions start with some).
+    const blank = store.getState().staff.find(p => !p.name.trim() && p.role === r);
+    openStaffEditor(blank ? blank.id : store.addStaff(r), { focusName: true });
+  },
+  openRoster: openRosterSheet,
+  // Each pick fills a blank row of their role, or gets a new row.
+  rosterAddSelected() {
+    const picks = rosterSelected();
+    if (!picks.length) return;
+    closeSheet('sheet-roster');
+    picks.forEach(({ name, role }) => App.addPerson(name, role));
+  },
+  editTime: (id, field) => openTimeEditor(id, field),
   // immediate = picker / button edits (render now); typing debounces.
   staffField(id, field, value, immediate = false) {
     store.mutate(s => {
@@ -447,7 +464,7 @@ if (window.visualViewport) {
     const t = e.target;
     const x = e.touches[0].clientX, box = document.body.getBoundingClientRect();
     tracking = x - box.left >= EDGE && box.right - x >= EDGE
-      && !t.closest('.overflow-x-auto') && !t.closest('.subtabs')
+      && !t.closest('.overflow-x-auto') && !t.closest('.subtabs') && !t.closest('[data-drag]')
       && !(t.matches('input') && t === document.activeElement)
       && !document.body.classList.contains('keyboard-open');
     x0 = x;

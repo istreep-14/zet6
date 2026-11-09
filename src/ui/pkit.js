@@ -57,9 +57,25 @@ export function Button({ variant = 'plain', size = 'md', block = false, icon, cl
     ${icon && html`<${Icon} name=${icon} class=${size === 'sm' ? 'size-4' : 'size-5'} />`}${children}</button>`;
 }
 
-export function Avatar({ name, role, size = 'md' }) {
+// A distinct colour per person. Ordered so consecutive hues are far apart:
+// pass `index` (the person's place on the shift / in the list) and the first
+// 12 people never share a colour; without it the name hashes to a hue.
+const AVATAR_HUES = ['#ff9f0a', '#3d9bff', '#30d158', '#ff6bb5', '#ffd23f', '#a78bfa', '#2dd4bf', '#ff5a4e', '#a3e635', '#5ac8fa', '#ff8a3d', '#e879f9'];
+export function avatarColor(name, index) {
+  if (Number.isInteger(index) && index >= 0) return AVATAR_HUES[index % AVATAR_HUES.length];
+  let h = 0;
+  for (const c of String(name).trim().toLowerCase()) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return AVATAR_HUES[h % AVATAR_HUES.length];
+}
+
+// Index of a staff member among the named people on the shift (for avatarColor).
+export const staffIndex = (state, id) => state.staff.filter(p => p.name.trim()).findIndex(p => p.id === id);
+
+export function Avatar({ name, index, size = 'md' }) {
   const s = { sm: 'size-7 text-[11px]', md: 'size-9 text-[13px]', lg: 'size-12 text-[17px]', xl: 'size-14 text-[20px]' }[size];
-  return html`<span class=${cx('grid shrink-0 place-items-center rounded-full font-bold tracking-wide', s, ROLE_TINT[role] || 'bg-high text-ink')} aria-hidden="true">${initials(name)}</span>`;
+  const c = avatarColor(name, index);
+  return html`<span class=${cx('grid shrink-0 place-items-center rounded-full font-bold tracking-wide', s)} aria-hidden="true"
+    style=${{ color: c, background: `color-mix(in srgb, ${c} 24%, transparent)` }}>${initials(name)}</span>`;
 }
 
 export function Money({ value, class: cls = '' }) {
@@ -107,10 +123,10 @@ export const INPUT = 'h-12 w-full min-w-0 rounded-xl bg-fill px-3 text-[17px] te
 // Segmented control: items [{ value, label }], onChange(value).
 export function Seg({ items, value, onChange, size = 'md', class: cls = '' }) {
   const h = size === 'sm' ? 'h-8 text-[14px]' : 'h-10 text-[15px]';
-  return html`<div class=${cx('flex gap-1 rounded-xl bg-fill-2 p-1', cls)} role="tablist">
+  return html`<div class=${cx('flex gap-1 rounded-xl bg-white/[.07] p-1', cls)} role="tablist">
     ${items.map(it => html`<button key=${it.value} role="tab" aria-selected=${String(it.value === value)} class=${cx(
       'flex-1 rounded-lg px-3 font-semibold transition', h,
-      it.value === value ? 'bg-high text-ink shadow-[0_2px_8px_rgb(0_0_0/.4),inset_0_1px_0_rgb(255_255_255/.08)]' : 'text-ink-2',
+      it.value === value ? 'bg-ink text-bg shadow-[0_2px_10px_rgb(0_0_0/.45)]' : 'text-ink-2 active:bg-white/10',
     )} onClick=${() => onChange(it.value)}>${it.label}</button>`)}
   </div>`;
 }
@@ -118,7 +134,7 @@ export function Seg({ items, value, onChange, size = 'md', class: cls = '' }) {
 export function Chip({ on, role, onClick, children }) {
   return html`<button class=${cx(
     'inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-full text-[15px] font-semibold transition',
-    on ? 'bg-high text-ink shadow-[inset_0_0_0_1px_rgb(255_255_255/.1)]' : 'bg-fill-2 text-ink-2',
+    on ? 'bg-ink text-bg' : 'bg-white/[.07] text-ink-3',
   )} aria-pressed=${String(!!on)} onClick=${onClick}>
     <span class=${cx('size-2 rounded-full', on ? ROLE_DOT[role] : 'bg-ink-3')}></span>${children}</button>`;
 }
@@ -266,3 +282,9 @@ export function Stats({ items, class: cls = '' }) {
     </div>`)}
   </div>`;
 }
+
+// People tables (Summary payouts, Staff): one grid on every row — a fixed
+// avatar column, then name at 2 parts and three 1-part value columns, values
+// centred. Header cells use TABLE_HEAD.
+export const TABLE_ROW = 'grid grid-cols-[36px_2fr_1fr_1fr_1fr] items-center gap-x-2 px-3.5 tabular-nums';
+export const TABLE_HEAD = 'text-center text-[11px] font-bold uppercase tracking-[.08em] text-ink-3';

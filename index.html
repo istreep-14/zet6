@@ -12,7 +12,7 @@
 <meta name="format-detection" content="telephone=no">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#1a1c22">
 <link rel="stylesheet" href="css/app.css">
 
 <!-- Design tokens. Every colour / font / radius here becomes a Tailwind
@@ -21,19 +21,19 @@
 <style type="text/tailwindcss">
 @theme static {
   /* surfaces, darkest → lightest */
-  --color-bg: #000000;
-  --color-surface: #121215;     /* cards (opaque: swipe rows + sticky cells match it) */
-  --color-raised: #1e1e23;      /* cards inside sheets, pressed rows, table footers */
-  --color-high: #2e2e34;        /* selected segment, active chip */
-  --color-fill: rgb(130 130 145 / .22);     /* inputs, tonal buttons */
-  --color-fill-2: rgb(130 130 145 / .12);
-  --color-sep: rgb(255 255 255 / .08);
-  --color-edge: rgb(255 255 255 / .09);     /* glass hairline around cards */
+  --color-bg: #1a1c22;          /* deep slate page, not pure black */
+  --color-surface: #262931;     /* cards (opaque) */
+  --color-raised: #31343d;      /* cards inside sheets, pressed rows, table footers */
+  --color-high: #3d414b;        /* selected segment, active chip */
+  --color-fill: rgb(130 130 145 / .28);     /* inputs, tonal buttons */
+  --color-fill-2: rgb(130 130 145 / .16);
+  --color-sep: rgb(255 255 255 / .11);
+  --color-edge: rgb(255 255 255 / .12);     /* glass hairline around cards */
 
   /* text */
   --color-ink: #ffffff;
-  --color-ink-2: rgb(235 235 245 / .7);
-  --color-ink-3: rgb(235 235 245 / .4);
+  --color-ink-2: rgb(235 235 245 / .78);
+  --color-ink-3: rgb(235 235 245 / .52);
 
   /* accent: gold = active + primary; green = rate; red = closers + errors */
   --color-gold: #ffd23f;

@@ -8,9 +8,9 @@
 // Tap a person → Person sheet.
 
 import { fmtHrs, payoutOrder } from '../util.js';
-import { timeParts } from '../time.js';
+import { fmtClockShort } from '../time.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Alert, Avatar, Money, Blocked, Banner, Card } from '../ui/pkit.js';
+import { cx, Icon, Alert, Avatar, Money, Blocked, Banner, Card, TABLE_ROW, TABLE_HEAD, staffIndex } from '../ui/pkit.js';
 import { distErrorText } from './payout.js';
 
 const $ = id => document.getElementById(id);
@@ -28,17 +28,16 @@ function BillsStatus({ vm }) {
 // hairline rows, chump + total at the foot.
 // One grid on every row: a fixed avatar column, then name · shift · hours ·
 // tips at 2 : 1 : 1 : 1, everything after the name centred.
-const GRID = 'grid grid-cols-[36px_2fr_1fr_1fr_1fr] items-center gap-x-2 px-3.5 tabular-nums';
+const GRID = TABLE_ROW;
 const HOURS = 'text-center text-[17px] font-medium leading-none text-ink-2';
 const TIPS = 'font-rounded text-[22px] font-bold leading-none tracking-tight';
 
-// Compact clock: no ":00" — "5p", "10:30p". 24-hour mode stays "17:00".
-const clock = abs => { const t = timeParts(abs); return t.h + (t.m ? ':' + t.m : '') + t.ap; };
+const clock = fmtClockShort;
 
-function PersonRow({ p }) {
+function PersonRow({ p, idx }) {
   return html`<button class=${cx(GRID, 'min-h-[54px] w-full border-t border-sep py-1.5 text-left transition active:bg-raised')}
     onClick=${() => App.personModal(p.id)}>
-    <${Avatar} name=${p.name} role=${p.role} />
+    <${Avatar} name=${p.name} index=${idx} />
     <span class="truncate text-[20px] font-semibold">${p.name}</span>
     <span class="flex flex-col items-center text-[13px] leading-[1.25] text-ink-2">
       <span>${clock(p.inAbs)}</span><span>${clock(p.outAbs)}</span>
@@ -53,7 +52,7 @@ function Payouts({ vm, name }) {
   const ordered = payoutOrder(s.perPerson);
   const hours = ordered.reduce((t, p) => t + (p.shiftHours ?? p.hours), 0);
   const paidOut = ordered.reduce((t, p) => t + p.final, 0);
-  const head = 'text-center text-[11px] font-bold uppercase tracking-[.08em] text-ink-3';
+  const head = TABLE_HEAD;
   return html`<${Card} flush>
     <div class=${cx(GRID, 'h-9')}>
       <span class="col-span-2 truncate text-[11px] font-bold uppercase tracking-[.08em] text-ink-3">${name || 'Payouts'}</span>
@@ -61,7 +60,7 @@ function Payouts({ vm, name }) {
       <span class=${head}>Hours</span>
       <span class=${head}>Tips</span>
     </div>
-    ${ordered.map(p => html`<${PersonRow} key=${p.id} p=${p} />`)}
+    ${ordered.map(p => html`<${PersonRow} key=${p.id} p=${p} idx=${staffIndex(vm.state, p.id)} />`)}
     ${s.leftover > 0 && html`<div class=${cx(GRID, 'h-11 border-t border-sep text-ink-2')}>
       <span class="col-span-4 truncate text-[14px]">Chump <span class="text-ink-3">· stays in the drawer</span></span>
       <span class="text-center"><${Money} value=${s.leftover} class="font-rounded text-[17px] font-semibold" /></span>

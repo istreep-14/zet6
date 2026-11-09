@@ -80,6 +80,12 @@ export function timeParts(tAbs) {
   return { h: String(hr % 12 || 12), m: mn ? mm : '', ap: hr < 12 ? 'a' : 'p' };
 }
 
+// Compact clock for tables: no ":00" — "5p", "10:30p" (24-hour: "17:00").
+export function fmtClockShort(tAbs) {
+  const t = timeParts(tAbs);
+  return t.h + (t.m ? ':' + t.m : '') + t.ap;
+}
+
 // Inverse of resolveIn: absolute IN time → the decimal string a person would
 // type. Only 9a–8:45p are expressible as an In under the fixed rule
 // (9–11.75 = AM, 12–12.75 = noon, 1–8.75 = PM); callers clamp to that range.

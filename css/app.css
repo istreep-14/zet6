@@ -15,10 +15,10 @@
   /* Near-black with two faint glows, so the glass bars and sheets have
      something to frost. Fixed on <html>; the page itself stays transparent. */
   html {
-    background-color: var(--color-bg, #000);
+    background-color: var(--color-bg, #1a1c22);
     background-image:
-      radial-gradient(120% 60% at 50% -10%, rgb(255 210 63 / .10), transparent 60%),
-      radial-gradient(90% 50% at 100% 100%, rgb(61 155 255 / .08), transparent 60%);
+      radial-gradient(120% 60% at 50% -10%, rgb(255 210 63 / .14), transparent 60%),
+      radial-gradient(90% 50% at 100% 100%, rgb(61 155 255 / .12), transparent 60%);
     background-attachment: fixed;
   }
   body { background: transparent; }
@@ -61,7 +61,7 @@
     --safe-r: env(safe-area-inset-right, 0px);
     --bar-bottom: max(var(--safe-b), 12px);
     --dock: calc(var(--tab-h) + var(--bar-bottom) + 10px);   /* top of tab bar + gap */
-    --glass: rgb(26 26 31 / .62);
+    --glass: rgb(44 47 56 / .72);
     --glass-blur: blur(30px) saturate(1.8);
     --glass-edge: inset 0 0 0 .5px rgb(255 255 255 / .16), inset 0 1px 0 rgb(255 255 255 / .1);
     --shadow: 0 16px 44px rgb(0 0 0 / .6), 0 2px 8px rgb(0 0 0 / .35);
@@ -192,7 +192,7 @@
     transition: color .15s, background .2s;
   }
   .tab svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .tab.active { color: var(--color-ink); background: rgb(255 255 255 / .12); box-shadow: inset 0 1px 0 rgb(255 255 255 / .1); }
+  .tab.active { color: var(--color-gold); background: rgb(255 210 63 / .14); box-shadow: inset 0 0 0 1px rgb(255 210 63 / .3); }
   .tab.active svg { color: var(--color-gold); }
   .tab-label { font-size: 11px; font-weight: 600; line-height: 1; }
   .tab.active .tab-label { font-weight: 700; }
@@ -212,7 +212,7 @@
     text-align: center;
     color: var(--color-ink);
     background: var(--color-high);
-    box-shadow: 0 0 0 2px rgb(20 20 24);
+    box-shadow: 0 0 0 2px var(--color-surface);
   }
   .tab-sub:empty { display: none; }
   .tab-sub.ok { color: var(--color-gold-ink); background: var(--color-gold); }
@@ -263,7 +263,7 @@
     display: flex;
     flex-direction: column;
     /* frosted glass over the dimmed page */
-    background: rgb(18 18 22 / .82);
+    background: rgb(36 39 47 / .9);
     -webkit-backdrop-filter: blur(40px) saturate(1.8);
     backdrop-filter: blur(40px) saturate(1.8);
     box-shadow: inset 0 .5px 0 rgb(255 255 255 / .18), 0 -10px 40px rgb(0 0 0 / .5);
@@ -304,7 +304,7 @@
     width: min(86vw, 360px);
     z-index: 95;
     display: flex; flex-direction: column;
-    background: rgb(16 16 20 / .86);
+    background: rgb(34 37 45 / .92);
     -webkit-backdrop-filter: blur(40px) saturate(1.8);
     backdrop-filter: blur(40px) saturate(1.8);
     visibility: hidden;
@@ -355,33 +355,37 @@
   .subtabs {
     position: sticky; top: -8px; z-index: 6;
     margin: -8px calc(-1 * var(--gutter)) 12px;
-    padding: 0 var(--gutter);
-    background: rgb(0 0 0 / .72);
+    padding: 0;
+    background: rgb(26 28 34 / .82);
     -webkit-backdrop-filter: blur(20px) saturate(1.6);
     backdrop-filter: blur(20px) saturate(1.6);
     box-shadow: inset 0 -.5px 0 var(--color-sep);
   }
   .subtabs:empty { display: none; }
-  .subtabs-row { display: flex; overflow-x: auto; scrollbar-width: none; }
-  .subtabs-row::-webkit-scrollbar { display: none; }
+  .subtabs-row { display: flex; }
   .subtab {
     position: relative;
-    flex: 1 1 auto;
+    flex: 1 1 0;                 /* equal halves / thirds / quarters */
     min-width: 0;
     height: 46px;
     display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-    padding: 0 8px;
+    padding: 0 6px;
     font-size: 15px; font-weight: 600;
     white-space: nowrap;
-    color: var(--color-ink-3);
-    transition: color .15s;
+    color: rgb(235 235 245 / .62);
+    transition: color .15s, background .15s;
   }
-  .subtab[aria-selected="true"] { color: var(--color-ink); font-weight: 700; }
+  .subtab > .truncate { min-width: 0; }
+  /* The selected segment fills its whole share of the bar; others stay clear. */
+  .subtab[aria-selected="true"] {
+    color: var(--color-ink); font-weight: 700;
+    background: linear-gradient(to bottom, rgb(255 210 63 / .06), rgb(255 210 63 / .16));
+  }
   .subtab[aria-selected="true"]::after {
-    content: ''; position: absolute; bottom: 0; left: 50%;
-    width: min(56px, 70%); height: 3px; border-radius: 3px;
-    background: var(--color-gold); transform: translateX(-50%);
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 3px; background: var(--color-gold);
   }
+  .subtabs-row:has(> .subtab:nth-child(4)) .subtab { font-size: 14px; gap: 4px; padding: 0 4px; }
   .subtab:active { color: var(--color-ink-2); }
   .subtab-n {
     flex-shrink: 0;
@@ -394,7 +398,7 @@
   .sub-root.sub-in-left  { animation: inLeft .24s cubic-bezier(.2, .8, .3, 1); }
 
   /* ── Settings switch ──────────────────────────────────────────────────── */
-  .switch { position: relative; flex-shrink: 0; width: 51px; height: 31px; border-radius: 999px; background: var(--color-fill); transition: background .25s; }
+  .switch { position: relative; flex-shrink: 0; width: 51px; height: 31px; border-radius: 999px; background: rgb(120 120 128 / .5); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08); transition: background .25s; }
   .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 3px 8px rgb(0 0 0 / .25); transition: transform .25s cubic-bezier(.3, .7, .4, 1.2); }
   .switch-row[aria-checked="true"] .switch { background: var(--color-green); }
   .switch-row[aria-checked="true"] .switch::after { transform: translateX(20px); }

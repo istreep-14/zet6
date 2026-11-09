@@ -8,6 +8,8 @@ const $ = id => document.getElementById(id);
 
 export const SHEETS = {
   'sheet-staff': { title: 'Person' },
+  'sheet-time': { title: 'Time' },
+  'sheet-roster': { title: 'Quick add', tall: true, foot: true },
   'sheet-person': { title: 'Payout' },
   'sheet-bonus': { title: 'Closer bonus & chump' },
   'sheet-close': { title: 'Close-time what-if' },
