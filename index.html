@@ -12,54 +12,43 @@
 <meta name="format-detection" content="telephone=no">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="icon.svg">
-<meta name="theme-color" content="#1a1c22">
+<meta name="theme-color" content="#f2f3f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0e12" media="(prefers-color-scheme: dark)">
 <link rel="stylesheet" href="css/app.css">
 
-<!-- Design tokens. Every colour / font / radius here becomes a Tailwind
-     utility (bg-surface, text-ink-2, text-gold, rounded-card, font-rounded …)
-     and a CSS variable (--color-surface …) that css/app.css can use. -->
+<!-- Tailwind names for the colour tokens. The values live in css/app.css
+     (:root for light; dark under prefers-color-scheme and [data-theme=dark]),
+     so one class (bg-surface, text-ink-2, text-accent …) works in both themes.
+     Same scheme as barlog. -->
 <style type="text/tailwindcss">
-@theme static {
-  /* surfaces, darkest → lightest */
-  --color-bg: #1a1c22;          /* deep slate page, not pure black */
-  --color-surface: #262931;     /* cards (opaque) */
-  --color-raised: #31343d;      /* cards inside sheets, pressed rows, table footers */
-  --color-high: #3d414b;        /* selected segment, active chip */
-  --color-fill: rgb(130 130 145 / .28);     /* inputs, tonal buttons */
-  --color-fill-2: rgb(130 130 145 / .16);
-  --color-sep: rgb(255 255 255 / .11);
-  --color-edge: rgb(255 255 255 / .12);     /* glass hairline around cards */
-
-  /* text */
-  --color-ink: #ffffff;
-  --color-ink-2: rgb(235 235 245 / .78);
-  --color-ink-3: rgb(235 235 245 / .52);
-
-  /* accent: gold = active + primary; green = rate; red = closers + errors */
-  --color-gold: #ffd23f;
-  --color-gold-ink: #1a1300;
-  --color-red: #ff453a;
-  --color-red-soft: #ff8a80;
-  --color-green: #30d158;
-  --color-amber: #ff9f0a;
-
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-bad: var(--bad);
   /* roles */
-  --color-bar: #ff9f0a;
-  --color-srv: #3d9bff;
-  --color-sup: #c77dff;
-
+  --color-bar: var(--bar);
+  --color-srv: var(--srv);
+  --color-sup: var(--sup);
   /* bill sizes — one tint per denomination, only for bills */
-  --color-d100: #5fd4a8;
-  --color-d50: #ff8fa3;
-  --color-d20: #8fd16a;
-  --color-d10: #f0a35e;
-  --color-d5: #a99bf7;
-  --color-d1: #9aa7b3;
-
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
-  --font-rounded: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-
-  --radius-card: 1.25rem;
+  --color-d100: var(--d100);
+  --color-d50: var(--d50);
+  --color-d20: var(--d20);
+  --color-d10: var(--d10);
+  --color-d5: var(--d5);
+  --color-d1: var(--d1);
+  --font-sans: "Poppins", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --radius-card: 1rem;
 }
 </style>
 <!-- Tailwind v4 browser build, vendored: no CDN, no npm, no build step. -->
@@ -68,25 +57,25 @@
 <body>
 
 <header class="hdr">
-  <button type="button" class="hdr-menu" onclick="App.panel('left')" aria-label="Sessions and settings" aria-controls="drawer">
-    <svg class="size-[1.375rem]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+  <button type="button" class="icon-btn" onclick="App.panel('left')" aria-label="Sessions and settings" aria-controls="drawer">
+    <svg class="size-[1.125rem]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
   </button>
-  <h1 class="hdr-title truncate font-bold" id="hdrTitle">Payout</h1>
+  <!-- Small title: fades in once the page's big title scrolls away (html.scrolled) -->
+  <span class="hdr-title t-head truncate" id="hdrTitle" aria-hidden="true">Payout</span>
   <!-- Date pill: opens this shift's panel (calendar, times, tools) -->
-  <button type="button" class="hdr-date-btn" id="hdrDateBtn" onclick="App.panel('right')" aria-label="Shift date and settings" aria-controls="shiftPanel">
-    <svg class="size-4 text-ink-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-    <span id="hdrDateLabel">Today</span>
-    <svg class="-mr-1 size-4 text-ink-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+  <button type="button" class="hdr-pill" id="hdrDateBtn" onclick="App.panel('right')" aria-label="Shift date and settings" aria-controls="shiftPanel">
+    <span class="truncate" id="hdrDateLabel">Today</span>
+    <svg class="size-3.5 shrink-0 text-ink-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
   </button>
 </header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
 <!-- Each tab's content is rendered by its module in src/render/. -->
 <main class="content" id="mainContent">
-  <section class="panel" id="tab-summary"><div class="subtabs" id="subtabs-summary"></div><div class="sub-root" id="summary-root"></div></section>
-  <section class="panel" id="tab-staff"><div class="subtabs" id="subtabs-staff"></div><div class="sub-root" id="staff-root"></div></section>
-  <section class="panel" id="tab-tips"><div class="subtabs" id="subtabs-tips"></div><div class="sub-root" id="tips-root"></div></section>
-  <section class="panel" id="tab-payout"><div class="subtabs" id="subtabs-payout"></div><div class="sub-root" id="payout-root"></div></section>
+  <section class="panel" id="tab-summary"><h1 class="page-title t-title">Summary</h1><div class="subtabs" id="subtabs-summary"></div><div class="sub-root" id="summary-root"></div></section>
+  <section class="panel" id="tab-staff"><h1 class="page-title t-title">Staff</h1><div class="subtabs" id="subtabs-staff"></div><div class="sub-root" id="staff-root"></div></section>
+  <section class="panel" id="tab-tips"><h1 class="page-title t-title">Tips</h1><div class="subtabs" id="subtabs-tips"></div><div class="sub-root" id="tips-root"></div></section>
+  <section class="panel" id="tab-payout"><h1 class="page-title t-title">Payout</h1><div class="subtabs" id="subtabs-payout"></div><div class="sub-root" id="payout-root"></div></section>
 </main>
 
 <!-- Live HUD — rate / pool / chump while editing Staff & Tips -->
@@ -116,25 +105,25 @@
 <div class="side-scrim" id="panelScrim" onclick="App.closePanels()"></div>
 <aside class="side side--left" id="drawer" aria-label="Sessions and settings" aria-hidden="true">
   <div class="side-head">
-    <img src="icon-192.png" alt="" class="size-9 rounded-[0.625rem]">
+    <img src="icon-192.png" alt="" class="size-10 rounded-xl">
     <div class="min-w-0 flex-1">
-      <div class="truncate text-[1.375rem] font-extrabold leading-none tracking-[-.03em]">Tip Pool</div>
-      <div class="mt-1 text-[0.75rem] font-semibold uppercase tracking-[.09em] text-ink-3">Sessions &amp; settings</div>
+      <div class="t-title truncate">Tip Pool</div>
+      <div class="t-small truncate text-ink-3">Sessions and settings</div>
     </div>
-    <button type="button" class="grid size-11 place-items-center" onclick="App.closePanels()" aria-label="Close">
-      <span class="grid size-8 place-items-center rounded-full bg-fill text-ink-2"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></span>
+    <button type="button" class="icon-btn" onclick="App.closePanels()" aria-label="Close">
+      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
     </button>
   </div>
   <div class="side-body" id="drawer-body"></div>
 </aside>
 <aside class="side side--right" id="shiftPanel" aria-label="This shift" aria-hidden="true">
   <div class="side-head">
-    <button type="button" class="grid size-11 place-items-center" onclick="App.closePanels()" aria-label="Close">
-      <span class="grid size-8 place-items-center rounded-full bg-fill text-ink-2"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span>
+    <button type="button" class="icon-btn" onclick="App.closePanels()" aria-label="Close">
+      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
     </button>
     <div class="min-w-0 flex-1">
-      <div class="truncate text-[1.375rem] font-extrabold leading-none tracking-[-.03em]">This shift</div>
-      <div class="mt-1 truncate text-[0.75rem] font-semibold uppercase tracking-[.09em] text-ink-3" id="shift-sub">&nbsp;</div>
+      <div class="t-title truncate">This shift</div>
+      <div class="t-small truncate text-ink-3" id="shift-sub">&nbsp;</div>
     </div>
   </div>
   <div class="side-body" id="shift-body"></div>

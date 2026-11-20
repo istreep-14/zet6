@@ -45,10 +45,14 @@ export function validateV4(state) {
     if (!isPlainObject(pool.window) || !isPlainObject(pool.roles) || !isPlainObject(pool.cash)) {
       throw new Error('pool shape is invalid');
     }
-    if (pool.cash.entryMode !== 'perbill' && pool.cash.entryMode !== 'nettotal') {
+    if (!['perbill', 'nettotal', 'mixed'].includes(pool.cash.entryMode)) {
       throw new Error('pool entryMode is invalid');
     }
     assertString(pool.cash.netTotal, 'pool netTotal');
+    if (pool.cash.adjust != null) assertString(pool.cash.adjust, 'pool adjust');
+    if (pool.cash.restMode != null && pool.cash.restMode !== 'rest' && pool.cash.restMode !== 'total') {
+      throw new Error('pool restMode is invalid');
+    }
     if (!isPlainObject(pool.cash.billCounts)) throw new Error('pool billCounts must be an object');
     DENOMS.forEach(d => {
       const v = pool.cash.billCounts[d];
@@ -86,8 +90,20 @@ function normalizeV4(state) {
     if (typeof pool.support.pct !== 'string') pool.support.pct = '';
     if (typeof pool.support.rate !== 'string') pool.support.rate = '';
     if (!isPlainObject(pool.support.hours)) pool.support.hours = {};
+    normalizeCash(pool);
   });
   return state;
+}
+
+// Older pools were either counted by bill or a net total; now both are one
+// form (counted bills + the uncounted rest). Keep only what the old mode used.
+function normalizeCash(pool) {
+  const c = pool.cash;
+  if (c.entryMode === 'perbill') c.netTotal = '';
+  else if (c.entryMode === 'nettotal') c.billCounts = blankBillStrings();
+  c.entryMode = 'mixed';
+  if (typeof c.adjust !== 'string') c.adjust = '';
+  if (c.restMode !== 'total') c.restMode = 'rest';
 }
 
 // ── v3 → v4 migration ─────────────────────────────────────────────────────────
@@ -145,6 +161,7 @@ export function migrateV3(snap) {
     });
     pool.cash.billCounts = counts;
   }
+  normalizeCash(pool);
   state.pools = [pool];
   state.ui.selectedPool = pool.id;
 

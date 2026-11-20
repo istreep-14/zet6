@@ -16,6 +16,10 @@ const rem = () => parseFloat(getComputedStyle(document.documentElement).fontSize
 
 function update() {
   raf = 0;
+  // Header: the small title fades in (and a hairline shows) once the page's
+  // big title has scrolled away.
+  const sc = document.getElementById(SCROLLER);
+  if (sc) document.documentElement.classList.toggle('scrolled', sc.scrollTop > 2.5 * rem());
   document.querySelectorAll('.thead').forEach(th => {
     const s = th.previousElementSibling;
     if (!s || !s.classList.contains('thead-sentinel')) return;

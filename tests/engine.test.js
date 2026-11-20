@@ -1,7 +1,7 @@
 // Regression gate — same scenarios as the v3 engine.test.js, against the
 // ported pure distribute() API.
 import assert from 'node:assert';
-import { distribute, suggestBreaks, planMakeChange, getSmallBillRequirements } from '../src/engine.js';
+import { distribute, suggestBreaks, planMakeChange, getSmallBillRequirements, drawerBills } from '../src/engine.js';
 
 function totalBills(bills) {
   return [100, 50, 20, 10, 5, 1].reduce((sum, d) => sum + (bills[d] || 0) * d, 0);
@@ -192,6 +192,48 @@ function assertDenomSpread(byPerson, ids, denom, maxSpread, label) {
   assert.strictEqual(plan.deltas[50], -2, 'trade two $50s instead');
   assert.strictEqual(plan.deltas[10], 1);
   assert.strictEqual(distribute(people, plan.pool, 0).error, '');
+}
+
+// ── a swap brings back the fewest bills: a $10, not two $5s ──
+// Drawer 5×100 1×50 29×20 2×10 4×5, no $1s: short 10 × $1 and a $10. Trade
+// one $20 for 1 × $10 + 10 × $1 (11 bills), not 2 × $5 + 10 × $1 (what
+// this payout order used to get).
+{
+  const people = [141, 137, 113, 135, 121, 151, 125, 145, 102].map((final, i) => ({ id: 'p' + i, final }));
+  const plan = planMakeChange(people, { 100: 5, 50: 1, 20: 29, 10: 2, 5: 4, 1: 0 }, 0);
+  assert.ok(plan, 'a fix should be found');
+  assert.strictEqual(plan.deltas[20], -1, 'trade one $20');
+  assert.strictEqual(plan.deltas[10], 1, 'get a $10 back');
+  assert.strictEqual(plan.deltas[5], 0, 'not two $5s');
+  assert.strictEqual(plan.deltas[1], 10);
+  assert.strictEqual(distribute(people, plan.pool, 0).error, '');
+}
+
+// ── drawerBills: counted bills + the uncounted rest + a register over / short ──
+{
+  const bc = o => ({ 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 1: 0, ...o });
+  const value = b => Object.entries(b).reduce((s, [d, n]) => s + d * n, 0);
+  const people = [262, 233, 204, 218, 262].map((final, i) => ({ id: 'p' + i, final }));
+  // 4 × $100 and 3 × $50 counted, $629 not: the counted bills stay, the rest
+  // is filled so every payout comes out exact.
+  const mixed = drawerBills([{ billCounts: bc({ 100: 4, 50: 3 }), rest: 629, adjust: 0 }], people, 0);
+  assert.strictEqual(mixed.bills[100], 4);
+  assert.strictEqual(mixed.bills[50], 3);
+  assert.strictEqual(value(mixed.added), 629);
+  assert.strictEqual(value(mixed.bills), 1179);
+  assert.strictEqual(distribute(people, mixed.bills, 0).error, '');
+  // Nothing counted: all of it is suggested.
+  const net = drawerBills([{ billCounts: bc({}), rest: 1179, adjust: 0 }], people, 0);
+  assert.strictEqual(net.counted, false);
+  assert.strictEqual(distribute(people, net.bills, 0).error, '');
+  // Fully counted, register $50 short: a $50 comes off the counted bills.
+  const short = drawerBills([{ billCounts: bc({ 100: 4, 50: 4, 20: 22, 10: 9, 5: 12, 1: 39 }), rest: 0, adjust: -50 }], people, 0);
+  assert.strictEqual(short.bills[50], 3);
+  assert.strictEqual(short.note, '');
+  // Short an amount the counted bills can't drop exactly → a note, still the right total.
+  const odd = drawerBills([{ billCounts: bc({ 100: 2 }), rest: 0, adjust: -50 }], people.slice(0, 1).map(p => ({ ...p, final: 150 })), 0);
+  assert.ok(odd.note);
+  assert.strictEqual(value(odd.bills), 150);
 }
 
 console.log('engine distribution tests passed');

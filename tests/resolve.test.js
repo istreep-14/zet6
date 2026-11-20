@@ -132,7 +132,8 @@ function person(over) {
   assert.strictEqual(pools[0].startAbs, 18);  // blank start = earliest resolved in (6 → 6p)
   assert.strictEqual(pools[0].endAbs, 26);    // blank end = close time (2a)
   assert.strictEqual(pools[0].total, 500);
-  assert.strictEqual(pools[0].billCounts, null);
+  assert.strictEqual(pools[0].counted, 0);
+  assert.strictEqual(pools[0].rest, 500);
 
   // Explicit window + per-bill cash
   const state2 = baseState(
@@ -149,6 +150,19 @@ function person(over) {
   assert.strictEqual(r2.pools[0].endAbs, 23);   // 11 → 11p
   assert.strictEqual(r2.pools[0].total, 303);
   assert.strictEqual(r2.pools[0].billCounts[20], 5);
+
+  // One cash form: counted bills + the rest, or a total that includes them,
+  // then a signed register adjustment.
+  const cash = c => baseState([person({ id: 's1', name: 'A' })], [pool({ cash: { entryMode: 'mixed', billCounts: { 100: '4', 50: '3' }, ...c } })]);
+  const rp = st => resolvePools(st, resolveStaff(st));
+  let r = rp(cash({ netTotal: '631', restMode: 'rest', adjust: '' }));
+  assert.deepStrictEqual([r.pools[0].counted, r.pools[0].rest, r.pools[0].total], [550, 631, 1181]);
+  r = rp(cash({ netTotal: '1181', restMode: 'total', adjust: '-50' }));
+  assert.deepStrictEqual([r.pools[0].rest, r.pools[0].totalBefore, r.pools[0].total], [631, 1181, 1131]);
+  r = rp(cash({ netTotal: '500', restMode: 'total', adjust: '' }));
+  assert.ok(r.errors.some(e => e.includes('more than the total')));
+  r = rp(cash({ netTotal: '', restMode: 'rest', adjust: '5x' }));
+  assert.ok(r.errors.some(e => e.includes('over / short')));
 
   // Inverted window errors
   const state3 = baseState([person({ id: 's1', name: 'A' })], [pool({ window: { start: '11', end: '7' } })]);

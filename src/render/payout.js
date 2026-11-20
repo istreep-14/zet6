@@ -63,7 +63,12 @@ function safeTradeUp(vm) {
 
 function applyBillCountsToPool(vm, newPool) {
   updatePool(vm.state.pools[0].id, pool => {
-    pool.cash.entryMode = 'perbill';
+    // The swapped drawer is now fully counted: the rest and any register
+    // over / short are folded into these counts.
+    pool.cash.entryMode = 'mixed';
+    pool.cash.netTotal = '';
+    pool.cash.restMode = 'rest';
+    pool.cash.adjust = '';
     DENOMS.forEach(d => { pool.cash.billCounts[d] = (newPool[d] || 0) > 0 ? String(newPool[d]) : ''; });
   });
   invalidateTips();   // the Tips inputs must show the new counts
@@ -88,15 +93,15 @@ function Envelopes({ vm, byPerson, remBills, note }) {
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
   const cols = DENOMS.filter(d => colTotal(d) > 0);
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
-  const n = v => v > 0 ? html`<span class="font-rounded font-bold">${v}</span>` : html`<span class="text-ink-3/40">–</span>`;
+  const n = v => v > 0 ? html`<span class="font-semibold">${v}</span>` : html`<span class="text-ink-3/40">–</span>`;
   return html`<${Section} title="Envelopes" aside=${note}><${Table} fixed
     cols=${[{ label: 'Name', w: 'w-[28%]' }, ...cols.map(d => ({ head: html`<span class="bill-col rounded-md px-1.5 py-0.5 normal-case tracking-tight" data-d=${d}>${d}</span>` })), { label: 'Pay', align: 'right', w: 'w-[20%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => App.personModal(p.id),
-        cells: [p.name, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), html`<${Money} value=${p.final} class=${cx('font-rounded font-bold', !(p.final > 0) && 'text-ink-3')} />`] })),
+        cells: [p.name, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), html`<${Money} value=${p.final} class=${cx('font-semibold', !(p.final > 0) && 'text-ink-3')} />`] })),
       ...(s.leftover > 0 ? [{ key: 'chump', tone: 'muted', cells: ['Chump', ...cols.map(d => n(rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
     ]}
-    foot=${['Total', ...cols.map(d => html`<span class="bill-col rounded-md px-1.5 py-0.5" data-d=${d}>${colTotal(d)}</span>`), html`<${Money} value=${grand} class="font-rounded text-gold" />`]} /><//>`;
+    foot=${['Total', ...cols.map(d => html`<span class="bill-col rounded-md px-1.5 py-0.5" data-d=${d}>${colTotal(d)}</span>`), html`<${Money} value=${grand} />`]} /><//>`;
 }
 
 // ── Status: exact change, or the fix card ────────────────────────────────────
@@ -110,8 +115,8 @@ function SmallBills({ req, pool }) {
   const minFives = Math.max(0, (req.minOneFiveValue - req.minOnes) / 5);
   const minTens = Math.max(0, (req.minOneFiveTenValue - req.minOneFiveValue) / 10);
   const row = (d, need, have, short) => ({ key: d, cells: [html`<${Denom} d=${d} />`, Math.ceil(need), have, short > 0
-    ? html`<span class="font-semibold text-red">short ${Math.ceil(short / d)}</span>`
-    : html`<span class="font-semibold text-green">${have < Math.ceil(need) ? '✓ via smaller' : '✓'}</span>`] });
+    ? html`<span class="font-semibold text-bad">short ${Math.ceil(short / d)}</span>`
+    : html`<span class="font-semibold text-good">${have < Math.ceil(need) ? '✓ via smaller' : '✓'}</span>`] });
   return html`<${Table} cols=${[{ label: 'Small bills' }, { label: 'Need' }, { label: 'Have' }, { label: '', align: 'right' }]} rows=${[
     row(1, req.minOnes, pool[1] || 0, req.onesShort),
     row(5, minFives, pool[5] || 0, Math.max(0, req.oneFiveShort - req.onesShort)),
@@ -125,8 +130,8 @@ function SwapTable({ now, deltas, after }) {
     rows=${ds.map(d => {
       const v = deltas[d] || 0;
       return { key: d, cells: [html`<${Denom} d=${d} />`, html`<span class="text-ink-2">${now[d] || 0}</span>`,
-        html`<span class=${cx('font-semibold', v > 0 ? 'text-green' : v < 0 ? 'text-red' : 'text-ink-3')}>${v === 0 ? '—' : (v > 0 ? '+' : '−') + Math.abs(v)}</span>`,
-        html`<span class=${cx('font-semibold', v && 'text-gold')}>${after[d] || 0}</span>`] };
+        html`<span class=${cx('font-semibold', v > 0 ? 'text-good' : v < 0 ? 'text-bad' : 'text-ink-3')}>${v === 0 ? '—' : (v > 0 ? '+' : '−') + Math.abs(v)}</span>`,
+        html`<span class=${cx('font-semibold', !v && 'text-ink-2')}>${after[d] || 0}</span>`] };
     })} />`;
 }
 
@@ -134,8 +139,8 @@ function FixCard({ vm, errMsg, plan }) {
   return html`<${Banner} tone="error" title="Bills don’t work out yet" sub=${errMsg}>
     ${smallBillsShort(vm.req) && html`<${SmallBills} req=${vm.req} pool=${vm.bills} />`}
     ${plan
-      ? html`<div class="text-[0.875rem] font-semibold text-ink-2">Fewest bills to swap at the bar:</div>
-        ${plan.trades.length > 0 && html`<ul class="flex flex-col gap-1.5">${plan.trades.map(t => html`<li class="rounded-xl bg-black/20 px-3.5 py-2.5 text-[1rem] font-semibold">${t}</li>`)}</ul>`}
+      ? html`<div class="t-small font-semibold text-ink-2">Fewest bills to swap at the bar:</div>
+        ${plan.trades.length > 0 && html`<ul class="flex flex-col gap-1.5">${plan.trades.map(t => html`<li class="t-body rounded-xl bg-surface px-3.5 py-2.5 font-semibold">${t}</li>`)}</ul>`}
         <${SwapTable} now=${vm.bills} deltas=${plan.deltas} after=${plan.pool} />
         <${Button} variant="primary" block icon="swap" onClick=${applyPendingTradeDown}>Apply swap to the cash count<//>`
       : html`<${Button} block onClick=${() => App.tab('tips')}>${vm.state.pools.length > 1 ? 'Edit pool cash' : 'Edit the cash count'}<//>`}
@@ -143,10 +148,10 @@ function FixCard({ vm, errMsg, plan }) {
 }
 
 function TidyDrawer({ vm, plan }) {
-  return html`<details class="group rounded-card bg-surface">
+  return html`<details class="group overflow-hidden rounded-card bg-surface">
     <summary class="flex min-h-14 cursor-pointer list-none items-center gap-3 px-4 [&::-webkit-details-marker]:hidden">
-      <span class="grid size-8 place-items-center rounded-lg bg-white/8 text-ink"><${Icon} name="swap" class="size-[1.125rem]" /></span>
-      <span class="flex-1"><span class="block font-semibold">Tidy the drawer</span><span class="text-[0.8125rem] text-ink-2">Swap extra small bills for ${plan.new20s} × $20</span></span>
+      <span class="grid size-8 place-items-center rounded-lg bg-surface-2 text-ink-2"><${Icon} name="swap" class="size-[1.125rem]" /></span>
+      <span class="flex-1"><span class="t-body block font-medium">Tidy the drawer</span><span class="t-small text-ink-3">Swap extra small bills for ${plan.new20s} × $20</span></span>
       <${Icon} name="chevD" class="size-5 text-ink-3 transition group-open:rotate-180" />
     </summary>
     <div class="flex flex-col gap-3 px-4 pb-4">
@@ -176,7 +181,7 @@ function Worksheet({ vm }) {
   const tipped = ordered.filter(p => p.hours > 0 && !(sup && p.role === 'support'));
   const supPeople = sup ? ordered.filter(p => p.role === 'support' && p.hours > 0) : [];
 
-  const V = 'text-[0.875rem] leading-snug text-ink-2 [&_b]:font-bold [&_b]:text-ink';
+  const V = 't-small text-ink-2 [&_b]:font-semibold [&_b]:text-ink';
   const steps = [];
   const step = (label, body) => steps.push({ label, body });
 
@@ -193,9 +198,9 @@ function Worksheet({ vm }) {
   const line = (p, rate) => html`<span class="truncate py-1.5 text-ink">${p.name}</span>
     <span class="py-1.5 pl-2 text-right">${h(p.hours)} × ${rate.toFixed(4)}</span>
     <span class="py-1.5 pl-2 text-right">= ${cents(p.exact)}</span>
-    <span class="py-1.5 pl-2 text-right font-bold text-ink">${p.base}${p.bonus > 0 && html`<em class="ml-0.5 text-[0.75rem] not-italic text-red">+${p.bonus}</em>`}</span>`;
+    <span class="py-1.5 pl-2 text-right font-semibold text-ink">${p.base}${p.bonus > 0 && html`<em class="ml-0.5 text-[0.75rem] not-italic text-bad">+${p.bonus}</em>`}</span>`;
   step('Hours × rate, rounded down to whole dollars',
-    html`<div class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] whitespace-nowrap rounded-xl bg-fill-2 px-2.5 py-0.5 text-[0.8125rem] text-ink-2 max-[23.375rem]:text-[0.75rem]">
+    html`<div class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] whitespace-nowrap rounded-xl bg-surface-2 px-2.5 py-0.5 text-[0.8125rem] text-ink-2 max-[23.375rem]:text-[0.75rem]">
       ${tipped.map(p => line(p, pool.rate))}${supPeople.map(p => line(p, sup.rate))}</div>`);
 
   const bonusSum = ordered.reduce((t, p) => t + p.bonus, 0);
@@ -210,12 +215,12 @@ function Worksheet({ vm }) {
       <div class=${V}>${where}</div>`);
   }
 
-  return html`<${Section} title="How the split works" aside=${html`<span class="font-rounded text-[0.9375rem] font-bold text-green">$${pool.rate.toFixed(2)}/hr</span>`}>
+  return html`<${Section} title="How the split works" aside=${html`<span class="t-small font-semibold text-good">$${pool.rate.toFixed(2)}/hr</span>`}>
   <${Card}>
     <ol class="flex flex-col gap-4">
       ${steps.map((st, i) => html`<li key=${i} class="grid grid-cols-[1.375rem_minmax(0,1fr)] gap-2.5">
-        <span class="grid size-[1.375rem] place-items-center rounded-full bg-gold text-[0.75rem] font-bold text-gold-ink">${i + 1}</span>
-        <div class="flex min-w-0 flex-col gap-1"><div class="text-[0.875rem] font-semibold">${st.label}</div>${st.body}</div>
+        <span class="grid size-[1.375rem] place-items-center rounded-full bg-surface-2 text-[0.75rem] font-semibold text-ink-2">${i + 1}</span>
+        <div class="flex min-w-0 flex-col gap-1"><div class="t-small font-semibold">${st.label}</div>${st.body}</div>
       </li>`)}
     </ol>
   <//><//>`;

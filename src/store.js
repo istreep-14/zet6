@@ -32,9 +32,11 @@ export function newPool(label = 'Pool') {
     // pct-derived $/hr, hours[staffId] overrides a support person's overlap.
     support: { pct: '', rate: '', hours: {} },
     cash: {
-      entryMode: 'nettotal',
+      entryMode: 'mixed',          // counted bills + uncounted rest (netTotal)
       billCounts: blankBillStrings(),
       netTotal: '',
+      restMode: 'rest',            // netTotal is 'rest' (uncounted) or 'total' (incl. counted)
+      adjust: '',                  // signed register over / short, e.g. '-50'
     },
   };
 }
@@ -57,7 +59,7 @@ export function initialState() {
     overrides: { bonuses: {} },
     // Simple mode by default: one staff list, one pool. allRoles exposes the
     // server/support split; multiPool exposes add-pool / windows / labels.
-    settings: { allRoles: false, multiPool: false, clock24: false, size: 'm' },
+    settings: { allRoles: false, multiPool: false, clock24: false, size: 'm', theme: 'system' },
     ui: { activeTab: 'summary', staffViewRole: 'bartender', selectedPool: pool.id, sub: {} },
   };
   return state;
@@ -208,6 +210,7 @@ export function normalizeSettings(state) {
     multiPool: typeof s.multiPool === 'boolean' ? s.multiPool : state.pools.length > 1,
     clock24: typeof s.clock24 === 'boolean' ? s.clock24 : false,
     size: SIZES.includes(s.size) ? s.size : 'm',
+    theme: THEMES.includes(s.theme) ? s.theme : 'system',
   };
   return state;
 }
@@ -217,6 +220,13 @@ export const SIZES = ['s', 'm', 'l'];
 export function setSize(size) {
   if (!SIZES.includes(size)) return;
   mutate(s => { s.settings.size = size; }, { immediate: true });
+}
+
+// Theme: follow the system, or force light / dark (css/app.css).
+export const THEMES = ['system', 'light', 'dark'];
+export function setTheme(theme) {
+  if (!THEMES.includes(theme)) return;
+  mutate(s => { s.settings.theme = theme; }, { immediate: true });
 }
 
 export function setSetting(key, value) {

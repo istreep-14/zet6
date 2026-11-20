@@ -17,7 +17,7 @@ import { fmtHrs } from '../util.js';
 import { parseTime, fmtTimeAbs, fmtClockShort, resolveIn, nextAfter, absToInRaw, absToOutRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { getRoster } from '../roster.js';
 import { html, render, useState, useRef, useLayoutEffect } from '../ui/preact.js';
-import { cx, Clock, Icon, Card, Button, Alert, Seg, SwitchRow, List, Item, Section, INPUT, ROLE_DOT, ROLE_PLURAL, TABLE_HEAD, THEAD, Sentinel, zebra } from '../ui/pkit.js';
+import { cx, Clock, Icon, Card, Button, Alert, Seg, SwitchRow, List, Item, Section, INPUT_PAGE, ROLE_DOT, ROLE_PLURAL, TABLE_HEAD, THEAD, Sentinel, zebra } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, sheetFoot, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 import { activeSub } from './tabs.js';
 
@@ -81,7 +81,7 @@ function Note({ vm }) {
       if (!p.usedDefaults.out && p.outAbs !== null && p.outAbs > closeAbs + 0.001) warnings.push(p.name + ' is out after the close time');
     });
   }
-  return html`<div class="px-1 text-[0.875rem] text-ink-2">${parts.join(' · ')}</div>
+  return html`<div class="t-small px-4 text-ink-3">${parts.join(' · ')}</div>
     ${warnings.map(w => html`<${Alert} key=${w} tone="warn">${w}<//>`)}`;
 }
 
@@ -94,28 +94,32 @@ const onShiftSet = state => new Set(state.staff.map(p => p.name.trim().toLowerCa
 
 function QuickAdd({ vm }) {
   const all = getRoster();
-  if (!all.length) return html`<p class="px-1 text-[0.8125rem] text-ink-3">Names you add are saved for quick adding next shift.</p>`;
+  if (!all.length) return html`<p class="t-small px-4 text-ink-3">Names you add are saved for quick adding next shift.</p>`;
   const onShift = onShiftSet(vm.state);
   const avail = all.filter(r => !onShift.has(r.name.toLowerCase()));
   const show = (avail.length ? avail : all).slice(0, 3);
   return html`<${List}><${Item} onClick=${() => App.openRoster()} title="Quick add"
-    lead=${html`<span class="grid size-10 shrink-0 place-items-center rounded-xl bg-gold/15 text-gold"><${Icon} name="plus" class="size-5" /></span>`}
+    lead=${html`<span class="grid size-10 shrink-0 place-items-center rounded-[0.625rem] bg-accent/12 text-accent"><${Icon} name="plus" class="size-5" /></span>`}
     sub=${avail.length ? show.map(r => r.name).join(', ') + (avail.length > show.length ? ` +${avail.length - show.length}` : '') : 'Everyone saved is on this shift'} /><//>`;
 }
 
 let rosterSel = new Set();      // lowercased names picked in the sheet
 let rosterEditing = false;
-onSheetClose('sheet-roster', () => { rosterSel = new Set(); rosterEditing = false; });
+let rosterStart = null;         // abs In for the next add; null = the default
+let rosterNote = '';            // "Added Maya, Leo · 4:00p"
+onSheetClose('sheet-roster', () => { rosterSel = new Set(); rosterEditing = false; rosterStart = null; rosterNote = ''; });
 
 export function openRosterSheet() {
   rosterSel = new Set();
   rosterEditing = false;
+  rosterStart = null;
+  rosterNote = '';
   openSheet('sheet-roster');
   if (lastVm) renderRoster(lastVm);
 }
 const rerenderRoster = () => { if (lastVm) renderRoster(lastVm); };
 
-function RosterCard({ r, onShift }) {
+function RosterCard({ r, onShift, startOf }) {
   const key = r.name.toLowerCase();
   const on = onShift.has(key);
   const sel = rosterSel.has(key);
@@ -124,13 +128,13 @@ function RosterCard({ r, onShift }) {
     if (sel) rosterSel.delete(key); else rosterSel.add(key);
     rerenderRoster();
   };
-  const mark = rosterEditing ? 'bg-red text-white' : sel ? 'bg-gold text-gold-ink' : on ? 'bg-ink-3 text-surface' : 'bg-white/10';
-  return html`<button class=${cx('relative flex min-h-[4.75rem] flex-col items-center justify-center gap-1 rounded-2xl px-2 py-2.5 transition active:scale-95',
-      sel ? 'bg-gold/20 ring-2 ring-inset ring-gold' : 'bg-white/[.08]', on && !rosterEditing && 'opacity-45')}
+  const mark = rosterEditing ? 'bg-bad text-white' : sel ? 'bg-accent text-on-accent' : on ? 'bg-ink-3 text-surface' : 'bg-surface-2';
+  return html`<button class=${cx('relative flex min-h-[4.75rem] flex-col items-center justify-center gap-1 rounded-card px-2 py-2.5 transition active:scale-95',
+      sel ? 'bg-accent/12 ring-2 ring-inset ring-accent' : 'bg-surface', on && !rosterEditing && 'opacity-45')}
     onClick=${tap} disabled=${on && !rosterEditing} aria-pressed=${String(sel)}>
-    <span class=${cx('absolute right-2 top-2 grid size-[1.375rem] place-items-center rounded-full text-[0.75rem] font-extrabold', mark)} aria-hidden="true">${rosterEditing ? '✕' : sel || on ? '✓' : ''}</span>
-    <span class="line-clamp-2 max-w-full px-4 text-center text-[1.0625rem] font-semibold leading-tight [overflow-wrap:anywhere]">${r.name}</span>
-    <span class=${cx('min-h-3.5 text-[0.75rem] leading-3.5', rosterEditing ? 'text-red' : sel ? 'text-gold' : 'text-ink-3')}>${rosterEditing ? 'Remove' : on ? 'On shift' : sel ? 'Selected' : ''}</span>
+    <span class=${cx('absolute right-2 top-2 grid size-[1.375rem] place-items-center rounded-full text-[0.75rem] font-bold', mark)} aria-hidden="true">${rosterEditing ? '✕' : sel || on ? '✓' : ''}</span>
+    <span class="line-clamp-2 max-w-full px-4 t-body text-center font-medium leading-tight [overflow-wrap:anywhere]">${r.name}</span>
+    <span class=${cx('min-h-3.5 text-[0.75rem] leading-3.5', rosterEditing ? 'text-bad' : sel ? 'text-accent' : 'text-ink-3')}>${rosterEditing ? 'Remove' : on ? (startOf(key) != null ? 'On · ' + fmtClockShort(startOf(key)) : 'On shift') : sel ? 'Selected' : ''}</span>
   </button>`;
 }
 
@@ -144,31 +148,62 @@ function Roster({ vm }) {
   const allPicked = avail.length > 0 && avail.every(r => rosterSel.has(r.name.toLowerCase()));
   const groups = !rolesOn ? [{ role: null, people: all }]
     : ROLES.map(role => ({ role, people: all.filter(r => r.role === role) })).filter(g => g.people.length);
-  const link = 'h-9 px-1 text-[1rem] font-semibold text-gold disabled:text-ink-3';
+  const link = 't-body h-9 px-1 font-semibold text-accent disabled:text-ink-3';
+  const starts = new Map(vm.state.staff.filter(p => p.name.trim()).map(p => [p.name.trim().toLowerCase(), times(state, p, vm).inAbs]));
+  const startOf = k => starts.get(k) ?? null;
   return html`<div class="flex min-h-9 items-center justify-between">
       ${rosterEditing
-        ? html`<span class="text-[0.8125rem] text-ink-2">Tap a name to forget it on this device</span>`
+        ? html`<span class="t-small text-ink-3">Tap a name to forget it on this device</span>`
         : html`<button class=${link} disabled=${!avail.length} onClick=${() => {
             rosterSel = allPicked ? new Set() : new Set(avail.map(r => r.name.toLowerCase())); rerenderRoster();
           }}>${allPicked ? 'Clear' : 'Select all'}</button>`}
       <button class=${link} onClick=${() => { rosterEditing = !rosterEditing; rerenderRoster(); }}>${rosterEditing ? 'Done' : 'Edit'}</button>
     </div>
     ${groups.map(g => html`<div key=${g.role || 'all'} class="flex flex-col gap-2">
-      ${g.role && html`<div class="mt-1 flex items-center gap-2 text-[0.875rem] font-semibold text-ink-2"><span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}</div>`}
-      <div class="grid auto-rows-fr grid-cols-3 gap-2.5">${g.people.map(r => html`<${RosterCard} key=${r.name} r=${r} onShift=${onShift} />`)}</div>
+      ${g.role && html`<div class="t-cap mt-1 flex items-center gap-2 px-1 text-ink-3"><span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}</div>`}
+      <div class="grid auto-rows-fr grid-cols-3 gap-2.5">${g.people.map(r => html`<${RosterCard} key=${r.name} r=${r} onShift=${onShift} startOf=${startOf} />`)}</div>
     </div>`)}`;
 }
 
-function RosterFoot() {
+// Footer: who starts when. Pick a start (Default or a half-hour around it),
+// then Add — repeat for the next group (2 at 4p, 2 at 5p, 1 at 6p …); the
+// sheet stays open while saved names are left.
+function RosterFoot({ vm }) {
   const n = rosterSel.size;
   if (rosterEditing) return html`<${Button} block onClick=${() => { rosterEditing = false; rerenderRoster(); }}>Done<//>`;
-  return html`<${Button} variant="primary" block disabled=${!n} onClick=${() => App.rosterAddSelected()}>
-    ${n ? `Add ${n} ${n === 1 ? 'person' : 'people'}` : 'Select people to add'}<//>`;
+  const g = parseTime(vm.state.defaults.global.in).value;
+  const def = g != null ? resolveIn(g) : 17;
+  const chips = [];
+  for (let v = def - 2; v <= def + 2.01; v += 0.5) if (v >= IN_MIN_ABS && v <= IN_MAX_ABS && Math.abs(v - def) > 0.01) chips.push(v);
+  const chip = (on, label, pick) => html`<button class=${cx('t-small h-8 shrink-0 rounded-full px-3 font-semibold tabular-nums transition active:scale-95',
+    on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2')} aria-pressed=${String(on)} onClick=${pick}>${label}</button>`;
+  const at = rosterStart == null ? '' : ' · ' + fmtClockShort(rosterStart);
+  return html`<div class="flex flex-col gap-2.5">
+    ${rosterNote && html`<div class="t-small text-center text-ink-3">${rosterNote}</div>`}
+    <div class="flex items-center gap-2">
+      <span class="t-cap shrink-0 text-ink-3">Start</span>
+      <div class="flex min-w-0 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        ${chip(rosterStart == null, 'Default ' + fmtClockShort(def), () => { rosterStart = null; rerenderRoster(); })}
+        ${chips.map(v => html`<span key=${v}>${chip(rosterStart != null && Math.abs(rosterStart - v) < 0.01, fmtClockShort(v), () => { rosterStart = v; rerenderRoster(); })}</span>`)}
+      </div>
+    </div>
+    <${Button} variant="primary" block disabled=${!n} onClick=${() => App.rosterAddSelected()}>
+      ${n ? `Add ${n} ${n === 1 ? 'person' : 'people'}${at}` : 'Select people to add'}<//>
+  </div>`;
 }
 
-// Picks as [{ name, role }] (roster role), dropping anyone now on shift.
+// Picks as [{ name, role, in }] (roster role; `in` = the raw start typed for
+// the chosen Start, '' for the default), dropping anyone now on shift.
 export function rosterSelected() {
-  return getRoster().filter(r => rosterSel.has(r.name.toLowerCase())).map(r => ({ name: r.name, role: r.role }));
+  const inRaw = rosterStart == null ? '' : absToInRaw(rosterStart);
+  return getRoster().filter(r => rosterSel.has(r.name.toLowerCase())).map(r => ({ name: r.name, role: r.role, in: inRaw }));
+}
+
+// After adding: clear the picks, note who went in at what time.
+export function rosterAdded(picks) {
+  rosterNote = 'Added ' + picks.map(p => p.name).join(', ') + (rosterStart == null ? '' : ' · ' + fmtClockShort(rosterStart));
+  rosterSel = new Set();
+  rerenderRoster();
 }
 
 function renderRoster(vm) {
@@ -177,7 +212,7 @@ function renderRoster(vm) {
   const names = new Set(getRoster().map(r => r.name.toLowerCase()));
   rosterSel = new Set([...rosterSel].filter(k => names.has(k) && !onShift.has(k)));
   render(html`<${Roster} vm=${vm} />`, sheetBody('sheet-roster'));
-  render(html`<${RosterFoot} />`, sheetFoot('sheet-roster'));
+  render(html`<${RosterFoot} vm=${vm} />`, sheetFoot('sheet-roster'));
 }
 
 // ── People list ──────────────────────────────────────────────────────────────
@@ -202,7 +237,7 @@ const PX_PER_STEP = 18;        // horizontal drag distance per 15 minutes
 // click can't land on the sheet it just opened. Set times are filled bright, inherited defaults dim.
 // `data-drag` keeps page swipes off it; clicks don't bubble (so a pill inside
 // a tappable row doesn't also open the row).
-export function DragTime({ abs, min, max, onSet, onTap, set, bad, label, cls = CELL, tone }) {
+export function DragTime({ abs, min, max, onSet, onTap, set, bad, label, cls = CELL, tone, full = false }) {
   const [drag, setDrag] = useState(null);         // { x0, abs0, abs, moved }
   const dragged = useRef(false);                  // swallow the click after a drag
   const down = e => {
@@ -229,32 +264,32 @@ export function DragTime({ abs, min, max, onSet, onTap, set, bad, label, cls = C
   };
   const shown = drag?.moved ? drag.abs : abs;
   return html`<button data-drag class=${cx(cls, 'touch-pan-y select-none',
-      drag?.moved ? 'scale-105 bg-gold font-bold text-gold-ink shadow-[0_0.375rem_1.125rem_-0.375rem_rgb(255_210_63/.7)]'
-        : cx(drag && 'bg-white/[.14]', bad ? 'font-semibold text-red' : tone || (set ? 'font-semibold text-ink' : 'text-ink-2')))}
+      drag?.moved ? 'scale-105 bg-accent font-semibold text-on-accent'
+        : cx(drag && 'bg-ink/10', bad ? 'font-semibold text-bad' : tone || (set ? 'font-semibold text-ink' : 'text-ink-2')))}
     onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${() => setDrag(null)}
     onClick=${e => { e.stopPropagation(); if (dragged.current) { dragged.current = false; return; } onTap?.(); }}
     aria-label=${label + ' — tap to edit, drag sideways to adjust'}>
-    ${bad ? '?' : shown != null ? html`<${Clock} abs=${shown} />` : '—'}</button>`;
+    ${bad ? '?' : shown != null ? html`<${Clock} abs=${shown} full=${full} />` : '—'}</button>`;
 }
 
 // A person's In / Out (tap → quick time sheet).
-function TimePill({ vm, p, field, cls, tone }) {
+function TimePill({ vm, p, field, cls, tone, full }) {
   const t = times(vm.state, p, vm);
   const k = pickerFor(vm, p, field);
   return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${field === 'in' ? t.inSet : t.outSet} bad=${t.bad}
-    min=${k.min} max=${k.max} onSet=${k.onSet} onTap=${() => App.editTime(p.id, field)} cls=${cls} tone=${tone}
+    min=${k.min} max=${k.max} onSet=${k.onSet} onTap=${() => App.editTime(p.id, field)} cls=${cls} tone=${tone} full=${full}
     label=${p.name + ' ' + field + ' time'} />`;
 }
 
 // By staff id (Summary's payout rows).
-export function StaffTime({ vm, id, field, cls, tone }) {
+export function StaffTime({ vm, id, field, cls, tone, full }) {
   const p = vm.state.staff.find(x => x.id === id);
-  return p ? html`<${TimePill} vm=${vm} p=${p} field=${field} cls=${cls} tone=${tone} />` : null;
+  return p ? html`<${TimePill} vm=${vm} p=${p} field=${field} cls=${cls} tone=${tone} full=${full} />` : null;
 }
 
 // The shift's default open / close (defaults.global). Tap → shift panel at
 // its times; drag writes the new default.
-export function DefaultTime({ vm, field, cls }) {
+export function DefaultTime({ vm, field, cls, tone, full }) {
   const g = vm.state.defaults.global;
   const inV = parseTime(g.in).value, outV = parseTime(g.out).value;
   const inAbs = inV != null ? resolveIn(inV) : null;
@@ -263,21 +298,21 @@ export function DefaultTime({ vm, field, cls }) {
   return html`<${DragTime} abs=${isIn ? inAbs : outAbs} set=${true}
     min=${isIn ? IN_MIN_ABS : (inAbs ?? 17) + 0.25} max=${isIn ? IN_MAX_ABS : (inAbs ?? 17) + 12}
     onSet=${abs => App.globalDefault(field, isIn ? absToInRaw(abs) : absToOutRaw(abs))}
-    onTap=${() => App.openDefaults()} cls=${cls} label=${'Default ' + (isIn ? 'open' : 'close') + ' time'} />`;
+    onTap=${() => App.openDefaults()} cls=${cls} tone=${tone} full=${full} label=${'Default ' + (isIn ? 'open' : 'close') + ' time'} />`;
 }
 
 function PersonRow({ vm, p, i = 0 }) {
   const t = times(vm.state, p, vm);
-  const closer = t.forced ? 'bg-red text-white'
-    : t.closer ? 'bg-red/25 text-red' : 'bg-white/[.08] text-transparent';
+  const closer = t.forced ? 'bg-bad text-white'
+    : t.closer ? 'bg-bad/25 text-bad' : 'bg-surface-2 text-transparent';
   return html`<div class=${cx(STAFF_ROW, 'min-h-[3.375rem] py-1.5', zebra(i))}>
     <button class="flex min-w-0 items-center gap-1 text-left active:opacity-60" onClick=${() => App.editStaff(p.id)}>
-      <span class="truncate text-[1.25rem] font-semibold">${p.name}</span>
+      <span class="truncate text-[1.125rem] font-medium">${p.name}</span>
       <${Icon} name="chevR" class="size-3.5 text-ink-3" />
     </button>
     <${TimePill} vm=${vm} p=${p} field="in" />
     <${TimePill} vm=${vm} p=${p} field="out" />
-    <span class=${cx('text-center text-[1rem] font-medium tabular-nums', t.hrs == null ? 'text-red' : 'text-ink-2')}>${t.hrs != null ? fmtHrs(t.hrs) : '?'}</span>
+    <span class=${cx('text-center text-[1rem] font-medium tabular-nums', t.hrs == null ? 'text-bad' : 'text-ink-2')}>${t.hrs != null ? fmtHrs(t.hrs) : '?'}</span>
     <button class="grid h-10 place-items-center" onClick=${() => App.toggleCloser(p.id)}
       aria-pressed=${String(t.forced)} aria-label=${p.name + ' closer'}>
       <span class=${cx('grid size-7 place-items-center rounded-full transition', closer)}><${Icon} name="check" class="size-4" /></span>
@@ -300,9 +335,9 @@ function Group({ vm, role, people, title }) {
     ${people.length
       ? people.map((p, i) => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} i=${i} />`)
       : null}
-    <button class="flex h-12 w-full items-center gap-2 border-t border-sep px-4 text-[1rem] font-semibold text-gold transition active:bg-raised"
+    <button class="t-body flex h-12 w-full items-center gap-2 border-t border-line px-4 font-semibold text-accent transition active:bg-surface-2"
       onClick=${() => App.addBlank(role || 'bartender')}><${Icon} name="plus" class="size-[1.125rem]" />${role ? 'Add ' + ROLE_ONE[role] : 'Add person'}</button>
-    <button class="flex h-11 w-full items-center gap-2 border-t border-sep bg-raised/60 px-4 text-[0.875rem] text-ink-2 transition active:bg-raised"
+    <button class="t-small flex h-11 w-full items-center gap-2 border-t border-line px-4 text-ink-3 transition active:bg-surface-2"
       onClick=${() => App.openDefaults()} aria-label="Default times">
       <${Icon} name="clock" class="size-4 text-ink-3" />Defaults<span class="ml-auto font-semibold tabular-nums text-ink">${defaultsLabel(def)}</span><${Icon} name="chevR" class="size-4 text-ink-3" />
     </button>
@@ -321,7 +356,7 @@ function Staff({ vm }) {
     <${Note} vm=${vm} />
     <${QuickAdd} vm=${vm} />
     ${groups.map(g => html`<${Group} key=${g.role || 'all'} vm=${vm} ...${g} />`)}
-    ${named.length > 0 && html`<p class="px-6 text-center text-[0.8125rem] leading-snug text-ink-3">Tap a time to change it, the circle to make someone a closer, or a name for more. Faded times are the defaults.</p>`}
+    ${named.length > 0 && html`<p class="t-small px-6 text-center text-ink-3">Tap a time to change it, the circle to make someone a closer, or a name for more. Faded times are the defaults.</p>`}
   </div>`;
 }
 
@@ -355,7 +390,7 @@ function ChipRow({ values, current, onPick, fmt }) {
       ${values.map(v => {
         const on = current != null && Math.abs(v - current) < 0.01;
         return html`<button key=${v} data-v=${v} aria-pressed=${String(on)} onClick=${() => onPick(v)}
-          class=${cx('h-10 rounded-full px-3.5 text-[0.9375rem] font-semibold tabular-nums transition active:scale-95', on ? 'bg-gold text-gold-ink' : 'bg-fill text-ink-2')}>${fmt(v)}</button>`;
+          class=${cx('t-small h-9 rounded-full px-3.5 font-semibold tabular-nums transition active:scale-95', on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2')}>${fmt(v)}</button>`;
       })}
     </div>
   </div>`;
@@ -366,18 +401,18 @@ function TimePicker({ label, abs, isSet, defAbs, min, max, onSet, onReset }) {
   const chips = [];
   const center = defAbs ?? abs ?? min;
   for (let v = Math.ceil((center - 3) * 2) / 2; v <= center + 3; v += 0.5) if (v >= min && v <= max) chips.push(v);
-  const sb = 'grid size-12 shrink-0 place-items-center rounded-full bg-fill text-[1.625rem] text-ink transition active:bg-high disabled:opacity-30';
-  return html`<div class="flex flex-col gap-2.5 rounded-2xl bg-raised p-3.5">
+  const sb = 'grid size-11 shrink-0 place-items-center rounded-full bg-surface-2 text-[1.5rem] text-ink transition active:scale-95 disabled:opacity-30';
+  return html`<div class="flex flex-col gap-3 rounded-card bg-surface p-3.5">
     <div class="flex items-center gap-3">
-      <span class="w-10 text-[0.8125rem] font-bold uppercase tracking-wider text-ink-2">${label}</span>
+      <span class="t-cap w-10 text-ink-3">${label}</span>
       <button class=${sb} onClick=${() => step(-0.25)} disabled=${abs == null || abs <= min} aria-label=${label + ' 15 minutes earlier'}>−</button>
-      <span class=${cx('flex-1 text-center font-rounded text-[2.125rem] font-bold tabular-nums tracking-tight', !isSet && 'text-ink-2')}>${abs != null ? fmtTimeAbs(abs) : '—'}</span>
+      <span class=${cx('flex-1 text-center text-[2rem] font-semibold tabular-nums tracking-tight', !isSet && 'text-ink-2')}>${abs != null ? fmtTimeAbs(abs) : '—'}</span>
       <button class=${sb} onClick=${() => step(0.25)} disabled=${abs == null || abs >= max} aria-label=${label + ' 15 minutes later'}>+</button>
     </div>
     <${ChipRow} values=${chips} current=${abs} onPick=${onSet} fmt=${fmtTimeAbs} />
-    <div class="flex items-center justify-between px-0.5 text-[0.8125rem]">
+    <div class="t-small flex items-center justify-between px-0.5">
       <span class="text-ink-3">${isSet ? 'Set for this person' : 'Using the default'}</span>
-      ${isSet && html`<button class="font-semibold text-gold" onClick=${onReset}>Use default${defAbs != null ? ' · ' + fmtTimeAbs(defAbs) : ''}</button>`}
+      ${isSet && html`<button class="font-semibold text-accent" onClick=${onReset}>Use default${defAbs != null ? ' · ' + fmtTimeAbs(defAbs) : ''}</button>`}
     </div>
   </div>`;
 }
@@ -404,7 +439,7 @@ function Editor({ vm, p }) {
   const set = (field, raw) => App.staffField(p.id, field, raw, true);
 
   return html`
-    <input class=${cx(INPUT, 'h-14 rounded-2xl text-[1.375rem] font-bold')} value=${p.name} placeholder="Name"
+    <input class=${cx(INPUT_PAGE, 'h-12 text-[1.25rem] font-semibold')} value=${p.name} placeholder="Name"
       autocomplete="off" autocorrect="off" autocapitalize="words" enterkeyhint="done" aria-label="Name"
       onInput=${e => App.staffField(p.id, 'name', e.target.value)} onChange=${() => App.rememberStaff(p.id)}
       onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} />
@@ -412,9 +447,9 @@ function Editor({ vm, p }) {
       items=${ROLES.map(r => ({ value: r, label: ROLE_SHORT[r] }))} />`}
     <${TimePicker} ...${pickerFor(vm, p, 'in')} />
     <${TimePicker} ...${pickerFor(vm, p, 'out')} />
-    <div class="flex items-center justify-between rounded-2xl bg-raised px-4 py-3">
-      <span class="text-[0.9375rem] text-ink-2">${t.hrs != null ? fmtHrs(t.hrs) + ' hours' : 'Check the times'}</span>
-      ${share && html`<span class="text-[0.9375rem] text-ink-2">takes home <b class="font-rounded text-[1.25rem] text-gold">$${share.final}</b></span>`}
+    <div class="t-body flex items-center justify-between rounded-card bg-surface px-4 py-3">
+      <span class="text-ink-2">${t.hrs != null ? fmtHrs(t.hrs) + ' hours' : 'Check the times'}</span>
+      ${share && html`<span class="text-ink-2">takes home <b class="t-head text-ink">$${share.final}</b></span>`}
     </div>
     <${List}>
       <${SwitchRow} on=${t.forced} onClick=${() => App.toggleCloser(p.id)} label="Closer"
@@ -443,9 +478,9 @@ function TimeEditor({ vm, p, field }) {
     <${Seg} value=${field} onChange=${f => openTimeEditor(p.id, f)}
       items=${[{ value: 'in', label: 'In · ' + (t.inAbs != null ? fmtClockShort(t.inAbs) : '—') }, { value: 'out', label: 'Out · ' + (t.outAbs != null ? fmtClockShort(t.outAbs) : '—') }]} />
     <${TimePicker} key=${field} ...${pickerFor(vm, p, field)} />
-    <div class="flex items-center justify-between px-1 text-[0.9375rem] text-ink-2">
+    <div class="t-body flex items-center justify-between px-1 text-ink-2">
       <span>${t.hrs != null ? fmtHrs(t.hrs) + ' hours' : 'Check the times'}</span>
-      <button class="font-semibold text-gold" onClick=${() => openTimeEditor(p.id, other)}>${field === 'in' ? 'Set out time →' : '← Set in time'}</button>
+      <button class="font-semibold text-accent" onClick=${() => openTimeEditor(p.id, other)}>${field === 'in' ? 'Set out time →' : '← Set in time'}</button>
     </div>
     <${Button} variant="primary" block onClick=${() => App.closeSheet('sheet-time')}>Done<//>`;
 }

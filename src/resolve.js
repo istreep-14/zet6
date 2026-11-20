@@ -160,22 +160,31 @@ export function resolvePools(state, resolved) {
       errors.push(label + ' window end must be after its start.');
     }
 
-    // Cash: per-bill counts sum directly; net total parses as whole dollars.
-    let total = 0;
-    let billCounts = null;
-    if (pool.cash.entryMode === 'perbill') {
-      billCounts = {};
-      DENOMS.forEach(d => {
-        const parsed = parseWholeNumber(pool.cash.billCounts[d]);
-        if (!parsed.valid) errors.push(label + ' $' + d + ' count must be a whole number.');
-        billCounts[d] = parsed.valid ? parsed.value : 0;
-      });
-      total = poolValue(billCounts);
-    } else {
-      const parsed = parseWholeNumber(pool.cash.netTotal);
-      if (!parsed.valid) errors.push(label + ' net total must be a whole-dollar amount.');
-      total = parsed.valid ? parsed.value : 0;
-    }
+    // Cash = the bills counted + the rest that wasn't counted (netTotal), then
+    // the signed register adjustment (adjust, e.g. "-50" when the register is
+    // short). Old 'perbill' / 'nettotal' pools only read their own field.
+    const mode = pool.cash.entryMode;
+    const billCounts = {};
+    DENOMS.forEach(d => {
+      const parsed = parseWholeNumber(mode === 'nettotal' ? '' : pool.cash.billCounts[d]);
+      if (!parsed.valid) errors.push(label + ' $' + d + ' count must be a whole number.');
+      billCounts[d] = parsed.valid ? parsed.value : 0;
+    });
+    // netTotal is either the uncounted rest, or (restMode 'total') the whole
+    // amount including the counted bills — then rest = total − counted.
+    const counted = poolValue(billCounts);
+    const restParsed = parseWholeNumber(mode === 'perbill' ? '' : pool.cash.netTotal);
+    if (!restParsed.valid) errors.push(label + ' cash must be a whole-dollar amount.');
+    const typed = restParsed.valid ? restParsed.value : 0;
+    const asTotal = pool.cash.restMode === 'total' && String(pool.cash.netTotal ?? '').trim() !== '';
+    if (asTotal && typed < counted) errors.push(label + ': the counted bills come to more than the total cash.');
+    const rest = asTotal ? Math.max(0, typed - counted) : typed;
+    const adjParsed = parseSignedWhole(pool.cash.adjust);
+    if (!adjParsed.valid) errors.push(label + ' register over / short must be whole dollars, e.g. -50.');
+    const adjust = adjParsed.valid ? adjParsed.value : 0;
+    const totalBefore = counted + rest;
+    const total = totalBefore + adjust;
+    if (total < 0) errors.push(label + ' is short more than it holds.');
 
     // Support tip-out config. Pct chain: pool override → global default → 10.
     // A non-blank rate replaces the pct-derived $/hr; hours entries replace
@@ -207,13 +216,24 @@ export function resolvePools(state, resolved) {
         rateOverride: rateParsed.valid && !rateParsed.empty ? rateParsed.value : null,
         hoursOverrides,
       },
-      entryMode: pool.cash.entryMode,
-      total,
+      total: Math.max(0, total),
+      totalBefore,
+      counted,
+      rest,
+      adjust,
       billCounts,
     };
   });
 
   return { pools, errors };
+}
+
+// "-50", "+20", "−50", "$-50", "" → { valid, value } (blank = 0).
+export function parseSignedWhole(raw) {
+  const s = String(raw ?? '').trim().replace(/[$\s]/g, '').replace('−', '-');
+  if (!s) return { valid: true, value: 0 };
+  if (!/^[+-]?\d+$/.test(s)) return { valid: false, value: 0 };
+  return { valid: true, value: Number(s) };
 }
 
 export function poolParticipants(pool, staff) {

@@ -12,13 +12,13 @@ The tab bar has three tabs, in the order you use them:
 
 | Tab | What it's for |
 |---|---|
-| **Staff** | Who worked. Type a name (or tap a saved one) to add them; tap a person to set their In/Out times, make them a closer or remove them. With roles on, bartenders, servers and support each get their own section and default times. |
-| **Tips** | The tips: type one net total, or count each bill size with −/+ steppers. |
+| **Staff** | Who worked. Type a name, or use Quick add to pick saved names with a start time (add the 4pm people, then the 5pm people…); tap a person to set their In/Out times, make them a closer or remove them. With roles on, bartenders, servers and support each get their own section and default times. |
+| **Tips** | The tips: count the bills you can see at a glance (say the $100s and $50s), type the rest as one amount (or the whole total — the counted bills are taken out of it), and if the register turns out over or short, enter that — the tips re-split and Summary shows was / now / change. |
 | **Payout** | The answer: total pool and rate, then each person's shift, hours, pay **and the bills for their envelope**. If the drawer can't make exact change, a fix card shows the fewest swaps and **Apply** updates the cash count. **Show the working** explains the maths; Close time and Bonus tools sit below. |
 
-Tap the bottom tabs to move around: **Summary** (the shift at a glance — total, rate, and what everyone takes home), **Staff**, **Tips** and **Payout** (the cash side). Inside a tab, swipe left or right to move between its sub-tabs — e.g. Payout's **Bills** (envelopes and any bill swaps) and **Working** (how the split was worked out).
+Tap the bottom tabs to move around: **Summary** (the shift at a glance — rate, pool, hours, hours and what everyone takes home; the floating bar shows rate, pool, chump and the fewest $10 / $5 / $1s you need; **Copy as text** puts a plain summary on the clipboard for Notes), **Staff**, **Tips** and **Payout** (the cash side). Inside a tab, swipe left or right to move between its sub-tabs — e.g. Payout's **Bills** (envelopes and any bill swaps) and **Working** (how the split was worked out).
 
-The menu button — or a swipe in from the left edge — opens the **sessions panel**: every saved shift (tap one to switch, Edit to rename or delete), **New session**, and app settings (servers & support, multiple pools, 24-hour time, display size Small / Medium / Large, import). The date in the header — or a swipe in from the right edge — opens **this shift's panel**: name, a calendar to set the date, default shift times, closer bonus, close-time what-if, export and delete.
+The menu button — or a swipe in from the left edge — opens the **sessions panel**: every saved shift (tap one to switch, Edit to rename or delete), **New session**, and app settings (theme Auto / Light / Dark, display size Small / Medium / Large, servers & support, multiple pools, 24-hour time, import). The date in the header — or a swipe in from the right edge — opens **this shift's panel**: name, a calendar to set the date, default shift times, closer bonus, close-time what-if, export and delete.
 
 ### Staff
 

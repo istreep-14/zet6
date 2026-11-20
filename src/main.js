@@ -6,14 +6,16 @@ import * as store from './store.js';
 import * as persist from './persist.js';
 import * as sessions from './sessions.js';
 import { buildViewModel } from './viewmodel.js';
-import { setClock24 } from './time.js';
+import { setClock24, parseTime } from './time.js';
 import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
 import { switchTab, updateTabIndicators, normalizeTab, renderSubtabs, subsFor, activeSub } from './render/tabs.js';
-import { renderStaff, openStaffEditor, openTimeEditor, openRosterSheet, rosterSelected } from './render/staff.js';
-import { loadRoster, rememberName, forgetName } from './roster.js';
+import { renderStaff, openStaffEditor, openTimeEditor, openRosterSheet, rosterSelected, rosterAdded } from './render/staff.js';
+import { loadRoster, rememberName, forgetName, getRoster } from './roster.js';
 import { renderTips, invalidateTips, openPoolSheet } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
 import { refreshSticky } from './ui/sticky.js';
+import { toast, copyText } from './ui/toast.js';
+import { summaryText } from './textout.js';
 import { renderSummary, openPoolSummary } from './render/summary.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
@@ -44,7 +46,10 @@ let lastVm = buildViewModel(state);
 
 function render(s) {
   setClock24(s.settings.clock24);
-  document.documentElement.dataset.size = s.settings.size || 'm';
+  const root = document.documentElement;
+  root.dataset.size = s.settings.size || 'm';
+  if (s.settings.theme === 'light' || s.settings.theme === 'dark') root.dataset.theme = s.settings.theme;
+  else delete root.dataset.theme;
   lastVm = buildViewModel(s);
   renderStaff(lastVm);
   renderTips(lastVm);
@@ -185,6 +190,7 @@ window.App = {
 
   // settings
   setSize: size => store.setSize(size),
+  setTheme: theme => store.setTheme(theme),
   toggleSetting(key) {
     const s = store.getState();
     if (key === 'multiPool' && s.pools.length > 1) return;
@@ -194,14 +200,17 @@ window.App = {
   // staff
   // Add a named person: fills a blank row of that role first (fresh sessions
   // start with blank rows), else a new row. Remembered for next shift.
-  addPerson(name, role = 'bartender') {
+  addPerson(name, role = 'bartender', inRaw = '') {
     const n = String(name || '').trim();
     if (!n) return;
     const r = rolesOn() ? role : 'bartender';
     store.mutate(st => {
+      // A start equal to the role's default is stored blank (it inherits).
+      const def = st.defaults.byRole[r]?.in || st.defaults.global.in || '';
+      const start = inRaw && parseTime(inRaw).value !== parseTime(def).value ? inRaw : '';
       const blank = st.staff.find(p => !p.name.trim() && p.role === r);
-      if (blank) blank.name = n;
-      else st.staff.push({ ...store.newStaff(r), name: n });
+      if (blank) { blank.name = n; blank.in = start; }
+      else st.staff.push({ ...store.newStaff(r), name: n, in: start });
     }, { immediate: true });
     rememberName(n, r);
   },
@@ -219,8 +228,11 @@ window.App = {
   rosterAddSelected() {
     const picks = rosterSelected();
     if (!picks.length) return;
-    closeSheet('sheet-roster');
-    picks.forEach(({ name, role }) => App.addPerson(name, role));
+    picks.forEach(p => App.addPerson(p.name, p.role, p.in));
+    // Keep the sheet open while saved names are left, for the next start time.
+    const onShift = new Set(store.getState().staff.map(p => p.name.trim().toLowerCase()));
+    if (getRoster().some(r => !onShift.has(r.name.toLowerCase()))) rosterAdded(picks);
+    else closeSheet('sheet-roster');
   },
   editTime: (id, field) => openTimeEditor(id, field),
   // immediate = picker / button edits (render now); typing debounces.
@@ -263,6 +275,19 @@ window.App = {
   poolWindow: (id, field, value) => store.updatePool(id, p => { p.window[field] = value; }),
   poolBill: (id, denom, value) => store.updatePool(id, p => { p.cash.billCounts[denom] = value; }),
   poolNet: (id, value) => store.updatePool(id, p => { p.cash.netTotal = value; }),
+  poolAdjust: (id, value) => store.updatePool(id, p => { p.cash.adjust = value; }),
+  // The amount box means the uncounted rest, or the whole total (incl. the
+  // counted bills). Switching keeps the same cash: the typed number converts.
+  poolRestMode(id, mode) {
+    store.mutate(s => {
+      const p = s.pools.find(x => x.id === id);
+      if (!p || (p.cash.restMode || 'rest') === mode) return;
+      const counted = [100, 50, 20, 10, 5, 1].reduce((t, d) => t + d * (parseInt(p.cash.billCounts[d], 10) || 0), 0);
+      const n = parseInt(p.cash.netTotal, 10);
+      if (Number.isFinite(n)) p.cash.netTotal = String(mode === 'total' ? n + counted : Math.max(0, n - counted));
+      p.cash.restMode = mode;
+    }, { immediate: true });
+  },
   poolSupport(id, field, value) {
     store.updatePool(id, p => {
       p.support ||= { pct: '', rate: '', hours: {} };
@@ -291,7 +316,8 @@ window.App = {
     e.preventDefault();
     const inputs = [...document.querySelectorAll(`[data-pid="${poolId}"] [data-bill]`)];
     const next = inputs[inputs.indexOf(e.target) + 1];
-    if (next) { next.focus(); next.select?.(); } else e.target.blur();
+    const rest = document.querySelector(`[data-pid="${poolId}"] [data-rest]`);
+    if (next) { next.focus(); next.select?.(); } else if (rest) rest.focus(); else e.target.blur();
   },
 
   // bonus
@@ -308,6 +334,14 @@ window.App = {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
     store.mutate(s => { s.meta.date = v; }, { immediate: true });
     syncHdrDate();
+  },
+  // Summary as plain text on the clipboard (for Notes).
+  async copySummary() {
+    const st = store.getState();
+    const name = sessions.list().find(e => e.id === sessions.currentId())?.name || '';
+    const text = lastVm?.shares && lastVm.totalCash > 0 ? summaryText(lastVm, [name || 'Tips', fmtHdrDate(st.meta.date)].join(' · ')) : '';
+    if (!text) { toast('Nothing to copy yet'); return; }
+    toast(await copyText(text) ? 'Copied — paste into Notes' : 'Couldn’t copy on this device');
   },
   exportSession() {
     const s = store.getState();
@@ -507,9 +541,16 @@ initPanelGestures({
     && !document.querySelector('.sheet-backdrop.open'),
 });
 
-// Reveal once Tailwind has styled the page (it compiles in the browser).
-(function reveal(tries = 0) {
-  const ready = getComputedStyle(document.documentElement).getPropertyValue('--color-surface').trim();
-  if (ready || tries > 60) document.documentElement.classList.add('ready');
-  else requestAnimationFrame(() => reveal(tries + 1));
+// Reveal once Tailwind has styled the page (it compiles in the browser): a
+// probe with `hidden` turns display:none once the utilities exist.
+(() => {
+  const probe = Object.assign(document.createElement('div'), { className: 'hidden' });
+  document.body.append(probe);
+  let tries = 0;
+  (function reveal() {
+    if (getComputedStyle(probe).display === 'none' || ++tries > 90) {
+      probe.remove();
+      document.documentElement.classList.add('ready');
+    } else requestAnimationFrame(reveal);
+  })();
 })();

@@ -115,24 +115,48 @@ export function updateTabIndicators(vm) {
   updateHud(vm, named, total, short);
 }
 
-const S = ({ k, v, cls }) => html`<span class="flex min-w-0 flex-col items-center gap-0.5 leading-tight">
-  <span class="text-[0.75rem] font-medium text-ink-2">${k}</span>
-  <span class=${cx('font-rounded text-[1.125rem] font-semibold tabular-nums', cls)}>${v}</span></span>`;
+// One figure cell: value over a small label (cells are split by hairlines).
+const S = ({ k, v, cls }) => html`<span class="flex min-w-0 flex-1 flex-col items-center px-1 leading-tight">
+  <span class=${cx('t-head max-w-full truncate tabular-nums', cls)}>${v}</span>
+  <span class="t-small max-w-full truncate text-ink-3">${k}</span></span>`;
 
-function Stats({ shares }) {
-  return html`<${S} k="Rate" v=${'$' + shares.rate.toFixed(2)} cls="text-green" />
-    <${S} k="Pool" v=${fmtMoney(shares.totalCash)} />
-    <${S} k="Chump" v=${shares.leftover > 0 ? fmtMoney(shares.leftover) : '—'} cls="text-ink-2" />`;
+// The fewest $10 / $5 / $1s that make every payout exact — what the drawer
+// should hold, after a swap if one is needed. vm.req places the drawer's
+// $100s / $50s first, so a $50 that evens out an odd-tens payout saves a $10.
+export function smallBillsNeeded(vm) {
+  const r = vm.req;
+  if (!r) return null;
+  return [
+    { d: 10, n: Math.ceil(Math.max(0, r.minOneFiveTenValue - r.minOneFiveValue) / 10) },
+    { d: 5, n: Math.ceil(Math.max(0, r.minOneFiveValue - r.minOnes) / 5) },
+    { d: 1, n: r.minOnes },
+  ];
 }
 
-// HUD: live numbers once the pipeline computes, the blocking reason otherwise.
-// Hidden on a pristine session.
+// Fourth cell: the small bills as "1 · 1 · 16" over "$10 · $5 · $1", each
+// count in its bill's tint — reference for pulling change.
+function BillsCell({ vm }) {
+  const need = smallBillsNeeded(vm);
+  if (!need) return null;
+  const dot = html`<span class="mx-0.5 text-ink-3">·</span>`;
+  return html`<${S} k="$10 · $5 · $1"
+    v=${need.map((c, i) => html`${i > 0 && dot}<span class="bill-col !font-semibold" data-d=${c.d}>${c.n}</span>`)} />`;
+}
+
+// HUD: Rate · Pool · Chump · small bills as one row of figures, the blocking
+// reason otherwise. Hidden on a pristine session.
 function Hud({ vm, total, short }) {
-  const msg = t => html`<span class=${cx('truncate text-[0.875rem] font-medium', vm.blocked || short ? 'text-red' : 'text-ink-2')}>${t}</span>`;
-  return html`<span class="flex min-w-0 flex-1 items-center justify-around gap-2">
-      ${vm.shares && total > 0 && !vm.blocked ? html`<${Stats} shares=${vm.shares} />${short && msg('bills short')}` : msg(vm.blocked || 'Enter cash to calculate')}
-    </span>
-    <span class="grid size-9 shrink-0 place-items-center rounded-full bg-fill text-ink-2"><${Icon} name="chevR" class="size-[1.125rem]" /></span>`;
+  const msg = t => html`<span class=${cx('t-small truncate px-2 font-medium', vm.blocked || short ? 'text-bad' : 'text-ink-2')}>${t}</span>`;
+  const sh = vm.shares;
+  return html`${sh && total > 0 && !vm.blocked
+      ? html`<span class="flex min-w-0 flex-1 items-center divide-x divide-line">
+          <${S} k="Rate" v=${'$' + sh.rate.toFixed(2)} cls="text-good" />
+          <${S} k="Pool" v=${fmtMoney(sh.totalCash)} />
+          <${S} k="Chump" v=${sh.leftover > 0 ? fmtMoney(sh.leftover) : '—'} cls=${sh.leftover > 0 ? '' : 'text-ink-3'} />
+          <${BillsCell} vm=${vm} />
+        </span>`
+      : html`<span class="flex min-w-0 flex-1 items-center">${msg(vm.blocked || 'Enter cash to calculate')}</span>`}
+    <${Icon} name="chevR" class="size-4 shrink-0 text-ink-3" />`;
 }
 
 function updateHud(vm, named, total, short) {
@@ -140,6 +164,6 @@ function updateHud(vm, named, total, short) {
   if (!hud) return;
   const pristine = named === 0 && total === 0;
   hud.classList.toggle('is-empty', pristine);
-  hud.classList.toggle('is-warn', !pristine && (!!vm.blocked || short));
+  hud.classList.toggle('is-warn', !pristine && !!vm.blocked);
   render(pristine ? null : html`<${Hud} vm=${vm} total=${total} short=${short} />`, hud);
 }

@@ -95,9 +95,9 @@ function fakeStorage() {
 
   assert.strictEqual(state.pools.length, 1);
   const pool = state.pools[0];
-  assert.strictEqual(pool.cash.entryMode, 'perbill');
+  assert.strictEqual(pool.cash.entryMode, 'mixed');   // one cash form now
   assert.strictEqual(pool.cash.billCounts[20], '10');
-  assert.strictEqual(pool.cash.netTotal, '463');
+  assert.strictEqual(pool.cash.netTotal, '');        // perbill: the old net total was unused
   assert.deepStrictEqual(pool.window, { start: '', end: '' });
 
   // Migrated state passes v4 validation and round-trips

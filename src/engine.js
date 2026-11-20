@@ -831,6 +831,27 @@ function exchangeFor(order, start, placement) {
   return { give: out, get };
 }
 
+// The same cash in fewer bills: two $5s → a $10, five $1s → a $5, while
+// everyone is still paid exactly. Keeps give / get disjoint (never asks back
+// a size that's being handed over).
+function consolidateGet(people, start, give, get, leftover) {
+  const STEPS = [[5, 2, 10], [1, 5, 5]];
+  let cur = { ...get };
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const [d, n, to] of STEPS) {
+      if (cur[d] < n || give[to] > 0) continue;
+      const next = { ...cur, [d]: cur[d] - n, [to]: cur[to] + 1 };
+      const pool = { ...start };
+      DENOMS.forEach(x => { pool[x] += next[x] - give[x]; });
+      if (DENOMS.some(x => pool[x] < 0) || !runPipeline(people, pool, leftover).success) continue;
+      cur = next;
+      changed = true;
+    }
+  }
+  return cur;
+}
+
 function compareScores(a, b) {
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] - b[i];
   return 0;
@@ -855,16 +876,20 @@ export function planExchange(people, poolIn, leftoverAmount) {
   for (const [order, placement] of candidates) {
     const plan = exchangeFor(order, start, placement);
     if (!plan) continue;
-    const { give, get } = plan;
+    const { give } = plan;
     if (!countBills(give)) continue;
+    const pool0 = { ...start };
+    DENOMS.forEach(d => { pool0[d] += plan.get[d] - give[d]; });
+    if (DENOMS.some(d => pool0[d] < 0)) continue;
+    if (!runPipeline(people, pool0, leftover).success) continue;
+    const get = consolidateGet(people, start, give, plan.get, leftover);
     const pool = { ...start };
     DENOMS.forEach(d => { pool[d] += get[d] - give[d]; });
-    if (DENOMS.some(d => pool[d] < 0)) continue;
-    if (!runPipeline(people, pool, leftover).success) continue;
     // Least cash to exchange, then fewest $100s traded (break a $50 first),
-    // then fewest bills handed over, then fewest $10s brought in (a $50
-    // placed well beats a stack of $10s), then the smallest drawer.
-    const score = [poolValue(give), give[100], countBills(give), get[10], countBills(pool)];
+    // then fewest bills handed over, then fewest bills brought back (a $10,
+    // not two $5s), then fewest $10s (a $50 placed well beats a stack of
+    // $10s), then the smallest drawer.
+    const score = [poolValue(give), give[100], countBills(give), countBills(get), get[10], countBills(pool)];
     if (!best || compareScores(score, best.score) < 0) {
       best = { give, get, pool, score };
     }
@@ -891,7 +916,9 @@ export function planMakeChange(people, poolIn, leftoverAmount) {
   if (breaks && exchange) {
     const out = blankBills();
     DENOMS.forEach(d => { out[d] = Math.max(0, -breaks.deltas[d]); });
-    const breaksScore = [poolValue(out), out[100], countBills(out), Math.max(0, breaks.deltas[10]), countBills(breaks.pool)];
+    const back = blankBills();
+    DENOMS.forEach(d => { back[d] = Math.max(0, breaks.deltas[d]); });
+    const breaksScore = [poolValue(out), out[100], countBills(out), countBills(back), back[10], countBills(breaks.pool)];
     // Breaks win full ties: they keep the bundles bank-standard.
     return compareScores(exchange.score, breaksScore) < 0 ? exchange : breaks;
   }
@@ -931,4 +958,51 @@ export function computeTradeUp(pool, req) {
   DENOMS.forEach(d => { delta[d] = (newPool[d] || 0) - (pool[d] || 0); });
 
   return { newPool, delta, new20s };
+}
+
+// ── The drawer from what was entered ─────────────────────────────────────────
+// Each pool holds the bills that were counted plus a "rest" that wasn't (and a
+// signed register adjustment). The counted bills are kept as they are; the
+// uncounted dollars are filled with the bills the payouts need most — the
+// $1 / $5 / $10s still short given where the counted $100s / $50s can go —
+// then $20s, then whatever is left. A negative remainder (the register is
+// short more than the uncounted cash) comes off the counted bills, largest
+// first; `note` says when that can't be done exactly.
+export function drawerBills(pools, people, leftoverAmount) {
+  const counted = blankBills();
+  let loose = 0;
+  pools.forEach(p => {
+    DENOMS.forEach(d => { counted[d] += (p.billCounts && p.billCounts[d]) || 0; });
+    loose += (p.rest || 0) + (p.adjust || 0);
+  });
+  const anyCounted = countBillsIn(counted) > 0;
+  if (loose < 0) {
+    const pool = { ...counted };
+    let def = -loose;
+    DENOMS.forEach(d => { const n = Math.min(pool[d], Math.floor(def / d)); pool[d] -= n; def -= n * d; });
+    if (def === 0) return { bills: pool, counted: anyCounted, added: blankBills(), note: '' };
+    const total = poolValue(counted) + loose;
+    return { bills: fillLoose(blankBills(), Math.max(0, total), people, leftoverAmount).bills, counted: false, added: blankBills(),
+      note: 'The register adjustment doesn’t match the bills you counted — recount them; bills shown are a suggestion.' };
+  }
+  const { bills, added } = fillLoose(counted, loose, people, leftoverAmount);
+  return { bills, counted: anyCounted, added, note: '' };
+}
+
+function countBillsIn(pool) { return DENOMS.reduce((s, d) => s + (pool[d] || 0), 0); }
+
+function fillLoose(fixed, loose, people, leftoverAmount) {
+  const added = blankBills();
+  let left = loose;
+  const take = (d, n) => { const k = Math.max(0, Math.min(n, Math.floor(left / d))); added[d] += k; left -= k * d; };
+  if (left > 0 && people.length) {
+    const req = getSmallBillRequirements(people, fixed, leftoverAmount);
+    take(1, req.onesShort);
+    take(5, Math.ceil(Math.max(0, req.oneFiveShort - added[1]) / 5));
+    take(10, Math.ceil(Math.max(0, req.oneFiveTenShort - added[1] - added[5] * 5) / 10));
+  }
+  [20, 10, 5, 1].forEach(d => take(d, Math.floor(left / d)));
+  const bills = { ...fixed };
+  DENOMS.forEach(d => { bills[d] += added[d]; });
+  return { bills, added };
 }

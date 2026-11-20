@@ -57,14 +57,14 @@ function CloseTable({ vm, times, cols, pool, nowIdx }) {
   const req = (label, get) => ({ key: label, tone: 'muted', cells: [label, ...cols.map(c => {
     if (!c) return dash;
     const { ok, val } = get(c);
-    return html`<span class=${ok ? 'text-green' : 'font-bold text-red'}>${val}</span>`;
+    return html`<span class=${ok ? 'text-good' : 'font-semibold text-bad'}>${val}</span>`;
   })] });
   return html`<div ...${pinch}><${Table} scroll stickyFirst
     cols=${[{ label: 'Close' }, ...times.map((t, i) => ({ head: fmtCloseTime(t), hl: i === nowIdx, onHead: () => App.selectCloseTime(t) }))]}
     rows=${[
       ...people.map(person => ({ key: person.id, cells: [person.name, ...cols.map(col => {
         const p = col?.shares.perPerson.find(x => x.id === person.id);
-        return !p || p.final <= 0 ? dash : html`<span class=${p.closer ? 'font-bold text-red' : ''}>$${p.final}</span>`;
+        return !p || p.final <= 0 ? dash : html`<span class=${p.closer ? 'font-semibold text-bad' : ''}>$${p.final}</span>`;
       })] })),
       { key: 'chump', tone: 'muted', cells: ['Chump', ...cols.map(c => c?.shares.leftover ? '$' + c.shares.leftover : dash)] },
       { section: 'Small bills needed' },
@@ -86,7 +86,7 @@ function CloseTime({ vm }) {
   const cols = times.map(t => buildCloseTimeColumn(vm.state, t, vm.bills));
   const nowIdx = times.findIndex(t => Math.abs(t - ctCenter) < 0.01);
   return html`<${LiveStrip} vm=${vm} />
-    <p class="text-[0.875rem] leading-snug text-ink-3">Tap a time to make it the close. Pinch the table to widen or narrow the range.</p>
+    <p class="t-small px-1 text-ink-3">Tap a time to make it the close. Pinch the table to widen or narrow the range.</p>
     <${CloseTable} vm=${vm} times=${times} cols=${cols} pool=${vm.bills} nowIdx=${nowIdx} />`;
 }
 

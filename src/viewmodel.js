@@ -2,9 +2,8 @@
 // the renderers need. Renderers read ONLY the view model.
 
 import { resolveStaff, resolvePools } from './resolve.js';
-import { computeShares, shareTargets } from './shares.js';
-import { mergedBillCounts, idealBills } from './ideal.js';
-import { distribute, getSmallBillRequirements } from './engine.js';
+import { computeShares } from './shares.js';
+import { distribute, getSmallBillRequirements, drawerBills } from './engine.js';
 
 export function buildViewModel(state, opts = {}) {
   const resolved = resolveStaff(state, opts);
@@ -18,7 +17,13 @@ export function buildViewModel(state, opts = {}) {
     errors,
     hasNamedStaff: resolved.staff.length > 0,
     totalCash: poolsR.pools.reduce((s, p) => s + p.total, 0),
+    totalBefore: poolsR.pools.reduce((s, p) => s + p.totalBefore, 0),
+    adjust: poolsR.pools.reduce((s, p) => s + p.adjust, 0),
     shares: null,
+    sharesBefore: null,         // the split before the register adjustment
+    counted: false,             // any bills counted (vs. all suggested)
+    looseBills: null,           // bills suggested for the uncounted cash
+    cashNote: '',
     bills: null,
     dist: null,
     people: [],
@@ -38,18 +43,24 @@ export function buildViewModel(state, opts = {}) {
   }
 
   vm.shares = computeShares(poolsR.pools, resolved.staff, state.overrides);
+  if (vm.adjust !== 0) {
+    vm.sharesBefore = computeShares(poolsR.pools.map(p => ({ ...p, total: p.totalBefore })), resolved.staff, state.overrides);
+  }
 
   if (vm.totalCash === 0) {
     vm.blocked = 'Enter cash for at least one pool.';
     return vm;
   }
 
-  const targets = shareTargets(vm.shares);
-  vm.bills = mergedBillCounts(poolsR.pools) ?? idealBills(vm.totalCash, targets);
-
   vm.people = vm.shares.perPerson
     .filter(p => p.final > 0)
     .map(p => ({ id: p.id, name: p.name, role: p.role, closer: p.closer, final: p.final }));
+
+  const drawer = drawerBills(poolsR.pools, vm.people, vm.shares.leftover);
+  vm.bills = drawer.bills;
+  vm.counted = drawer.counted;
+  vm.looseBills = drawer.added;
+  vm.cashNote = drawer.note;
 
   vm.dist = distribute(vm.people, vm.bills, vm.shares.leftover);
   vm.req = getSmallBillRequirements(vm.people, vm.bills, vm.shares.leftover);

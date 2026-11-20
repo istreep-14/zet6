@@ -7,7 +7,7 @@
 // Re-rendered with every app render while open; Preact keeps input focus.
 
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Field, Label, ListRow, List, INPUT, ROLE_TEXT } from '../ui/pkit.js';
+import { cx, Icon, Card, Field, Section, ListRow, List, INPUT, ROLE_TEXT } from '../ui/pkit.js';
 import { todayISO } from '../sessions.js';
 import { isPanelOpen, onPanel } from '../ui/panels.js';
 
@@ -59,7 +59,7 @@ function Calendar({ selected, sessionDates }) {
   const today = todayISO();
   const iso = d => calY + '-' + String(calM + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
   const title = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(first);
-  const nav = 'grid size-9 shrink-0 place-items-center rounded-full text-ink-2 active:bg-high';
+  const nav = 'grid size-9 shrink-0 place-items-center rounded-full text-ink-2 active:opacity-70';
 
   const cells = [];
   for (let i = 0; i < lead; i++) cells.push(html`<span key=${'b' + i}></span>`);
@@ -67,20 +67,20 @@ function Calendar({ selected, sessionDates }) {
     const v = iso(d);
     const sel = v === selected;
     cells.push(html`<button key=${v} class=${cx(
-      'relative mx-auto grid size-10 place-items-center rounded-full font-rounded text-[1rem] font-semibold tabular-nums transition active:scale-90',
-      sel ? 'bg-gold text-gold-ink' : v === today ? 'text-gold ring-1 ring-inset ring-gold/60' : 'text-ink active:bg-high',
+      'relative mx-auto grid size-10 place-items-center rounded-full text-[0.9375rem] font-medium tabular-nums transition active:scale-90',
+      sel ? 'bg-accent text-on-accent' : v === today ? 'text-accent ring-1 ring-inset ring-accent/60' : 'text-ink active:opacity-70',
     )} onClick=${() => App.setDate(v)} aria-label=${v} aria-pressed=${String(sel)}>${d}${
       !sel && sessionDates.has(v) && html`<i class="absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full bg-ink-2"></i>`}</button>`);
   }
 
   return html`<${Card} class="flex flex-col gap-1 !px-3 !py-3">
     <div class="flex items-center gap-0.5 pb-1 pl-2">
-      <span class="min-w-0 flex-1 truncate whitespace-nowrap text-[1rem] font-bold">${title}</span>
-      <button class="h-8 shrink-0 rounded-full bg-fill px-2.5 text-[0.8125rem] font-semibold text-ink active:bg-high" onClick=${() => calendarStep(0)}>Today</button>
+      <span class="t-head min-w-0 flex-1 truncate whitespace-nowrap">${title}</span>
+      <button class="t-small h-8 shrink-0 rounded-full bg-accent/12 px-3 font-semibold text-accent active:opacity-70" onClick=${() => calendarStep(0)}>Today</button>
       <button class=${nav} onClick=${() => calendarStep(-1)} aria-label="Previous month"><${Icon} name="chevR" class="size-5 rotate-180" /></button>
       <button class=${nav} onClick=${() => calendarStep(1)} aria-label="Next month"><${Icon} name="chevR" class="size-5" /></button>
     </div>
-    <div class="grid grid-cols-7 text-center text-[0.6875rem] font-bold uppercase tracking-wider text-ink-3">
+    <div class="t-cap grid grid-cols-7 text-center text-ink-3">
       ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => html`<span key=${i} class="py-1">${d}</span>`)}
     </div>
     <div class="grid grid-cols-7 gap-y-1">${cells}</div>
@@ -95,49 +95,52 @@ function ShiftPanel({ vm, sessions, currentId }) {
   const entry = sessions.find(e => e.id === currentId) || {};
   const sessionDates = new Set(sessions.filter(e => e.id !== currentId).map(e => e.date));
   const ROLE_NAME = { bartender: 'Bar', server: 'Server', support: 'Support' };
-  const note = 'text-[0.8125rem] leading-snug text-ink-3';
 
   return html`
-    <${Field} label="Session name" value=${entry.name || ''} placeholder="e.g. Brunch, Private party" maxlength="40" enterkeyhint="done"
+    <${Field} page label="Session name" value=${entry.name || ''} placeholder="e.g. Brunch, Private party" maxlength="40" enterkeyhint="done"
       onChange=${e => App.renameCurrent(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} />
 
-    <${Label}>Date<//>
-    <${Calendar} selected=${s.meta.date} sessionDates=${sessionDates} />
+    <${Section} title="Date">
+      <${Calendar} selected=${s.meta.date} sessionDates=${sessionDates} />
+    <//>
 
-    <div id="shift-times" class="scroll-mt-2"><${Label}>Shift times<//></div>
-    <${Card} class="flex flex-col gap-3">
-      <div class="flex gap-3">
+    <div id="shift-times" class="scroll-mt-2"><${Section} title="Shift times"
+      footer="Fills any blank In/Out. Blank Outs inherit the close time, which also decides the auto closers. Type 5, 10.5, 2 …">
+      <${Card} class="flex gap-3">
         <${Field} label="Open (in)" inputmode="decimal" placeholder="5" value=${d.global.in} onInput=${e => App.globalDefault('in', e.target.value)} />
         <${Field} label="Close (out)" inputmode="decimal" placeholder="2" value=${d.global.out} onInput=${e => App.globalDefault('out', e.target.value)} />
-      </div>
-      <p class=${note}>Fills any blank In/Out. Blank Outs inherit the close time, which also decides the auto closers. Type 5, 10.5, 2 …</p>
-    <//>
-    ${s.settings.allRoles && html`<${Card} class="flex flex-col gap-3">
-      <div class="text-[0.875rem] font-medium text-ink-2">Per role</div>
-      <div class="grid grid-cols-[4.5rem_1fr_1fr] items-center gap-x-3 gap-y-2.5">
-        <span></span><span class="text-center text-[0.8125rem] font-medium text-ink-2">In</span><span class="text-center text-[0.8125rem] font-medium text-ink-2">Out</span>
-        ${['bartender', 'server', 'support'].map(r => html`
-          <span key=${r + 'l'} class=${cx('text-[0.9375rem] font-semibold', ROLE_TEXT[r])}>${ROLE_NAME[r]}</span>
-          ${['in', 'out'].map(f => html`<input key=${r + f} class=${cx(INPUT, 'text-center font-semibold')} inputmode="decimal" placeholder="—"
-            value=${d.byRole[r][f] ?? ''} onInput=${e => App.roleDefault(r, f, e.target.value)} aria-label=${r + ' ' + f} />`)}`)}
-      </div>
-      <p class=${note}>Role times win over the shift times for that role.</p>
+      <//>
+    <//></div>
+    ${s.settings.allRoles && html`<${Section} title="Per role" footer="Role times win over the shift times for that role.">
+      <${Card}>
+        <div class="grid grid-cols-[4.5rem_1fr_1fr] items-center gap-x-3 gap-y-2.5">
+          <span></span><span class="t-small text-center font-medium text-ink-2">In</span><span class="t-small text-center font-medium text-ink-2">Out</span>
+          ${['bartender', 'server', 'support'].map(r => html`
+            <span key=${r + 'l'} class=${cx('t-body font-semibold', ROLE_TEXT[r])}>${ROLE_NAME[r]}</span>
+            ${['in', 'out'].map(f => html`<input key=${r + f} class=${cx(INPUT, 'text-center font-semibold')} inputmode="decimal" placeholder="—"
+              value=${d.byRole[r][f] ?? ''} onInput=${e => App.roleDefault(r, f, e.target.value)} aria-label=${r + ' ' + f} />`)}`)}
+        </div>
+      <//>
     <//>`}
-    ${s.settings.allRoles && html`<${Card} class="flex flex-col gap-3">
-      <${Field} label="Support tip-out · % of each pool" inputmode="decimal" placeholder="10" value=${d.supportPct ?? ''} onInput=${e => App.supportDefault(e.target.value)} />
-      <p class=${note}>Each pool can override % or $/hr on the Tips tab.</p>
+    ${s.settings.allRoles && html`<${Section} title="Support" footer="Each pool can override % or $/hr on the Tips tab.">
+      <${Card}>
+        <${Field} label="Tip-out · % of each pool" inputmode="decimal" placeholder="10" value=${d.supportPct ?? ''} onInput=${e => App.supportDefault(e.target.value)} />
+      <//>
     <//>`}
 
-    <${Label}>Tools<//>
-    <${List}>
-      <${ListRow} icon="gift" onClick=${() => App.openBonus()}>Closer bonus & chump<//>
-      <${ListRow} icon="sliders" onClick=${() => App.openCloseTime()}>Close-time what-if<//>
+    <${Section} title="Tools">
+      <${List}>
+        <${ListRow} icon="gift" onClick=${() => App.openBonus()}>Closer bonus & chump<//>
+        <${ListRow} icon="sliders" onClick=${() => App.openCloseTime()}>Close-time what-if<//>
+      <//>
     <//>
 
-    <${Label}>This session<//>
-    <${List}>
-      <${ListRow} icon="download" chevron=${false} onClick=${() => App.exportSession()}>Export JSON<//>
-      <${ListRow} icon="trash" tone="danger" chevron=${false} onClick=${() => App.deleteSession(currentId)}>Delete session<//>
+    <${Section} title="This session">
+      <${List}>
+        <${ListRow} icon="copy" chevron=${false} onClick=${() => App.copySummary()}>Copy summary as text<//>
+        <${ListRow} icon="download" chevron=${false} onClick=${() => App.exportSession()}>Export JSON<//>
+        <${ListRow} icon="trash" tone="danger" chevron=${false} onClick=${() => App.deleteSession(currentId)}>Delete session<//>
+      <//>
     <//>`;
 }
 

@@ -30,30 +30,30 @@ function Person({ vm, p }) {
   return html`
     <div class="flex items-center gap-3.5 py-1">
       <div class="min-w-0">
-        <div class="flex flex-wrap items-center gap-2 text-[1.5rem] font-bold tracking-tight">${p.name}
+        <div class="t-title flex flex-wrap items-center gap-2">${p.name}
           ${p.closer && html`<${Badge} tone="red">closer<//>`}<${Badge} tone=${p.role}>${p.role}<//></div>
-        <div class="mt-0.5 text-[0.9375rem] text-ink-2">${fmtHrs(p.shiftHours ?? p.hours)}h · ${inStr} – ${outStr}</div>
+        <div class="t-body mt-0.5 text-ink-3">${fmtHrs(p.shiftHours ?? p.hours)}h · ${inStr} – ${outStr}</div>
       </div>
     </div>
-    <div class="flex items-center justify-between rounded-2xl bg-raised px-4 py-3.5">
-      <span class="text-[1.0625rem] font-semibold">Takes home</span>
-      <${Money} value=${p.final} class="font-rounded text-[2.375rem] font-bold tracking-tight text-gold" />
+    <div class="flex items-center justify-between rounded-card bg-surface px-4 py-4">
+      <span class="t-small font-medium text-ink-3">Takes home</span>
+      <${Money} value=${p.final} class="t-display" />
     </div>
     <div class="grid grid-cols-2 gap-2">
       <${Stat} label="Base" value=${'$' + p.base} sub=${'$' + p.exact.toFixed(2) + ' exact'} />
       ${p.bonus > 0
-        ? html`<${Stat} label="Closer bonus" value=${'+$' + p.bonus} tone="text-red" />`
+        ? html`<${Stat} label="Closer bonus" value=${'+$' + p.bonus} tone="text-bad" />`
         : html`<${Stat} label="Rate" value=${'$' + (vm.shares.rate || 0).toFixed(2)} sub="per hour" />`}
     </div>
     <${Label}>Envelope<//>
     ${hasBills
-      ? html`<div class="grid grid-cols-3 gap-1.5">${DENOMS.map(d => html`<div key=${d} class=${cx('flex items-center justify-between rounded-xl bg-raised px-3 py-2.5', !bills[d] && 'opacity-40')}>
-          <${Denom} d=${d} /><span class="font-rounded text-[1.375rem] font-bold tabular-nums">${bills[d] || '—'}</span></div>`)}</div>`
-      : html`<div class="px-1 text-[0.875rem] text-ink-3">No bill split yet.</div>`}
+      ? html`<div class="grid grid-cols-3 gap-1.5">${DENOMS.map(d => html`<div key=${d} class=${cx('flex items-center justify-between rounded-xl bg-surface px-3 py-2.5', !bills[d] && 'opacity-40')}>
+          <${Denom} d=${d} /><span class="t-head tabular-nums">${bills[d] || '—'}</span></div>`)}</div>`
+      : html`<div class="t-small px-4 text-ink-3">No bill split yet.</div>`}
     <${Label}>Shift<//>
     <div class="flex gap-3">
-      <${Field} label="In" value=${raw?.in ?? ''} placeholder=${inStr} inputmode="decimal" onChange=${e => App.staffField(p.id, 'in', e.target.value)} />
-      <${Field} label="Out" value=${raw?.out ?? ''} placeholder=${p.usedCloseTime ? 'close' : outStr} inputmode="decimal" onChange=${e => App.staffField(p.id, 'out', e.target.value)} />
+      <${Field} page label="In" value=${raw?.in ?? ''} placeholder=${inStr} inputmode="decimal" onChange=${e => App.staffField(p.id, 'in', e.target.value)} />
+      <${Field} page label="Out" value=${raw?.out ?? ''} placeholder=${p.usedCloseTime ? 'close' : outStr} inputmode="decimal" onChange=${e => App.staffField(p.id, 'out', e.target.value)} />
     </div>`;
 }
 
@@ -83,7 +83,7 @@ function Bonus({ vm }) {
   const manual = s.bonusMode === 'manual';
 
   return html`<${LiveStrip} vm=${vm} />
-    <div class="flex items-center justify-between gap-2 rounded-2xl bg-raised px-4 py-3.5 font-semibold">
+    <div class="t-body flex items-center justify-between gap-2 rounded-card bg-surface px-4 py-3.5 font-medium">
       <span>$${remainder} left after rounding down</span>
       ${manual ? html`<${Badge} tone="amber">manual<//>` : html`<${Badge} tone="green">auto · closers<//>`}
     </div>
@@ -94,13 +94,13 @@ function Bonus({ vm }) {
         trail=${html`<${Stepper} value=${p.bonus > 0 ? '+' + p.bonus : '0'} on=${p.bonus > 0}
           onDec=${() => App.remBonus(p.id, -1)} onInc=${() => App.remBonus(p.id, 1)}
           decDisabled=${!(p.bonus > 0)} incDisabled=${!(leftover > 0)} />`}
-        value=${'$' + p.final} valueTone="min-w-14 text-right" />`)}
+        value=${'$' + p.final} valueTone="min-w-12 text-right" />`)}
     <//>
     <${List}>
-      <${Item} title="Rounded-down shares" chevron=${false} value=${fmtMoney(floored)} valueTone="text-[1.0625rem]" />
-      <${Item} title="Remainder" chevron=${false} value=${fmtMoney(remainder)} valueTone="text-[1.0625rem]" />
-      <${Item} title="Given as bonus" chevron=${false} value=${bonusSum > 0 ? fmtMoney(bonusSum) : '—'} valueTone="text-[1.0625rem]" />
-      <${Item} title="Chump" sub="Stays in the drawer" chevron=${false} value=${leftover > 0 ? fmtMoney(leftover) : '—'} valueTone="text-[1.0625rem] text-gold" />
+      <${Item} title="Rounded-down shares" chevron=${false} value=${fmtMoney(floored)}  />
+      <${Item} title="Remainder" chevron=${false} value=${fmtMoney(remainder)}  />
+      <${Item} title="Given as bonus" chevron=${false} value=${bonusSum > 0 ? fmtMoney(bonusSum) : '—'}  />
+      <${Item} title="Chump" sub="Stays in the drawer" chevron=${false} value=${leftover > 0 ? fmtMoney(leftover) : '—'} valueTone="" />
     <//>
     ${manual && html`<${Button} block onClick=${() => App.resetRemBonuses()}>↺ Reset to auto (closers split)<//>`}`;
 }
