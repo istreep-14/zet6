@@ -80,34 +80,43 @@ function BillRow({ pool, d }) {
   const v = pool.cash.billCounts[d] ?? '';
   const parsed = parseWholeNumber(v);
   const sub = parsed.valid ? parsed.value * d : 0;
-  const step = 'grid size-[2.625rem] shrink-0 place-items-center rounded-full text-[1.375rem] text-ink-2 active:bg-ink/10 active:text-ink';
-  return html`<div class="grid grid-cols-[3.5rem_minmax(0,1fr)_4.75rem] items-center gap-3 py-2 max-[25rem]:grid-cols-[3.125rem_minmax(0,1fr)_4rem] max-[25rem]:gap-2.5">
+  const step = 'grid size-10 shrink-0 place-items-center rounded-full text-[1.25rem] text-ink-2 active:bg-ink/10 active:text-ink';
+  return html`<div class="grid grid-cols-[3.5rem_minmax(0,1fr)_4.75rem] items-center gap-3 py-1.5 max-[25rem]:grid-cols-[3.125rem_minmax(0,1fr)_4rem] max-[25rem]:gap-2.5">
     <${Denom} d=${d} />
     <div class="flex items-center rounded-full bg-surface-2 focus-within:ring-2 focus-within:ring-accent/40">
       <button class=${step} onClick=${() => App.billStep(pool.id, String(d), -1)} aria-label=${'One fewer $' + d} tabindex="-1">−</button>
-      <input class="h-[2.625rem] w-full min-w-0 bg-transparent text-center text-[1.25rem] font-semibold text-ink outline-none placeholder:text-ink-3"
+      <input class="h-10 w-full min-w-0 bg-transparent text-center text-[1.125rem] font-semibold text-ink outline-none placeholder:text-ink-3"
         type="number" min="0" step="1" placeholder="0" inputmode="numeric" enterkeyhint="next" data-bill=${d}
         aria-label=${'$' + d + ' bills'} value=${v} onInput=${e => App.poolBill(pool.id, String(d), e.target.value)}
         onKeyDown=${e => App.billKey(e, pool.id)} />
       <button class=${step} onClick=${() => App.billStep(pool.id, String(d), 1)} aria-label=${'One more $' + d} tabindex="-1">+</button>
     </div>
-    <span class=${cx('text-right text-[1.125rem] font-semibold tabular-nums', !parsed.valid ? 'text-bad' : sub > 0 ? 'text-ink' : 'text-ink-3')}>
+    <span class=${cx('t-body text-right font-semibold tabular-nums', !parsed.valid ? 'text-bad' : sub > 0 ? 'text-ink' : 'text-ink-3')}>
       ${!parsed.valid ? '!' : sub > 0 ? fmtMoney(sub) : '—'}</span>
   </div>`;
 }
 
-// The amount box: the uncounted rest, or the whole total including the
-// counted bills (then the rest is worked out) — switched by a small Seg.
-function Rest({ pool, vmPool }) {
-  const total = pool.cash.restMode === 'total';
+// The amount box. Meaning: just the cash (nothing counted), or — with Count
+// bills open — the total including the counted bills, or only the rest.
+function Amount({ pool, vmPool, counting }) {
+  const total = counting && pool.cash.restMode === 'total';
+  const hint = counting && vmPool && String(pool.cash.netTotal).trim() !== ''
+    ? (total ? fmtMoney(vmPool.rest) + ' not counted' : 'not counted') : '';
   return html`<div class="relative">
     <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[1.5rem] font-medium text-ink-3">$</span>
     <input class=${cx(INPUT, 'h-14 pl-10 text-[1.75rem] font-semibold tracking-tight')}
-      type="number" min="0" step="1" placeholder="0" inputmode="numeric" aria-label=${total ? 'Total cash' : 'Uncounted cash'} data-rest
+      type="number" min="0" step="1" placeholder="0" inputmode="numeric" data-rest
+      aria-label=${!counting ? 'Cash' : total ? 'Total cash' : 'Uncounted cash'}
       value=${pool.cash.netTotal} onInput=${e => App.poolNet(pool.id, e.target.value)} />
-    ${total && vmPool && vmPool.counted > 0 && String(pool.cash.netTotal).trim() !== '' && html`<span
-      class="t-small pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink-3">${fmtMoney(vmPool.rest)} not counted</span>`}
+    ${hint && html`<span class="t-small pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-ink-3">${hint}</span>`}
   </div>`;
+}
+
+// An option that opens part of the form (Count bills, Over / short).
+function Toggle({ on, icon, onClick, children }) {
+  return html`<button class=${cx('t-small inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-semibold transition active:scale-95',
+    on ? 'bg-accent/12 text-accent' : 'bg-surface-2 text-ink-2')} aria-pressed=${String(!!on)} onClick=${onClick}>
+    <${Icon} name=${on ? 'check' : icon} class="size-4" />${children}</button>`;
 }
 
 // Register over / short: a Short / Over switch and an amount, stored as one
@@ -131,21 +140,29 @@ function Adjust({ pool }) {
   </div>`;
 }
 
-// One form for the cash: count the bills you can see at a glance (say 5 ×
-// $100 and 3 × $50), put the rest in as one amount — the best bills for it
-// are picked around the counted ones — and, after paying out, a register
-// over / short re-splits the tips (Summary shows old · new · change).
+// The cash form, plain by default: one amount. Two options open the rest —
+//   Count bills   the bills you can see at a glance (say 5 × $100, 3 × $50);
+//                 the amount is then the Total (incl. those) or only the Rest,
+//                 and the best bills are picked for whatever wasn't counted.
+//   Over / short  after counting the register: re-splits the tips (Summary
+//                 shows Was · Now · ±).
+// Turning an option off folds it back: counted bills go into the amount, an
+// over / short is cleared.
 function PoolCard({ pool, vm }) {
   const single = vm.state.pools.length === 1;
   const showChips = vm.state.settings.allRoles || !single;
   const vmPool = vm.pools.find(p => p.id === pool.id);
   const total = vmPool ? vmPool.total : 0;
-  const counted = vmPool?.counted || 0, rest = vmPool?.rest || 0, adj = vmPool?.adjust || 0;
-  const parts = [counted > 0 && fmtMoney(counted) + ' counted', rest > 0 && fmtMoney(rest) + ' rest',
+  const counted = vmPool?.counted || 0, adj = vmPool?.adjust || 0;
+  const [count, setCount] = useState(counted > 0);
+  const [over, setOver] = useState(!!String(pool.cash.adjust || '').trim());
+  const counting = count || counted > 0;
+  const adjusting = over || adj !== 0;
+  const parts = [counted > 0 && fmtMoney(counted) + ' counted', counted > 0 && vmPool.rest > 0 && fmtMoney(vmPool.rest) + ' rest',
     adj !== 0 && fmtMoney(Math.abs(adj)) + (adj < 0 ? ' short' : ' over')].filter(Boolean);
 
   return html`<${Card} flush data-pid=${pool.id}>
-    <div class="flex w-full items-center gap-3 px-4 pb-3 pt-4">
+    <div class="flex w-full items-start gap-3 px-4 pb-1 pt-4">
       <span class="flex min-w-0 flex-1 flex-col gap-0.5">
         <span class="t-head truncate">${single ? 'Tonight’s tips' : pool.label}</span>
         <span class="t-small text-ink-3">${parts.length ? parts.join(' · ') : windowSub(pool, vmPool)}</span>
@@ -155,26 +172,31 @@ function PoolCard({ pool, vm }) {
         ${adj !== 0 && html`<span class="t-small text-ink-3 line-through">${fmtMoney(vmPool.totalBefore)}</span>`}
       </span>
     </div>
-    <div class="flex flex-col gap-5 px-4 pb-4 pt-1">
-      <div class=${SUB}>
-        <span class=${EYEBROW}>Bills you counted <span class="font-normal text-ink-3">· the ones you can see at a glance</span></span>
-        <div class="flex flex-col divide-y divide-line">${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} d=${d} />`)}</div>
+    <div class="flex flex-col gap-4 px-4 pb-4 pt-3">
+      <${Amount} pool=${pool} vmPool=${vmPool} counting=${counting} />
+      <div class="flex flex-wrap gap-2">
+        <${Toggle} on=${counting} icon="cash" onClick=${() => {
+          if (counting) { setCount(false); App.poolCounting(pool.id, false); } else { setCount(true); App.poolCounting(pool.id, true); }
+        }}>Count bills<//>
+        <${Toggle} on=${adjusting} icon="swap" onClick=${() => {
+          if (adjusting) { setOver(false); App.poolAdjust(pool.id, ''); } else setOver(true);
+        }}>Over / short<//>
       </div>
-      <div class=${SUB}>
+      ${counting && html`<div class=${SUB}>
         <span class="flex items-center justify-between gap-3">
-          <span class=${EYEBROW}>${pool.cash.restMode === 'total'
-            ? html`Total cash <span class="font-normal text-ink-3">· incl. counted</span>`
-            : html`The rest <span class="font-normal text-ink-3">· not counted</span>`}</span>
-          <${Seg} size="sm" class="w-36 shrink-0" value=${pool.cash.restMode === 'total' ? 'total' : 'rest'} onChange=${m => App.poolRestMode(pool.id, m)}
-            items=${[{ value: 'rest', label: 'Rest' }, { value: 'total', label: 'Total' }]} />
+          <span class=${EYEBROW}>Bills you counted</span>
+          <span class="flex shrink-0 items-center gap-2">
+            <span class="t-small text-ink-3">Amount is the</span>
+            <${Seg} size="sm" class="w-32" value=${pool.cash.restMode === 'total' ? 'total' : 'rest'} onChange=${m => App.poolRestMode(pool.id, m)}
+              items=${[{ value: 'total', label: 'Total' }, { value: 'rest', label: 'Rest' }]} />
+          </span>
         </span>
-        <${Rest} pool=${pool} vmPool=${vmPool} />
-        <span class="t-small text-ink-3">The best bills are picked for whatever wasn’t counted.</span>
-      </div>
-      <div class=${SUB}>
-        <span class=${EYEBROW}>Register over / short <span class="font-normal text-ink-3">· after counting, re-splits the tips</span></span>
+        <div class="flex flex-col divide-y divide-line">${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} d=${d} />`)}</div>
+      </div>`}
+      ${adjusting && html`<div class=${SUB}>
+        <span class=${EYEBROW}>Register over / short <span class="font-normal text-ink-3">· re-splits the tips</span></span>
         <${Adjust} key=${pool.id} pool=${pool} />
-      </div>
+      </div>`}
       ${showChips && html`<${SharedBy} pool=${pool} />`}
       ${pool.includeSupport && html`<${SupportBox} pool=${pool} vm=${vm} vmPool=${vmPool} />`}
       ${!single && html`<div class=${SUB}>

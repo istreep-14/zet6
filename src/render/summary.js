@@ -2,6 +2,8 @@
 // Staff / Tips). The live HUD floats over it (rate · pool · chump · small
 // bills needed); tapping it goes on to Payout.
 //   register banner (when the Tips tab has an over / short)
+//   → Shift · Bills · Math switch: what sits under each name — the times,
+//     the envelope as bill tags, or hours × rate = exact and the rounding
 //   → payouts list: one row per person in Staff order — numbered tile (faint
 //     red ring = closer) · name over "5:00 pm – 2:00 am" (still tap / drag to
 //     edit) · Hrs · Tips, or Was · Now · ± when the register was adjusted;
@@ -13,8 +15,8 @@
 // Tap a person → Person sheet.
 
 import { fmtHrs, fmtMoney } from '../util.js';
-import { html, render, useRef, useLayoutEffect } from '../ui/preact.js';
-import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL } from '../ui/pkit.js';
+import { html, render, useRef, useState, useLayoutEffect } from '../ui/preact.js';
+import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Seg, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL } from '../ui/pkit.js';
 import { StaffTime, DefaultTime } from './staff.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
@@ -144,7 +146,9 @@ const dec2 = v => (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigi
 // With a register over / short (Tips tab) the money columns become
 // Was · Now · ± — the split before and after the adjustment.
 const PAY_GRID = 'grid grid-cols-[2rem_minmax(0,1fr)_2.75rem_4.5rem] items-center gap-x-3';
+const PAY_GRID_BARE = 'grid grid-cols-[2rem_minmax(0,1fr)_4.5rem] items-center gap-x-3';   // Bills / Math: no Hrs column
 const PAY_GRID_ADJ = 'grid grid-cols-[2rem_minmax(0,1fr)_3.25rem_3.75rem_2.75rem] items-center gap-x-2.5';
+const gridFor = (adj, view) => (adj ? PAY_GRID_ADJ : view === 'shift' ? PAY_GRID : PAY_GRID_BARE);
 const TILE = 'grid size-8 shrink-0 place-items-center rounded-lg';
 const ROW = 'li min-h-11 w-full px-4 py-1.5';
 // Tight under the name, but the tap / drag target reaches up over the name's
@@ -158,7 +162,7 @@ function Times({ a, b }) {
 }
 
 // Was · Now · ± cells (register adjusted), or Hrs · Tips.
-function MoneyCells({ adj, before, now, hours, sup, bold }) {
+function MoneyCells({ adj, before, now, hours, sup, bold, noHrs }) {
   if (adj) {
     const d = now - before;
     return html`
@@ -167,38 +171,66 @@ function MoneyCells({ adj, before, now, hours, sup, bold }) {
       <span class=${cx('t-small text-right font-medium tabular-nums', d < 0 ? 'text-bad' : d > 0 ? 'text-good' : 'text-ink-3')}>${signed(d)}</span>`;
   }
   return html`
-    <span class=${cx(HRS_CELL, bold ? 'font-semibold' : sup ? 'text-ink-3' : 'text-ink/80')}>${fmtHrs(hours)}</span>
+    ${!noHrs && html`<span class=${cx(HRS_CELL, bold ? 'font-semibold' : sup ? 'text-ink-3' : 'text-ink/80')}>${fmtHrs(hours)}</span>`}
     <${Money} value=${now} class=${cx('t-body text-right font-semibold', sup && SUP_TEXT, !(now > 0) && 'text-ink-3')} />`;
 }
 
-function PayRow({ vm, p, n, tint, before }) {
+// What sits under a name, by the view picked above the list:
+//   shift  "5:00 pm – 2:00 am" (tap / drag to edit)
+//   bills  the person's envelope as bill tags ($100×1 $20×5 …, bill tints)
+//   math   hours × rate = exact share, then the rounding (↓ down, ↑ up)
+const DEN = [100, 50, 20, 10, 5, 1];
+function BillTags({ bills }) {
+  const ds = DEN.filter(d => (bills?.[d] || 0) > 0);
+  if (!ds.length) return html`<span class="t-small text-ink-3">—</span>`;
+  return html`<span class="flex flex-wrap gap-1 pt-1">${ds.map(d => html`<span key=${d} class="billtag" data-d=${d}>$${d}<i>×${bills[d]}</i></span>`)}</span>`;
+}
+const r2 = v => (Number(v) || 0).toFixed(2);
+function MathLine({ p }) {
+  if (!(p.exact > 0)) return html`<span class="t-small text-ink-3">—</span>`;
+  const parts = Object.values(p.perPool || {}).filter(x => x.hours > 0).map(x => `${fmtHrs(x.hours)}h × ${r2(x.raw / x.hours)}`);
+  const diff = p.final - p.exact;
+  const up = diff > 0.004;
+  return html`<span class="t-small tabular-nums text-ink-3">${parts.join(' + ') || '0h'} = ${r2(p.exact)}
+    <span class=${cx('ml-1 whitespace-nowrap', up ? 'font-medium text-good' : 'text-ink-3')}>${up ? '↑' : '↓'} ${(up ? '+' : '−') + r2(Math.abs(diff))}</span></span>`;
+}
+function Sub({ vm, p, view }) {
+  if (view === 'bills') return html`<${BillTags} bills=${vm.dist && !vm.dist.error ? vm.dist.byPerson[p.id] : null} />`;
+  if (view === 'math') return html`<${MathLine} p=${p} />`;
+  return html`<${Times}
+    a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" cls=${TIME_INLINE} tone="text-ink-3" full />`}
+    b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" cls=${TIME_INLINE} tone="text-ink-3" full />`} />`;
+}
+
+function PayRow({ vm, p, n, tint, before, view }) {
   const adj = !!vm.sharesBefore;
   return html`<div role="button" tabindex="0" style=${{ '--inset': '3.5rem' }}
-    class=${cx(ROW, adj ? PAY_GRID_ADJ : PAY_GRID, 'cursor-pointer text-left transition active:bg-surface-2')}
+    class=${cx(ROW, gridFor(adj, view), 'cursor-pointer text-left transition active:bg-surface-2')}
     onClick=${() => App.personModal(p.id)} onKeyDown=${e => { if (e.key === 'Enter') App.personModal(p.id); }}>
     <span class=${cx(TILE, 't-small font-semibold tabular-nums', tint ? ROLE_TINT[p.role] : 'bg-surface-2 text-ink-2', p.closer && 'ring-1 ring-inset ring-bad/45')}
       aria-label=${'#' + n + (p.closer ? ', closer' : '')}>${n}</span>
     <span class="flex min-w-0 flex-col">
       <span class="t-body flex min-w-0 items-center gap-1.5 font-medium"><span class="truncate">${p.name}</span></span>
-      <${Times}
-        a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" cls=${TIME_INLINE} tone="text-ink-3" full />`}
-        b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" cls=${TIME_INLINE} tone="text-ink-3" full />`} />
+      <${Sub} vm=${vm} p=${p} view=${view} />
     </span>
-    <${MoneyCells} adj=${adj} before=${before} now=${p.final} hours=${p.shiftHours ?? p.hours} sup=${isSup(p)} />
+    <${MoneyCells} adj=${adj} before=${before} now=${p.final} hours=${p.shiftHours ?? p.hours} sup=${isSup(p)} noHrs=${view !== 'shift'} />
   </div>`;
 }
 
-function TotalRow({ vm, hours, paidOut, before }) {
+function TotalRow({ vm, hours, paidOut, before, view }) {
+  const s = vm.shares;
   const adj = !!vm.sharesBefore;
-  return html`<div style=${{ '--inset': '3.5rem' }} class=${cx(ROW, adj ? PAY_GRID_ADJ : PAY_GRID, 'bg-surface-2/60')}>
+  return html`<div style=${{ '--inset': '3.5rem' }} class=${cx(ROW, gridFor(adj, view), 'bg-surface-2/60')}>
     <span class=${cx(TILE, 'bg-surface-2 text-ink-2')}><${Icon} name="users" class="size-[1.125rem]" /></span>
     <span class="flex min-w-0 flex-col">
       <span class="t-body flex min-w-0 items-center gap-1.5 font-semibold">Total</span>
-      <${Times}
-        a=${html`<${DefaultTime} vm=${vm} field="in" cls=${TIME_INLINE} tone="text-ink-2" full />`}
-        b=${html`<${DefaultTime} vm=${vm} field="out" cls=${TIME_INLINE} tone="text-ink-2" full />`} />
+      ${view === 'bills' ? html`<${BillTags} bills=${vm.bills} />`
+        : view === 'math' ? html`<span class="t-small tabular-nums text-ink-3">${fmtMoney(s.totalCash)} ÷ ${fmtHrs(s.totalHours)}h = ${r2(s.rate)}/h${s.leftover > 0 ? ' · chump ' + fmtMoney(s.leftover) : ''}</span>`
+        : html`<${Times}
+          a=${html`<${DefaultTime} vm=${vm} field="in" cls=${TIME_INLINE} tone="text-ink-2" full />`}
+          b=${html`<${DefaultTime} vm=${vm} field="out" cls=${TIME_INLINE} tone="text-ink-2" full />`} />`}
     </span>
-    <${MoneyCells} adj=${adj} before=${before} now=${paidOut} hours=${hours} bold />
+    <${MoneyCells} adj=${adj} before=${before} now=${paidOut} hours=${hours} bold noHrs=${view !== 'shift'} />
   </div>`;
 }
 
@@ -209,7 +241,7 @@ function staffOrder(vm, people) {
   return people.map((p, i) => [p, i]).sort((x, y) => (rank[x[0].role] - rank[y[0].role]) || (x[1] - y[1])).map(x => x[0]);
 }
 
-function PayoutList({ vm, name }) {
+function PayoutList({ vm, name, view }) {
   const s = vm.shares;
   const adj = !!vm.sharesBefore;
   const ordered = staffOrder(vm, s.perPerson);
@@ -223,16 +255,16 @@ function PayoutList({ vm, name }) {
     ${roles.includes('support') && html`<span>· support is a tip-out, not counted in hours</span>`}</span>`;
   const cap = 't-cap text-ink-3';
   return html`<section class="flex flex-col gap-2">
-    <div class=${cx(adj ? PAY_GRID_ADJ : PAY_GRID, 'min-h-5 items-end px-4')}>
+    <div class=${cx(gridFor(adj, view), 'min-h-5 items-end px-4')}>
       <span class=${cx(cap, 'text-center')}>#</span>
       <span class=${cx(cap, 'truncate')}>${name || 'Payouts'}</span>
       ${adj
         ? html`<span class=${cx(cap, 'text-right')}>Was</span><span class=${cx(cap, 'text-right')}>Now</span><span class=${cx(cap, 'text-right')}>±</span>`
-        : html`<span class=${cx(cap, 'text-center')}>Hrs</span><span class=${cx(cap, 'text-right')}>Tips</span>`}
+        : html`${view === 'shift' && html`<span class=${cx(cap, 'text-center')}>Hrs</span>`}<span class=${cx(cap, 'text-right')}>Tips</span>`}
     </div>
     <${List}>
-      ${ordered.map((p, i) => html`<${PayRow} key=${p.id} vm=${vm} p=${p} n=${i + 1} tint=${tint} before=${was(p.id)} />`)}
-      <${TotalRow} vm=${vm} hours=${hours} paidOut=${paidOut} before=${paidBefore} />
+      ${ordered.map((p, i) => html`<${PayRow} key=${p.id} vm=${vm} p=${p} n=${i + 1} tint=${tint} before=${was(p.id)} view=${view} />`)}
+      <${TotalRow} vm=${vm} hours=${hours} paidOut=${paidOut} before=${paidBefore} view=${view} />
     <//>
     ${footer && html`<div class="t-small px-4 text-ink-3">${footer}</div>`}
   </section>`;
@@ -331,11 +363,18 @@ function Tools() {
 }
 
 function Summary({ vm, name }) {
+  const [view, setView] = useState('shift');          // shift · bills · math
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
+  const billsOff = view === 'bills' && (!vm.dist || vm.dist.error);
   return html`<div class="flex flex-col gap-6">
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map(w => html`<${Alert}>${w}<//>`)}
     <${AdjustBanner} vm=${vm} />
-    <${PayoutList} vm=${vm} name=${name} />
+    <div class="flex flex-col gap-3">
+      <${Seg} value=${view} onChange=${setView}
+        items=${[{ value: 'shift', label: 'Shift' }, { value: 'bills', label: 'Bills' }, { value: 'math', label: 'Math' }]} />
+      ${billsOff && html`<${Alert} tone="warn" action=${{ label: 'Payout', onClick: () => App.tab('payout') }}>The bills don’t work out yet — Payout has the swap.<//>`}
+      <${PayoutList} vm=${vm} name=${name} view=${view} />
+    </div>
     <${PoolsList} vm=${vm} />
     <${Tools} />
   </div>`;

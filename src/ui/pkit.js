@@ -86,9 +86,11 @@ export function Alert({ tone = 'error', action, children }) {
   </div>`;
 }
 
-export function Empty({ icon = 'dollar', title, body, action }) {
+export function Empty({ icon = 'dollar', logo = false, title, body, action }) {
   return html`<div class="t-body flex flex-col items-center px-6 pb-10 pt-12 text-center text-ink-3">
-    <span class="mb-4 grid size-14 place-items-center rounded-full bg-accent/12 text-accent"><${Icon} name=${icon} class="size-6" /></span>
+    ${logo
+      ? html`<img src="icon-192.png" alt="" class="mb-5 size-20 rounded-[1.375rem] shadow-[0_0.75rem_2rem_-0.75rem_rgb(0_0_0/.45)]" />`
+      : html`<span class="mb-4 grid size-14 place-items-center rounded-full bg-accent/12 text-accent"><${Icon} name=${icon} class="size-6" /></span>`}
     <div class="t-head mb-1 text-ink">${title}</div>
     <div>${body}</div>
     ${action && html`<div class="mt-6"><${Button} variant="primary" class="min-w-44" onClick=${action.onClick}>${action.label}<//></div>`}
@@ -99,7 +101,7 @@ export function Empty({ icon = 'dollar', title, body, action }) {
 export function Blocked({ vm }) {
   const pristine = !vm.hasNamedStaff && vm.totalCash === 0;
   if (pristine) {
-    return html`<${Empty} icon="users" title="No shift yet" body="Add who worked, then enter the tips."
+    return html`<${Empty} logo title="No shift yet" body="Add who worked, then enter the tips."
       action=${{ label: 'Add staff', onClick: () => App.tab('staff') }} />`;
   }
   const goTips = /cash|total|count|window|short|holds|support (%|\$|hours)/i.test(vm.blocked);

@@ -1,24 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- TipPool: one gold pool split three ways. Full-bleed square (iOS /
-       Android round the corners); the mark sits inside the central 80% so
-       maskable crops never clip it. Colours match the slate theme. -->
+  <!-- TipPool: a simplified take on the tavern badge — a palm-topped bottle
+       under an arch. No text, no outlines: navy field, brick-red arch, cream
+       mark. Full-bleed square (iOS / Android round the corners); the mark
+       stays inside the central 80% so maskable crops never clip it. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#2b2e37"/>
-      <stop offset="1" stop-color="#16181d"/>
+      <stop offset="0" stop-color="#22324f"/>
+      <stop offset="1" stop-color="#16223a"/>
     </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="46%" r="42%">
-      <stop offset="0" stop-color="#ffd23f" stop-opacity=".28"/>
-      <stop offset="1" stop-color="#ffd23f" stop-opacity="0"/>
-    </radialGradient>
-    <linearGradient id="g0" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe08a"/><stop offset="1" stop-color="#f5c02f"/></linearGradient><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd25a"/><stop offset="1" stop-color="#e9a91a"/></linearGradient><linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffcf4d"/><stop offset="1" stop-color="#dc9a12"/></linearGradient>
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
-  <rect width="512" height="512" fill="url(#glow)"/>
-  <g transform="translate(256 256)">
-    <path d="M7.8,-4.5 L7.8,-152.5 A148,148 0 0 1 136.0,69.5 Z" fill="url(#g0)"/><path d="M0.0,9.0 L128.2,83.0 A148,148 0 0 1 -128.2,83.0 Z" fill="url(#g1)"/><path d="M-7.8,-4.5 L-136.0,69.5 A148,148 0 0 1 -7.8,-152.5 Z" fill="url(#g2)"/>
-    <circle r="62" fill="#1d1f25"/>
-    <circle r="62" fill="none" stroke="#ffd23f" stroke-opacity=".25" stroke-width="3"/>
-    <text x="0" y="25" text-anchor="middle" font-family="-apple-system, 'SF Pro Rounded', 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="76" fill="#ffd23f">$</text>
+  <!-- arch -->
+  <path d="M132 418V250a124 124 0 0 1 248 0v168z" fill="#a23a3f"/>
+  <path d="M164 418V252a92 92 0 0 1 184 0v166z" fill="#1b2a45"/>
+  <!-- bottle -->
+  <path d="M245 214h22v58c0 10 25 22 25 46v94a8 8 0 0 1-8 8h-56a8 8 0 0 1-8-8v-94c0-24 25-36 25-46z" fill="#ece2b8"/>
+  <!-- palm fronds -->
+  <g fill="#ece2b8">
+    <path d="M256 204c-30-34-76-36-104-4 34-14 70-8 104 16z"/>
+    <path d="M256 204c30-34 76-36 104-4-34-14-70-8-104 16z"/>
+    <path d="M254 204c-12-38-44-60-82-58 34 12 58 34 74 70z"/>
+    <path d="M258 204c12-38 44-60 82-58-34 12-58 34-74 70z"/>
+    <path d="M252 206c-2-34 10-62 30-80-10 26-14 52-12 82z"/>
+    <circle cx="256" cy="210" r="11"/>
   </g>
 </svg>

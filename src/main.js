@@ -8,7 +8,7 @@ import * as sessions from './sessions.js';
 import { buildViewModel } from './viewmodel.js';
 import { setClock24, parseTime } from './time.js';
 import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
-import { switchTab, updateTabIndicators, normalizeTab, renderSubtabs, subsFor, activeSub } from './render/tabs.js';
+import { switchTab, updateTabIndicators, normalizeTab, renderSubtabs, subsFor, activeSub, TAB_ORDER } from './render/tabs.js';
 import { renderStaff, openStaffEditor, openTimeEditor, openRosterSheet, rosterSelected, rosterAdded } from './render/staff.js';
 import { loadRoster, rememberName, forgetName, getRoster } from './roster.js';
 import { renderTips, invalidateTips, openPoolSheet } from './render/tips.js';
@@ -145,8 +145,8 @@ const fromPanel = fn => (...a) => { closePanels(); fn(...a); };
 
 window.App = {
   // tabs
-  tab(name) {
-    switchTab(name);
+  tab(name, opts = {}) {
+    switchTab(name, opts);
     store.setActiveTab(name);
   },
 
@@ -276,6 +276,24 @@ window.App = {
   poolBill: (id, denom, value) => store.updatePool(id, p => { p.cash.billCounts[denom] = value; }),
   poolNet: (id, value) => store.updatePool(id, p => { p.cash.netTotal = value; }),
   poolAdjust: (id, value) => store.updatePool(id, p => { p.cash.adjust = value; }),
+  // Count bills on: the amount box now means the total (incl. the counted
+  // bills). Off: the counted bills fold back into one amount.
+  poolCounting(id, on) {
+    store.mutate(s => {
+      const p = s.pools.find(x => x.id === id);
+      if (!p) return;
+      const counted = [100, 50, 20, 10, 5, 1].reduce((t, d) => t + d * (parseInt(p.cash.billCounts[d], 10) || 0), 0);
+      const n = parseInt(p.cash.netTotal, 10) || 0;
+      if (on) {
+        if (!counted) p.cash.restMode = 'total';
+        return;
+      }
+      const sum = p.cash.restMode === 'total' && String(p.cash.netTotal).trim() ? Math.max(n, counted) : n + counted;
+      p.cash.netTotal = sum ? String(sum) : '';
+      Object.keys(p.cash.billCounts).forEach(d => { p.cash.billCounts[d] = ''; });
+      p.cash.restMode = 'rest';
+    }, { immediate: true });
+  },
   // The amount box means the uncounted rest, or the whole total (incl. the
   // counted bills). Switching keeps the same cash: the typed number converts.
   poolRestMode(id, mode) {
@@ -316,8 +334,7 @@ window.App = {
     e.preventDefault();
     const inputs = [...document.querySelectorAll(`[data-pid="${poolId}"] [data-bill]`)];
     const next = inputs[inputs.indexOf(e.target) + 1];
-    const rest = document.querySelector(`[data-pid="${poolId}"] [data-rest]`);
-    if (next) { next.focus(); next.select?.(); } else if (rest) rest.focus(); else e.target.blur();
+    if (next) { next.focus(); next.select?.(); } else e.target.blur();
   },
 
   // bonus
@@ -491,9 +508,10 @@ if (window.visualViewport) {
   }, { passive: false });
 })();
 
-// Swipe left/right on the page to move between the tab's SUB-tabs (bottom
-// tabs are tapped). Past the first sub-tab a right swipe opens the left
-// panel; past the last, a left swipe opens the shift panel. Ignored inside
+// Swipe left/right on the page to move between the bottom tabs (Summary ·
+// Staff · Tips · Payout). Only from the first tab does a right swipe open the
+// left panel, and only from the last does a left swipe open the shift panel
+// (the screen edges always drag the panels). Ignored inside
 // sideways-scrolling areas and staff rows, at the screen edges (those drag
 // the panels), while typing, or on vertical drags.
 (() => {
@@ -517,12 +535,9 @@ if (window.visualViewport) {
     const dx = e.changedTouches[0].clientX - x0;
     const dy = e.changedTouches[0].clientY - y0;
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - t0 > 700) return;
-    const st = store.getState();
-    const tab = st.ui.activeTab;
-    const subs = subsFor(tab, st);
-    const i = subs.findIndex(x => x.v === activeSub(tab, st));
+    const i = TAB_ORDER.indexOf(store.getState().ui.activeTab);
     const j = i + (dx < 0 ? 1 : -1);
-    if (subs.length && j >= 0 && j < subs.length) App.sub(tab, subs[j].v);
+    if (j >= 0 && j < TAB_ORDER.length) App.tab(TAB_ORDER[j], { swipe: dx < 0 ? 'left' : 'right' });
     else openPanel(dx > 0 ? 'left' : 'right');
   }, { passive: true });
 })();
