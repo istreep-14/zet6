@@ -1,22 +1,27 @@
-// Summary tab (Preact) — the shift at a glance, for reading (setup lives on
-// Staff / Tips). The live HUD floats over it (rate · pool · chump · small
+// Summary tab (Preact) — home: the shift at a glance (setup lives on
+// Staff / Tips; until it's done this shows the close-out checklist). The live HUD floats over it (rate · pool · chump · small
 // bills needed); tapping it goes on to Payout.
 //   register banner (when the Tips tab has an over / short)
-//   → Shift · Bills · Math switch: what sits under each name — the times,
-//     the envelope as bill tags, or hours × rate = exact and the rounding
+//   → Shift · Pools · Bills · Math switch. Pools (several pools only, and the
+//     default then) = the PoolGrid table: per person, Hrs · Tips for every
+//     pool, then total hours and take-home, with a Total row. The others set
+//     what sits under each name in the payouts list — the times, the
+//     envelope as bill tags, or hours × rate = exact and the rounding
 //   → payouts list: one row per person in Staff order — numbered tile (faint
-//     red ring = closer) · name over "5:00 pm – 2:00 am" (still tap / drag to
-//     edit) · Hrs · Tips, or Was · Now · ± when the register was adjusted;
-//     a Total row with the default open / close, hours and paid out
+//     red ring = closer) · name · In – Out (separate, lined-up columns; still
+//     tap / drag to edit) · Hrs · Tips, or Was · Now · ± when the register
+//     was adjusted; a Total row with the default open / close, hours and
+//     paid out
 //   → pools (several pools; tap → that pool's table in a sheet)
 //   → close time / bonus tools.
 // Support staff are paid a tip-out off the top, so their hours never count in
 // hours totals and their pay shows in the support colour.
 // Tap a person → Person sheet.
 
-import { fmtHrs, fmtMoney } from '../util.js';
-import { html, render, useRef, useState, useLayoutEffect } from '../ui/preact.js';
-import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Seg, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL } from '../ui/pkit.js';
+import { fmtHrs, fmtMoney, hasMinutes, hrsDecimals, hrsText } from '../util.js';
+import { TIME_TEXT } from '../ui/dragtime.js';
+import { html, render, useRef, useState, useEffect, useLayoutEffect } from '../ui/preact.js';
+import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Seg, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL } from '../ui/pkit.js';
 import { StaffTime, DefaultTime } from './staff.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
@@ -145,24 +150,47 @@ const dec2 = v => (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigi
 // sideways → 15-min steps. A Total row closes it.
 // With a register over / short (Tips tab) the money columns become
 // Was · Now · ± — the split before and after the adjustment.
-const PAY_GRID = 'grid grid-cols-[2rem_minmax(0,1fr)_2.75rem_4.5rem] items-center gap-x-3';
-const PAY_GRID_BARE = 'grid grid-cols-[2rem_minmax(0,1fr)_4.5rem] items-center gap-x-3';   // Bills / Math: no Hrs column
+// Tips' width (--pw) = the widest amount in the list (PayoutList).
+const PAY_GRID_BARE = 'grid grid-cols-[2rem_minmax(0,1fr)_var(--pw,4.5rem)] items-center gap-x-3';   // Bills / Math: no Hrs column
+// Shift view (no register adjustment): one flat grid — Name · In · Out ·
+// Hrs · Tips — sized from the data (fitShift, measured in PayoutList):
+//   In / Out / Hrs / Tips  four equal columns, equal gaps (gap-x-3): at
+//                   least the widest number in any of them + room (--cw),
+//                   growing with spare width (0.5fr)
+//   Name            at least the longest name on the list (--nmin) — as far
+//                   as the row allows; only then does a name truncate — and
+//                   everything left over (1fr)
+// The times' LINE becomes `contents` so its cells join this grid.
+const PAY_GRID_SHIFT = 'grid grid-cols-[2rem_minmax(var(--nmin,0px),1fr)_repeat(4,minmax(var(--cw,2.75rem),0.5fr))] items-center gap-x-3';
 const PAY_GRID_ADJ = 'grid grid-cols-[2rem_minmax(0,1fr)_3.25rem_3.75rem_2.75rem] items-center gap-x-2.5';
-const gridFor = (adj, view) => (adj ? PAY_GRID_ADJ : view === 'shift' ? PAY_GRID : PAY_GRID_BARE);
+const gridFor = (adj, view) => (adj ? PAY_GRID_ADJ : view === 'shift' ? PAY_GRID_SHIFT : PAY_GRID_BARE);
+// The times' wrapper: its own grid inside the name cell when the register
+// was adjusted (Was · Now · ± take the right), else dissolved into the row.
+const lineCls = adj => (adj ? cx(LINE, 'self-stretch') : 'contents');
 const TILE = 'grid size-8 shrink-0 place-items-center rounded-lg';
 const ROW = 'li min-h-11 w-full px-4 py-1.5';
-// Tight under the name, but the tap / drag target reaches up over the name's
-// lower half (padding out, negative margin back) so it's easy to hit.
-const TIME_INLINE = 'relative z-[1] rounded -mx-1 -my-2 px-1 py-2 tabular-nums transition';
 const HRS_CELL = 't-body text-center font-medium tabular-nums';
 const signed = v => (v > 0 ? '+' : v < 0 ? '−' : '') + (v ? Math.abs(v).toLocaleString('en-US') : '—');
 
-function Times({ a, b }) {
-  return html`<span class="t-small line-clamp-2 text-ink-3">${a}<span class="mx-1">–</span>${b}</span>`;
-}
+// ── Shift view: In – Out columns ─────────────────────────────────────────────
+// One line per person: Name · In · Out · Hrs · Tips (see PAY_GRID_SHIFT).
+// Each time is the Staff tab's DragTime as a box filling its cell — the
+// column's width and the row's full height (`TimeCol` stretches over the
+// row padding) — tap → quick time sheet, drag sideways → 15-min steps (the
+// box fills accent while dragged, like the Staff table). With a register
+// adjustment the times sit in `LINE`, a grid inside the name cell, same
+// column sizing.
+const LINE = 'grid min-w-0 grid-cols-[minmax(0,1fr)_repeat(2,minmax(var(--cw,2.75rem),0.5fr))] items-center gap-x-3';
+// Inside the box: the number with "am" / "pm" hanging under it (TIME_TEXT,
+// shared with the Staff table — see dragtime.js).
+const TIME_CELL = 'flex size-full items-center justify-center rounded-lg transition ' + TIME_TEXT;
+// The cell: fills the column and stretches over the row's py-1.5.
+const TimeCol = ({ children }) => html`<span data-tc class="-my-1.5 flex self-stretch">${children}</span>`;
+// Hrs' size and weight (medium), a step lower in contrast (ink-2; support dimmed).
+const TIME_TONE = p => cx('font-medium', isSup(p) ? 'text-ink-3' : 'text-ink-2');
 
 // Was · Now · ± cells (register adjusted), or Hrs · Tips.
-function MoneyCells({ adj, before, now, hours, sup, bold, noHrs }) {
+function MoneyCells({ adj, before, now, hours, sup, bold, noHrs, hdp = 0 }) {
   if (adj) {
     const d = now - before;
     return html`
@@ -171,12 +199,12 @@ function MoneyCells({ adj, before, now, hours, sup, bold, noHrs }) {
       <span class=${cx('t-small text-right font-medium tabular-nums', d < 0 ? 'text-bad' : d > 0 ? 'text-good' : 'text-ink-3')}>${signed(d)}</span>`;
   }
   return html`
-    ${!noHrs && html`<span class=${cx(HRS_CELL, bold ? 'font-semibold' : sup ? 'text-ink-3' : 'text-ink/80')}>${fmtHrs(hours)}</span>`}
-    <${Money} value=${now} class=${cx('t-body text-right font-semibold', sup && SUP_TEXT, !(now > 0) && 'text-ink-3')} />`;
+    ${!noHrs && html`<span class=${cx(HRS_CELL, bold ? 'font-semibold' : sup ? 'text-ink-3' : 'text-ink/80')}><span data-cw>${hrsText(hours, hdp)}</span></span>`}
+    <span data-pw class="t-body text-right"><${Money} value=${now} class=${cx('t-body font-semibold', sup && SUP_TEXT, !(now > 0) && 'text-ink-3')} /></span>`;
 }
 
 // What sits under a name, by the view picked above the list:
-//   shift  "5:00 pm – 2:00 am" (tap / drag to edit)
+//   shift  a thin timeline bar (the times trail the name)
 //   bills  the person's envelope as bill tags ($100×1 $20×5 …, bill tints)
 //   math   hours × rate = exact share, then the rounding (↓ down, ↑ up)
 const DEN = [100, 50, 20, 10, 5, 1];
@@ -197,41 +225,77 @@ function MathLine({ p }) {
 function Sub({ vm, p, view }) {
   if (view === 'bills') return html`<${BillTags} bills=${vm.dist && !vm.dist.error ? vm.dist.byPerson[p.id] : null} />`;
   if (view === 'math') return html`<${MathLine} p=${p} />`;
-  return html`<${Times}
-    a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" cls=${TIME_INLINE} tone="text-ink-3" full />`}
-    b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" cls=${TIME_INLINE} tone="text-ink-3" full />`} />`;
+  return null;
 }
 
-function PayRow({ vm, p, n, tint, before, view }) {
+const NAME_TEXT = 't-body flex min-w-0 items-baseline';
+
+function PayRow({ vm, p, n, tint, before, view, col = {} }) {
   const adj = !!vm.sharesBefore;
   return html`<div role="button" tabindex="0" style=${{ '--inset': '3.5rem' }}
     class=${cx(ROW, gridFor(adj, view), 'cursor-pointer text-left transition active:bg-surface-2')}
     onClick=${() => App.personModal(p.id)} onKeyDown=${e => { if (e.key === 'Enter') App.personModal(p.id); }}>
     <span class=${cx(TILE, 't-small font-semibold tabular-nums', tint ? ROLE_TINT[p.role] : 'bg-surface-2 text-ink-2', p.closer && 'ring-1 ring-inset ring-bad/45')}
       aria-label=${'#' + n + (p.closer ? ', closer' : '')}>${n}</span>
-    <span class="flex min-w-0 flex-col">
-      <span class="t-body flex min-w-0 items-center gap-1.5 font-medium"><span class="truncate">${p.name}</span></span>
-      <${Sub} vm=${vm} p=${p} view=${view} />
-    </span>
-    <${MoneyCells} adj=${adj} before=${before} now=${p.final} hours=${p.shiftHours ?? p.hours} sup=${isSup(p)} noHrs=${view !== 'shift'} />
+    ${view === 'shift' ? html`<span class=${lineCls(adj)}>
+        <span class="flex min-w-0"><span data-nw class="t-body min-w-0 truncate font-medium">${p.name}</span></span>
+        <${TimeCol}><${StaffTime} vm=${vm} id=${p.id} field="in" cls=${TIME_CELL} tone=${TIME_TONE(p)} mins=${col.inMins} /><//>
+        <${TimeCol}><${StaffTime} vm=${vm} id=${p.id} field="out" cls=${TIME_CELL} tone=${TIME_TONE(p)} mins=${col.outMins} /><//>
+      </span>`
+      : html`<span class="flex min-w-0 flex-col">
+        <span class=${cx(NAME_TEXT, 'font-medium')}><span class="truncate">${p.name}</span></span>
+        <${Sub} vm=${vm} p=${p} view=${view} />
+      </span>`}
+    <${MoneyCells} adj=${adj} before=${before} now=${p.final} hours=${p.shiftHours ?? p.hours} sup=${isSup(p)} noHrs=${view !== 'shift'} hdp=${col.hdp} />
   </div>`;
 }
 
-function TotalRow({ vm, hours, paidOut, before, view }) {
+function TotalRow({ vm, hours, paidOut, before, view, col = {} }) {
   const s = vm.shares;
   const adj = !!vm.sharesBefore;
   return html`<div style=${{ '--inset': '3.5rem' }} class=${cx(ROW, gridFor(adj, view), 'bg-surface-2/60')}>
     <span class=${cx(TILE, 'bg-surface-2 text-ink-2')}><${Icon} name="users" class="size-[1.125rem]" /></span>
-    <span class="flex min-w-0 flex-col">
-      <span class="t-body flex min-w-0 items-center gap-1.5 font-semibold">Total</span>
-      ${view === 'bills' ? html`<${BillTags} bills=${vm.bills} />`
-        : view === 'math' ? html`<span class="t-small tabular-nums text-ink-3">${fmtMoney(s.totalCash)} ÷ ${fmtHrs(s.totalHours)}h = ${r2(s.rate)}/h${s.leftover > 0 ? ' · chump ' + fmtMoney(s.leftover) : ''}</span>`
-        : html`<${Times}
-          a=${html`<${DefaultTime} vm=${vm} field="in" cls=${TIME_INLINE} tone="text-ink-2" full />`}
-          b=${html`<${DefaultTime} vm=${vm} field="out" cls=${TIME_INLINE} tone="text-ink-2" full />`} />`}
-    </span>
-    <${MoneyCells} adj=${adj} before=${before} now=${paidOut} hours=${hours} bold noHrs=${view !== 'shift'} />
+    ${view === 'shift' ? html`<span class=${lineCls(adj)}>
+        <span class="flex min-w-0"><span data-nw class="t-body min-w-0 truncate font-semibold">Total</span></span>
+        <${TimeCol}><${DefaultTime} vm=${vm} field="in" cls=${TIME_CELL} tone="font-semibold text-ink" mins=${col.inMins} /><//>
+        <${TimeCol}><${DefaultTime} vm=${vm} field="out" cls=${TIME_CELL} tone="font-semibold text-ink" mins=${col.outMins} /><//>
+      </span>`
+      : html`<span class="flex min-w-0 flex-col">
+        <span class=${cx(NAME_TEXT, 'font-semibold')}>Total</span>
+        ${view === 'bills' ? html`<${BillTags} bills=${vm.bills} />`
+          : html`<span class="t-small tabular-nums text-ink-3">${fmtMoney(s.totalCash)} ÷ ${fmtHrs(s.totalHours)}h = ${r2(s.rate)}/h${s.leftover > 0 ? ' · chump ' + fmtMoney(s.leftover) : ''}</span>`}
+      </span>`}
+    <${MoneyCells} adj=${adj} before=${before} now=${paidOut} hours=${hours} bold noHrs=${view !== 'shift'} hdp=${col.hdp} />
   </div>`;
+}
+
+// Size the payouts grid from what's in it (see PAY_GRID_SHIFT): --pw = the
+// widest amount (or the TIPS caption; Bills / Math's Tips width); in the
+// Shift view --cw = the widest number in In / Out / Hrs / Tips + room (the
+// time boxes still fill the column),
+// and --nmin = the longest name, but no more than the row can give after
+// the other columns' minimums — so a short list of short names leaves the
+// numbers more room, and a long name gets what it needs when it can.
+const widest = (el, sel) => Math.max(0, ...[...el.querySelectorAll(sel)].map(x => x.getBoundingClientRect().width));
+function fitShift(el, view) {
+  if (!el) return;
+  const pw = Math.ceil(widest(el, '[data-pw] > span, [data-pwcap]'));
+  if (pw > 0) el.style.setProperty('--pw', pw + 1 + 'px');
+  if (view !== 'shift') return;
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+  const num = Math.max(widest(el, '[data-tc] button > span'), widest(el, '[data-cw]'), pw);
+  if (!(num > 0)) return;
+  const cw = Math.max(2 * rem, Math.ceil(num + 0.75 * rem));
+  el.style.setProperty('--cw', cw + 'px');
+  const row = el.querySelector('.li');
+  if (!row) return;
+  const cs = getComputedStyle(row);
+  const avail = row.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const gap = parseFloat(cs.columnGap) || 0;
+  const room = avail - 2 * rem - 5 * gap - 4 * cw;
+  // scrollWidth: a truncated name's full width.
+  const nw = Math.max(0, ...[...el.querySelectorAll('[data-nw]')].map(x => x.scrollWidth)) + 1;
+  el.style.setProperty('--nmin', Math.max(0, Math.min(nw, room)) + 'px');
 }
 
 // Staff-tab order: state order, grouped by role when roles are on.
@@ -254,20 +318,114 @@ function PayoutList({ vm, name, view }) {
     ${roles.map(r => html`<span key=${r} class="inline-flex items-center gap-1.5"><span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_PLURAL[r]}</span>`)}
     ${roles.includes('support') && html`<span>· support is a tip-out, not counted in hours</span>`}</span>`;
   const cap = 't-cap text-ink-3';
-  return html`<section class="flex flex-col gap-2">
+  // One look per column: if any time in the In (or Out) column has minutes,
+  // every row shows them ("5:00p" over "5:30p"); Hrs likewise share the most
+  // decimals any row needs ("6.0" over "6.5"). The Total row counts too.
+  const R = vm.resolved;
+  const rs = ordered.map(p => R?.staff.find(x => x.id === p.id)).filter(Boolean);
+  const col = {
+    inMins: hasMinutes([...rs.map(r => r.inAbs), R?.anchorAbs]),
+    outMins: hasMinutes([...rs.map(r => r.outAbs), R?.closeAbs]),
+    hdp: Math.max(0, ...ordered.map(p => hrsDecimals(p.shiftHours ?? p.hours)), hrsDecimals(hours)),
+  };
+  const box = useRef(null);
+  useLayoutEffect(() => fitShift(box.current, view));
+  useEffect(() => {
+    const on = () => fitShift(box.current, view);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, [view]);
+  return html`<section ref=${box} class="flex flex-col gap-2">
     <div class=${cx(gridFor(adj, view), 'min-h-5 items-end px-4')}>
       <span class=${cx(cap, 'text-center')}>#</span>
-      <span class=${cx(cap, 'truncate')}>${name || 'Payouts'}</span>
+      ${view === 'shift'
+        ? html`<span class=${adj ? LINE : 'contents'}><span class=${cx(cap, 'truncate')}>${name || 'Payouts'}</span><span class=${cx(cap, 'text-center')}>In</span><span class=${cx(cap, 'text-center')}>Out</span></span>`
+        : html`<span class=${cx(cap, 'truncate')}>${name || 'Payouts'}</span>`}
       ${adj
         ? html`<span class=${cx(cap, 'text-right')}>Was</span><span class=${cx(cap, 'text-right')}>Now</span><span class=${cx(cap, 'text-right')}>±</span>`
-        : html`${view === 'shift' && html`<span class=${cx(cap, 'text-center')}>Hrs</span>`}<span class=${cx(cap, 'text-right')}>Tips</span>`}
+        : html`${view === 'shift' && html`<span class=${cx(cap, 'text-center')}>Hrs</span>`}<span class=${cx(cap, 'text-right')}><span data-pwcap>Tips</span></span>`}
     </div>
     <${List}>
-      ${ordered.map((p, i) => html`<${PayRow} key=${p.id} vm=${vm} p=${p} n=${i + 1} tint=${tint} before=${was(p.id)} view=${view} />`)}
-      <${TotalRow} vm=${vm} hours=${hours} paidOut=${paidOut} before=${paidBefore} view=${view} />
+      ${ordered.map((p, i) => html`<${PayRow} key=${p.id} vm=${vm} p=${p} n=${i + 1} tint=${tint} before=${was(p.id)} view=${view} col=${col} />`)}
+      <${TotalRow} vm=${vm} hours=${hours} paidOut=${paidOut} before=${paidBefore} view=${view} col=${col} />
     <//>
     ${footer && html`<div class="t-small px-4 text-ink-3">${footer}</div>`}
   </section>`;
+}
+
+// ── Pools table (several pools — Summary's default then) ────────────────────
+// One row per person, and for every pool its Hrs · Tips, then their Total
+// hours and take-home; a Total row with each pool's hours and cash. Scrolls
+// sideways with the name column pinned. A blank cell = their role doesn't
+// share that pool; "—" = it does, but they didn't work its window. Support:
+// hours dimmed (a tip-out, not in the hours totals), pay in the support tint.
+// Tips per pool are exact shares; Take-home is after rounding + closer bonus.
+function PoolGrid({ vm }) {
+  const s = vm.shares;
+  const pools = s.perPool;
+  const people = staffOrder(vm, s.perPerson.filter(p => p.final > 0 || Object.values(p.perPool || {}).some(x => x.hours > 0)));
+  const { roles, tint } = rolesOf(vm, people);
+  const shares = (pl, p) => { const r = poolRoles(vm, pl.id); return isSup(p) ? r.support : r[p.role]; };
+  const TH = 't-cap whitespace-nowrap px-2 pb-1.5 pt-1 text-ink-3';
+  const TD = 'whitespace-nowrap px-2 py-2 tabular-nums';
+  const SEP = 'border-l border-line';
+  const NAME = 'sticky left-0 z-[1] bg-inherit pl-4 pr-2 text-left';
+  const tippedHours = pools.reduce((t, pl) => t + pl.tippedHours, 0);
+  const paid = people.reduce((t, p) => t + p.final, 0);
+  return html`<${Card} flush>
+    <div class="overflow-x-auto [scrollbar-width:thin]">
+      <table class="min-w-full border-separate border-spacing-0 text-[0.9375rem]">
+        <thead class="bg-surface">
+          <tr class="bg-surface">
+            <th rowspan="2" class=${cx(NAME, TH, 'z-[2] align-bottom')}>Name</th>
+            ${pools.map((pl, i) => html`<th key=${pl.id} colspan="2" class=${cx('px-2 pt-2.5 text-center font-normal', SEP)}>
+              <button class="inline-flex flex-col items-center active:opacity-60" onClick=${() => App.openPoolSummary(pl.id)}>
+                <span class="t-small inline-flex items-center gap-1.5 font-semibold text-ink"><${PoolDot} i=${i} />${pl.label}</span>
+                <span class="whitespace-nowrap text-[0.75rem] tabular-nums text-ink-3"><${Clock} abs=${pl.startAbs} />–<${Clock} abs=${pl.endAbs} /> · ${rate2(pl.rate)}/h</span>
+              </button></th>`)}
+            <th colspan="2" class=${cx('t-small px-2 pt-2.5 text-center align-top font-semibold', SEP)}>Total</th>
+          </tr>
+          <tr class="bg-surface shadow-[0_1px_0_var(--line)]">
+            ${pools.map(pl => html`<th key=${pl.id + 'h'} class=${cx(TH, SEP, 'text-center')}>Hrs</th><th key=${pl.id + 't'} class=${cx(TH, 'text-right')}>Tips</th>`)}
+            <th class=${cx(TH, SEP, 'text-center')}>Hrs</th><th class=${cx(TH, 'pr-4 text-right')}>Take-home</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${people.map((p, i) => {
+            const hrs = Object.values(p.perPool || {}).reduce((t, x) => t + x.hours, 0);
+            return html`<tr key=${p.id} class=${cx(zebra(i), 'cursor-pointer active:brightness-95')} onClick=${() => App.personModal(p.id)}>
+              <td class=${cx(NAME, 'py-2')}><span class="flex max-w-[8.5rem] items-center gap-1.5">
+                ${tint && html`<${RoleDot} role=${p.role} />`}
+                <span class=${cx('truncate font-medium', p.closer && 'underline decoration-bad/50 decoration-2 underline-offset-4')}>${p.name}</span></span></td>
+              ${pools.map(pl => {
+                const x = p.perPool?.[pl.id];
+                const on = shares(pl, p);
+                return html`<td key=${pl.id + 'h'} class=${cx(TD, SEP, 'text-center', isSup(p) ? 'text-ink-3' : 'text-ink-2')}>${!on ? '' : x ? fmtHrs(x.hours) : '—'}</td>
+                  <td key=${pl.id + 't'} class=${cx(TD, 'text-right', isSup(p) && SUP_TEXT)}>${x ? r2(x.raw) : on ? html`<span class="text-ink-3">—</span>` : ''}</td>`;
+              })}
+              <td class=${cx(TD, SEP, 'text-center font-medium', isSup(p) ? 'text-ink-3' : 'text-ink/85')}>${fmtHrs(hrs)}</td>
+              <td class=${cx(TD, 'pr-4 text-right')}><${Money} value=${p.final} class=${cx('font-semibold', isSup(p) && SUP_TEXT)} /></td>
+            </tr>`;
+          })}
+        </tbody>
+        <tfoot>
+          <tr class=${TOTAL_FILL}>
+            <td class=${cx(NAME, 'py-2.5 font-semibold')}>Total</td>
+            ${pools.map(pl => html`<td key=${pl.id + 'h'} class=${cx(TD, SEP, 'text-center font-semibold')}>${fmtHrs(pl.tippedHours)}</td>
+              <td key=${pl.id + 't'} class=${cx(TD, 'text-right')}><${Money} value=${pl.total} class="font-semibold" /></td>`)}
+            <td class=${cx(TD, SEP, 'text-center font-semibold')}>${fmtHrs(tippedHours)}</td>
+            <td class=${cx(TD, 'pr-4 text-right')}><${Money} value=${paid} class="font-semibold" /></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <div class="t-small flex flex-wrap gap-x-3 gap-y-1 border-t border-line px-4 py-2 text-ink-3">
+      <span>Tips = each pool’s exact share; take-home is rounded${s.leftover > 0 ? ' · chump ' + fmtMoney(s.leftover) : ''}.</span>
+      <span>Blank = their role isn’t in that pool · — = didn’t work its window.</span>
+      ${tint && roles.map(r => html`<span key=${r} class="inline-flex items-center gap-1.5"><span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_PLURAL[r]}</span>`)}
+      <span class="inline-flex items-center gap-1.5"><span class="underline decoration-bad/50 decoration-2 underline-offset-4">Name</span> closer</span>
+    </div>
+  <//>`;
 }
 
 // Register over / short (Tips tab): what changed, tap → Tips.
@@ -363,19 +521,22 @@ function Tools() {
 }
 
 function Summary({ vm, name }) {
-  const [view, setView] = useState('shift');          // shift · bills · math
+  const [pick, setView] = useState(null);             // shift · pools · bills · math (null = default)
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
+  const several = vm.shares.perPool.length > 1;
+  // Several pools open on the Pools table — hours and tips per pool per person.
+  const view = (pick === 'pools' && !several) ? 'shift' : pick || (several ? 'pools' : 'shift');
   const billsOff = view === 'bills' && (!vm.dist || vm.dist.error);
   return html`<div class="flex flex-col gap-6">
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map(w => html`<${Alert}>${w}<//>`)}
     <${AdjustBanner} vm=${vm} />
     <div class="flex flex-col gap-3">
       <${Seg} value=${view} onChange=${setView}
-        items=${[{ value: 'shift', label: 'Shift' }, { value: 'bills', label: 'Bills' }, { value: 'math', label: 'Math' }]} />
+        items=${[{ value: 'shift', label: 'Shift' }, several && { value: 'pools', label: 'Pools' }, { value: 'bills', label: 'Bills' }, { value: 'math', label: 'Math' }].filter(Boolean)} />
       ${billsOff && html`<${Alert} tone="warn" action=${{ label: 'Payout', onClick: () => App.tab('payout') }}>The bills don’t work out yet — Payout has the swap.<//>`}
-      <${PayoutList} vm=${vm} name=${name} view=${view} />
+      ${view === 'pools' ? html`<${PoolGrid} vm=${vm} />` : html`<${PayoutList} vm=${vm} name=${name} view=${view} />`}
     </div>
-    <${PoolsList} vm=${vm} />
+    ${view !== 'pools' && html`<${PoolsList} vm=${vm} />`}
     <${Tools} />
   </div>`;
 }

@@ -210,7 +210,8 @@
   }
   body.keyboard-open .content { padding-bottom: 1.5rem; }
 
-  .panel { display: none; }
+  /* Sticky table heads sit flush with the top of .content (tucked into its 0.5rem padding). */
+  .panel { display: none; --thead-top: -0.5rem; }
   .panel.active { display: block; animation: rise .2s ease; }
   .panel.active.from-right { animation: inRight .24s cubic-bezier(.2, .8, .3, 1); }
   .panel.active.from-left  { animation: inLeft .24s cubic-bezier(.2, .8, .3, 1); }
@@ -418,44 +419,24 @@
   .side--right .side-body { padding-right: calc(1rem + var(--safe-r)); }
   .side-body > * { flex-shrink: 0; }
 
-  /* ── Sub-tabs: a row of pills under the page title (render/tabs.js) ───
-     Currently unused (every tab is one page); kept for the machinery. */
-  .subtabs {
-    position: sticky; top: -0.5rem; z-index: 6;
-    margin: -0.5rem calc(-1 * var(--gutter)) 0.5rem;
-    padding: 0.125rem 0 0.5rem;
+  /* ── Time keypad (ui/keypad.js): docked in place of the tab bar ──────── */
+  .keypad {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 110;
+    padding: 0 var(--safe-r) var(--safe-b) var(--safe-l);
     background: var(--glass);
     -webkit-backdrop-filter: var(--blur);
     backdrop-filter: var(--blur);
+    box-shadow: 0 -1px 0 var(--line);
+    transform: translateY(105%);
+    transition: transform .22s cubic-bezier(.2, .8, .3, 1);
   }
-  .subtabs:empty { display: none; }
-  .subtabs-row {
-    display: flex; gap: 0.25rem;
-    padding: 0 calc(var(--gutter) + var(--safe-r)) 0 calc(var(--gutter) + var(--safe-l));
-    overflow-x: auto; scrollbar-width: none;
-  }
-  .subtabs-row::-webkit-scrollbar { display: none; }
-  .subtab {
-    flex: 0 0 auto;
-    height: 2rem;
-    display: inline-flex; align-items: center; gap: 0.375rem;
-    padding: 0 0.875rem;
-    border-radius: 999px;
-    font-size: 0.875rem; font-weight: 600;
-    white-space: nowrap;
-    color: var(--ink-2);
-    transition: color .15s, background .15s;
-  }
-  .subtab[aria-selected="true"] { color: var(--on-accent); background: var(--accent); }
-  .subtab-n {
-    flex-shrink: 0;
-    min-width: 1.125rem; height: 1.125rem; padding: 0 0.3125rem; border-radius: 999px;
-    font-size: 0.6875rem; font-weight: 600; line-height: 1.125rem; text-align: center;
-    color: var(--ink-2); background: var(--surface-2);
-  }
-  .subtab-dot { width: 0.4375rem; height: 0.4375rem; border-radius: 50%; background: var(--bad); }
-  .sub-root.sub-in-right { animation: inRight .24s cubic-bezier(.2, .8, .3, 1); }
-  .sub-root.sub-in-left  { animation: inLeft .24s cubic-bezier(.2, .8, .3, 1); }
+  .keypad > * { max-width: 30rem; margin: 0 auto; }
+  .keypad.open { transform: none; }
+  html.keypad-open .tabbar, html.keypad-open .hud { visibility: hidden; }
+  html.keypad-open .content { padding-bottom: calc(var(--kp-h, 18rem) + 1rem); }
+  html.fill-screen .keypad { position: absolute; }
+  html.keypad-open .side-body, html.keypad-open .sheet-body { padding-bottom: calc(var(--kp-h, 18rem) + 1rem); }
+  [data-kcell] { scroll-margin: 3rem 0 calc(var(--kp-h, 0px) + 0.75rem); }
 
   /* ── Settings switch ──────────────────────────────────────────────────── */
   .switch { position: relative; flex-shrink: 0; width: 3.125rem; height: 1.875rem; border-radius: 999px; background: var(--surface-2); transition: background .25s; }

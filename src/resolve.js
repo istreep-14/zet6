@@ -9,14 +9,14 @@
 // Blank-out people sit at close time, so they're closers via latest-out
 // naturally — someone typed *past* close becomes the closer, ties share.
 
-import { parseTime, resolveIn, nextAfter, atOrAfter, overlapHours } from './time.js';
+import { parseTime, resolveIn, inAbsOf, afterAbsOf, atOrAfterOf, overlapHours } from './time.js';
 import { parseWholeNumber, parseDecimalNumber, poolValue, DENOMS } from './util.js';
 
 const EPS = 1e-9;
 
 function parseField(raw, label, errors) {
   const p = parseTime(raw);
-  if (!p.valid) errors.push(label + ' is not a valid time — use 15-min steps (e.g. 5, 5.25, 10.5, 11.75).');
+  if (!p.valid) errors.push(label + ' is not a valid time — use 15-min steps (e.g. 5, 5.25, 10.5, 7a, 9.5p).');
   return p;
 }
 
@@ -42,12 +42,12 @@ export function resolveStaff(state, opts = {}) {
   // resolved staff In, else 5p.
   let anchorAbs;
   if (globalIn.valid && !globalIn.empty) {
-    anchorAbs = resolveIn(globalIn.value);
+    anchorAbs = inAbsOf(globalIn);
   } else {
     const ins = effIns
       .map(s => parseTime(s))
       .filter(p => p.valid && !p.empty)
-      .map(p => resolveIn(p.value));
+      .map(p => inAbsOf(p));
     anchorAbs = ins.length ? Math.min(...ins) : resolveIn(5);
   }
 
@@ -62,14 +62,14 @@ export function resolveStaff(state, opts = {}) {
 
     const inParsed = parseField(effIns[idx], name + "'s In time", errors);
     let inAbs = null;
-    if (inParsed.valid && !inParsed.empty) inAbs = resolveIn(inParsed.value);
+    if (inParsed.valid && !inParsed.empty) inAbs = inAbsOf(inParsed);
     else if (inParsed.valid && inParsed.empty) errors.push(name + ' needs an In time (or set a default).');
 
     let outAbs = null;
     if (outRaw) {
       const outParsed = parseField(outRaw, name + "'s Out time", errors);
       if (outParsed.valid && !outParsed.empty) {
-        outAbs = inAbs !== null ? nextAfter(outParsed.value, inAbs) : resolveIn(outParsed.value);
+        outAbs = inAbs !== null ? afterAbsOf(outParsed, inAbs) : inAbsOf(outParsed);
       }
     }
     return { p, name, role: p.role, explicitIn, explicitOut, hasOut: !!outRaw, inAbs, outAbs };
@@ -79,7 +79,7 @@ export function resolveStaff(state, opts = {}) {
   // latest explicit out across staff, so a session without a Default Out works.
   let closeAbs = null;
   if (globalOut.valid && !globalOut.empty) {
-    closeAbs = nextAfter(globalOut.value, anchorAbs);
+    closeAbs = afterAbsOf(globalOut, anchorAbs);
   } else {
     for (const r of partial) {
       if (r.hasOut && r.outAbs !== null && (closeAbs === null || r.outAbs > closeAbs)) closeAbs = r.outAbs;
@@ -129,35 +129,53 @@ export function resolveStaff(state, opts = {}) {
   return { staff, anchorAbs, closeAbs, errors };
 }
 
-// Pool windows resolve onto the same axis: blank start = earliest resolved in,
-// blank end = close time, explicit values = next occurrence at/after the open.
+// Pool windows resolve onto the same axis. Each edge is one of:
+//   ''     start: earliest resolved in · end: close time
+//   '3.5'  a clock reading → next occurrence at/after the open
+//   'srv'  when the servers are out  = latest server Out on shift
+//   'bar'  when the bar is out       = latest bartender Out on shift
+// A role edge with nobody of that role named falls back to the role's default
+// Out, then the close time. Day shifts use them: Day = open → 'srv' (bar +
+// servers), Mid = 'srv' → 'bar' (bar only), so the switch follows the floor.
+export const EDGE_TOKENS = { srv: 'server', bar: 'bartender' };
+
 export function resolvePools(state, resolved) {
   const { staff, anchorAbs, closeAbs } = resolved;
   const errors = [];
 
-  const earliestIn = staff.length
-    ? Math.min(...staff.filter(p => p.inAbs !== null).map(p => p.inAbs))
-    : anchorAbs;
+  const ins = staff.filter(p => p.inAbs !== null).map(p => p.inAbs);
+  const earliestIn = ins.length ? Math.min(...ins) : anchorAbs;
+  const closeOr = closeAbs !== null ? closeAbs : earliestIn;
+
+  // Latest Out of a role, else its default Out, else the close time.
+  const roleEnd = role => {
+    const outs = staff.filter(p => p.role === role && p.outAbs !== null).map(p => p.outAbs);
+    if (outs.length) return Math.max(...outs);
+    const d = parseTime(state.defaults.byRole?.[role]?.out);
+    if (d.valid && !d.empty) return afterAbsOf(d, anchorAbs);
+    return closeOr;
+  };
 
   const pools = state.pools.map(pool => {
     const label = pool.label || 'Pool';
 
-    let startAbs = earliestIn;
-    const startStr = String(pool.window.start || '').trim();
-    if (startStr) {
-      const p = parseField(startStr, label + ' window start', errors);
-      if (p.valid && !p.empty) startAbs = atOrAfter(p.value, anchorAbs);
-    }
+    // → { abs, derived } for one edge.
+    const edge = (raw, which, fallback) => {
+      const str = String(raw || '').trim();
+      if (!str) return { abs: fallback, derived: true };
+      if (EDGE_TOKENS[str]) return { abs: roleEnd(EDGE_TOKENS[str]), derived: true };
+      const p = parseField(str, label + ' window ' + which, errors);
+      return { abs: p.valid && !p.empty ? atOrAfterOf(p, anchorAbs) : fallback, derived: false };
+    };
+    const st = edge(pool.window.start, 'start', earliestIn);
+    const en = edge(pool.window.end, 'end', closeOr);
+    let startAbs = st.abs, endAbs = en.abs;
 
-    let endAbs = closeAbs !== null ? closeAbs : earliestIn;
-    const endStr = String(pool.window.end || '').trim();
-    if (endStr) {
-      const p = parseField(endStr, label + ' window end', errors);
-      if (p.valid && !p.empty) endAbs = atOrAfter(p.value, anchorAbs);
-    }
-
+    // A typed window must run forward. A derived one may collapse (e.g. Mid
+    // when the servers stay to close) — then it's just an empty pool.
     if (endAbs <= startAbs) {
-      errors.push(label + ' window end must be after its start.');
+      if (st.derived && en.derived) endAbs = startAbs;
+      else errors.push(label + ' window end must be after its start.');
     }
 
     // Cash = the bills counted + the rest that wasn't counted (netTotal), then
@@ -206,8 +224,11 @@ export function resolvePools(state, resolved) {
     return {
       id: pool.id,
       label,
+      kind: pool.kind || '',
       startAbs,
       endAbs,
+      startRef: EDGE_TOKENS[String(pool.window.start || '').trim()] ? String(pool.window.start).trim() : '',
+      endRef: EDGE_TOKENS[String(pool.window.end || '').trim()] ? String(pool.window.end).trim() : '',
       roles: { ...pool.roles },
       includeSupport: !!pool.includeSupport,
       support: {

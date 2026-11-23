@@ -9,9 +9,13 @@
 // keeps focus and the totals update around it.
 
 import { DENOMS, parseWholeNumber, fmtHrs, fmtMoney } from '../util.js';
-import { fmtTimeAbs, overlapHours } from '../time.js';
+import { fmtTimeAbs, overlapHours, atOrAfterOf, absToEdgeRaw } from '../time.js';
+import { focusCell } from '../ui/keypad.js';
+import { EDGE_TOKENS } from '../resolve.js';
+import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
+import { KeyTime } from '../ui/keytime.js';
 import { html, render, useState } from '../ui/preact.js';
-import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, INPUT, ROLE_DOT } from '../ui/pkit.js';
+import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, INPUT, ROLE_DOT } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
@@ -26,6 +30,47 @@ function windowSub(pool, vmPool) {
   if (!start && !end) return 'Whole shift';
   const fmt = (raw, abs) => abs != null ? fmtTimeAbs(abs) : (raw || '?');
   return fmt(start, vmPool?.startAbs) + ' – ' + fmt(end, vmPool?.endAbs);
+}
+
+// ── Pool window edges ─────────────────────────────────────────────────────────
+// Each edge is a time (tap → keypad, drag → 15 min) or derived from the
+// floor: Open / Close, Servers out, Bar out (resolvePools). A dragged or
+// typed time makes it fixed; a chip makes it follow the floor again.
+const rerender = () => { if (lastVm) renderTips(lastVm); };
+const EDGE_NAME = { srv: 'Servers out', bar: 'Bar out' };
+
+function edgeCell(vm, pool, vmPool, which, cls, tone) {
+  const anchor = vm.resolved?.anchorAbs ?? 17;
+  const raw = String(pool.window[which] || '').trim();
+  const k = 'pool:' + pool.id + ':' + which;
+  return html`<${KeyTime} k=${k} title=${pool.label + ' · ' + (which === 'start' ? 'starts' : 'ends')}
+    abs=${vmPool ? vmPool[which + 'Abs'] : null} set=${!!raw && !EDGE_TOKENS[raw]} cls=${cls} tone=${tone}
+    toAbs=${(v, mer) => atOrAfterOf({ value: v, mer }, anchor)} fromAbs=${a => absToEdgeRaw(a, anchor)} min=${anchor} max=${anchor + 24}
+    write=${r => App.poolWindow(pool.id, which, r, true)} rerender=${rerender}
+    next=${dir => {
+      if (dir === 'next' && which === 'start') return focusCell('pool:' + pool.id + ':end');
+      if (dir === 'prev' && which === 'end') return focusCell('pool:' + pool.id + ':start');
+      return false;
+    }} />`;
+}
+
+function WindowEdge({ vm, pool, vmPool, which }) {
+  const raw = String(pool.window[which] || '').trim();
+  const opts = [{ v: '', label: which === 'start' ? 'Open' : 'Close' }, { v: 'srv', label: 'Servers out' }, { v: 'bar', label: 'Bar out' }];
+  const chip = on => cx('t-small h-8 rounded-full px-3 font-semibold transition active:scale-95', on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2');
+  return html`<div class="flex items-center gap-2">
+    <span class="t-small w-10 shrink-0 font-medium text-ink-2">${which === 'start' ? 'From' : 'To'}</span>
+    <div class="w-[4.75rem] shrink-0">${edgeCell(vm, pool, vmPool, which, 'h-10 w-full rounded-lg bg-surface-2 text-center text-[1rem] tabular-nums transition')}</div>
+    <div class="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      ${opts.map(o => html`<button key=${o.v} class=${chip(raw === o.v)} onClick=${() => App.poolWindow(pool.id, which, o.v, true)}>${o.label}</button>`)}
+    </div>
+  </div>`;
+}
+
+// "Servers out → Bar out" style description of a derived window.
+function edgeWords(pool, which) {
+  const raw = String(pool.window[which] || '').trim();
+  return EDGE_NAME[raw] || (raw ? '' : which === 'start' ? 'open' : 'close');
 }
 
 function SharedBy({ pool }) {
@@ -200,11 +245,11 @@ function PoolCard({ pool, vm }) {
       ${showChips && html`<${SharedBy} pool=${pool} />`}
       ${pool.includeSupport && html`<${SupportBox} pool=${pool} vm=${vm} vmPool=${vmPool} />`}
       ${!single && html`<div class=${SUB}>
-          <span class=${EYEBROW}>Window <span class="font-normal text-ink-3">· blank = whole shift</span></span>
-          <div class="flex gap-3">
-            <${Field} label="Start" inputmode="decimal" placeholder="open" value=${pool.window.start} onInput=${e => App.poolWindow(pool.id, 'start', e.target.value)} />
-            <${Field} label="End" inputmode="decimal" placeholder="close" value=${pool.window.end} onInput=${e => App.poolWindow(pool.id, 'end', e.target.value)} />
-          </div>
+          <span class=${EYEBROW}>Window <span class="font-normal text-ink-3">· tap a time to type it, drag to nudge</span></span>
+          ${pool.kind === 'party' && !pool.window.start.trim() && !pool.window.end.trim()
+            && html`<span class="t-small text-warn">Set when the party started and ended — only hours inside it share its tips.</span>`}
+          <${WindowEdge} vm=${vm} pool=${pool} vmPool=${vmPool} which="start" />
+          <${WindowEdge} vm=${vm} pool=${pool} vmPool=${vmPool} which="end" />
         </div>
         <${Field} label="Label" value=${pool.label} onInput=${e => App.poolLabel(pool.id, e.target.value)} />
         <${Button} variant="danger" size="sm" class="self-start" onClick=${() => { closeSheet('sheet-pool'); App.removePool(pool.id); }}>Remove pool<//>`}
@@ -228,29 +273,58 @@ function Suggested({ vm }) {
 }
 
 // Several pools: one compact card per pool → its sheet.
+// Several pools: one row per pool — name, its window as two times you can
+// drag or tap (keypad) right here, who shares it, total; tap the row → sheet.
+const TILE_TIME = 'relative z-[1] -my-1.5 rounded-md px-1 py-1.5 text-[0.9375rem] tabular-nums transition';
 function PoolTile({ pool, vm }) {
   const vmPool = vm.pools.find(p => p.id === pool.id);
   const total = vmPool ? vmPool.total : 0;
   const who = [pool.roles?.bartender && 'bartender', pool.roles?.server && 'server', pool.includeSupport && 'support'].filter(Boolean);
-  return html`<${Item} onClick=${() => App.openPool(pool.id)} title=${pool.label}
-    sub=${html`<span class="flex items-center gap-2">${windowSub(pool, vmPool)}
-      ${vm.state.settings.allRoles && html`<span class="flex items-center gap-1">${who.map(r => html`<span key=${r} class=${cx('size-1.5 rounded-full', ROLE_DOT[r])}></span>`)}</span>`}
-      ${vmPool?.adjust ? html`<span class=${vmPool.adjust < 0 ? 'text-bad' : 'text-good'}>· ${vmPool.adjust < 0 ? '−' : '+'}${fmtMoney(Math.abs(vmPool.adjust))}</span>` : null}</span>`}
-    value=${fmtMoney(total)} valueTone=${!total ? 'text-ink-3' : ''} />`;
+  const derived = [edgeWords(pool, 'start'), edgeWords(pool, 'end')];
+  return html`<div role="button" tabindex="0" class="li flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-2 text-left active:bg-surface-2"
+    style=${{ '--inset': '1rem' }} onClick=${() => App.openPool(pool.id)}>
+    <span class="flex min-w-0 flex-1 flex-col gap-0.5">
+      <span class="t-body flex items-center gap-2 font-medium">${pool.label}
+        ${vm.state.settings.allRoles && html`<span class="flex items-center gap-1">${who.map(r => html`<span key=${r} class=${cx('size-1.5 rounded-full', ROLE_DOT[r])}></span>`)}</span>`}
+        ${vmPool?.adjust ? html`<span class=${cx('t-small', vmPool.adjust < 0 ? 'text-bad' : 'text-good')}>${vmPool.adjust < 0 ? '−' : '+'}${fmtMoney(Math.abs(vmPool.adjust))}</span>` : null}</span>
+      <span class="t-small flex flex-wrap items-center text-ink-3">
+        ${edgeCell(vm, pool, vmPool, 'start', TILE_TIME, 'font-medium text-ink-2')}<span class="mx-0.5">–</span>${edgeCell(vm, pool, vmPool, 'end', TILE_TIME, 'font-medium text-ink-2')}
+        ${(derived[0] || derived[1]) && html`<span class="ml-1.5 truncate">${derived[0] || 'set'} → ${derived[1] || 'set'}</span>`}
+      </span>
+    </span>
+    <span class=${cx('t-body shrink-0 font-semibold tabular-nums', !total && 'text-ink-3')}>${fmtMoney(total)}</span>
+    <${Icon} name="chevR" class="size-4 shrink-0 text-ink-3/70" />
+  </div>`;
+}
+
+// Shift type (Night: one pool · Day: Day + Mid pools) and parties.
+function ShiftType({ vm }) {
+  const type = vm.state.meta.shiftType || 'night';
+  return html`<div class="flex items-center gap-2">
+    <${Seg} class="flex-1" value=${type} onChange=${t => App.setShiftType(t)}
+      items=${SHIFT_TYPES.map(t => ({ value: t, label: SHIFT_LABEL[t] + ' shift' }))} />
+    <${Button} size="sm" variant="tonal" icon="plus" onClick=${() => App.addParty()}>Party<//>
+  </div>`;
 }
 
 function Tips({ vm }) {
   const state = vm.state;
-  const err = vm.inputError && /cash|count|window|support|short|holds/i.test(vm.blocked) ? vm.blocked : '';
+  const err = vm.inputError && vm.blockedTab === 'tips' ? vm.blocked : '';
   const single = state.pools.length === 1;
+  const ready = !vm.blocked && vm.totalCash > 0;
   return html`<div class="flex flex-col gap-3">
     ${err && html`<${Alert}>${err}<//>`}
     ${vm.cashNote && html`<${Alert} tone="warn">${vm.cashNote}<//>`}
+    <${ShiftType} vm=${vm} />
+    ${state.meta.shiftType === 'day' && html`<p class="t-small px-1 text-ink-3">Day: bar + servers share the floor until the servers are out; then Mid is the bar’s alone. Parties are their own tips, shared by whoever worked inside the party’s window.</p>`}
     ${single
       ? html`<${PoolCard} pool=${state.pools[0]} vm=${vm} />`
       : html`<${List}>${state.pools.map(pool => html`<${PoolTile} key=${pool.id} pool=${pool} vm=${vm} />`)}<//>`}
-    ${(state.settings.multiPool || !single) && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
+    ${state.settings.multiPool && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
     <${Suggested} vm=${vm} />
+    ${ready && html`<${NextStep} tab="summary" label="See who gets what"
+      sub=${fmtMoney(vm.totalCash) + ' · $' + vm.shares.rate.toFixed(2) + ' an hour'} />`}
+    ${vm.blockedTab === 'staff' && html`<${NextStep} tab="staff" label="Back to Staff" sub=${vm.blocked} />`}
   </div>`;
 }
 
@@ -278,6 +352,3 @@ export function renderTips(vm) {
   renderPoolSheet(vm);
 }
 
-// Kept for callers from before the Preact port: Preact always shows the
-// stored values, so there is nothing to invalidate.
-export function invalidateTips() {}

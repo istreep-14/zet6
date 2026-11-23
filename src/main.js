@@ -6,12 +6,14 @@ import * as store from './store.js';
 import * as persist from './persist.js';
 import * as sessions from './sessions.js';
 import { buildViewModel } from './viewmodel.js';
-import { setClock24, parseTime } from './time.js';
+import { setClock24, setAmFrom, parseTime, inAbsOf } from './time.js';
+import { countedValue } from './util.js';
+import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL } from './shifts.js';
 import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
-import { switchTab, updateTabIndicators, normalizeTab, renderSubtabs, subsFor, activeSub, TAB_ORDER } from './render/tabs.js';
+import { switchTab, updateTabIndicators, normalizeTab, TAB_ORDER } from './render/tabs.js';
 import { renderStaff, openStaffEditor, openTimeEditor, openRosterSheet, rosterSelected, rosterAdded } from './render/staff.js';
 import { loadRoster, rememberName, forgetName, getRoster } from './roster.js';
-import { renderTips, invalidateTips, openPoolSheet } from './render/tips.js';
+import { renderTips, openPoolSheet } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
 import { refreshSticky } from './ui/sticky.js';
 import { toast, copyText } from './ui/toast.js';
@@ -36,25 +38,34 @@ if (saved) store.replaceState(saved);
 
 const state = store.getState();
 if (!state.meta.date) state.meta.date = sessions.todayISO();
-state.ui.activeTab = normalizeTab(state.ui.activeTab);
+state.ui.activeTab = landingTab(state);
 
 mountSheets($('sheets'));
+
+// Sessions always open on Summary — home. Its checklist points at whatever
+// step the shift still needs.
+function landingTab() {
+  return 'summary';
+}
 
 // ── Render loop ───────────────────────────────────────────────────────────────
 
 let lastVm = buildViewModel(state);
+const sessionName = () => sessions.list().find(e => e.id === sessions.currentId())?.name || '';
 
 function render(s) {
   setClock24(s.settings.clock24);
+  setAmFrom(s.settings.amFrom);
   const root = document.documentElement;
   root.dataset.size = s.settings.size || 'm';
   if (s.settings.theme === 'light' || s.settings.theme === 'dark') root.dataset.theme = s.settings.theme;
   else delete root.dataset.theme;
+  store.ensureBlankRows(s);
   lastVm = buildViewModel(s);
   renderStaff(lastVm);
   renderTips(lastVm);
   renderPayout(lastVm);
-  renderSummary(lastVm, sessions.list().find(e => e.id === sessions.currentId())?.name || '');
+  renderSummary(lastVm, sessionName());
   renderCloseTime(lastVm);
   renderSheets(lastVm);
   updateTabIndicators(lastVm);
@@ -62,7 +73,6 @@ function render(s) {
     total: lastVm.totalCash || 0,
     people: s.staff.filter(p => p.name.trim()).length,
   });
-  renderSubtabs(lastVm);
   refreshSticky();
   const list = sessions.list(), cur = sessions.currentId();
   renderDrawer(lastVm, list, cur);
@@ -75,7 +85,8 @@ function render(s) {
 // already uses roles or several pools keeps those visible.
 function carryPrefs(next) {
   const prefs = store.getState().settings;
-  const usesRoles = next.staff.some(p => p.role !== 'bartender') || next.pools.some(p => p.includeSupport);
+  const usesRoles = next.staff.some(p => p.role !== 'bartender') || next.pools.some(p => p.includeSupport)
+    || next.meta.shiftType === 'day';
   next.settings = {
     ...prefs,
     allRoles: prefs.allRoles || usesRoles,
@@ -93,7 +104,7 @@ function flushCurrent() {
 function activate(next, { keepPanel = false } = {}) {
   carryPrefs(next);
   if (!next.meta.date) next.meta.date = sessions.todayISO();
-  next.ui.activeTab = normalizeTab(next.ui.activeTab);
+  next.ui.activeTab = landingTab(next);
   closeAllSheets();
   store.replaceState(next);
   next.staff.forEach(p => rememberName(p.name, p.role));
@@ -103,10 +114,19 @@ function activate(next, { keepPanel = false } = {}) {
   if (!keepPanel) closePanels();
 }
 
+// A new session keeps the current shift type, with that type's remembered
+// default times and pools.
 function freshState() {
+  const cur = store.getState();
+  const type = cur.meta.shiftType || 'night';
   const fresh = store.initialState();
   fresh.meta.date = sessions.todayISO();
-  fresh.ui.activeTab = 'staff';
+  fresh.meta.shiftType = type;
+  const t = timesFor(type, cur.settings.shiftTimes);
+  fresh.defaults.global = t.global;
+  fresh.defaults.byRole = t.byRole;
+  fresh.pools = presetPools(type);
+  fresh.ui.selectedPool = fresh.pools[0].id;
   return fresh;
 }
 
@@ -129,15 +149,6 @@ function syncHdrDate() {
   if (label && label.textContent !== text) label.textContent = text;
 }
 
-// Slide a sub-tab's content in from the side it came from.
-function slideIn(tab, dir) {
-  const r = $(tab + '-root');
-  if (!r) return;
-  r.classList.remove('sub-in-left', 'sub-in-right');
-  void r.offsetWidth;
-  r.classList.add(dir === 'left' ? 'sub-in-right' : 'sub-in-left');
-}
-
 // ── Global handler surface for inline on* attributes ──────────────────────────
 
 const rolesOn = () => store.getState().settings.allRoles;
@@ -152,23 +163,6 @@ window.App = {
 
   // HUD: from Staff / Tips → Summary; from Summary → Payout (the bills).
   hudTap() { App.tab(store.getState().ui.activeTab === 'summary' ? 'payout' : 'summary'); },
-
-  // Sub-tab inside a tab (header tap or page swipe).
-  sub(tab, v) {
-    const st = store.getState();
-    const subs = subsFor(tab, st);
-    const from = subs.findIndex(x => x.v === activeSub(tab, st));
-    const to = subs.findIndex(x => x.v === v);
-    if (to < 0 || to === from) return;
-    document.activeElement?.blur?.();
-    if (tab === 'tips') {
-      if (st.pools.length > 1) store.selectPool(v);
-      else store.setPoolEntryMode(st.pools[0].id, v);
-    } else store.setSub(tab, v);
-    slideIn(tab, to > from ? 'left' : 'right');
-    const area = $('mainContent');
-    if (area.scrollTop > 0) area.scrollTop = 0;
-  },
 
   // sheets
   closeSheet,
@@ -190,6 +184,7 @@ window.App = {
 
   // settings
   setSize: size => store.setSize(size),
+  setAmFrom: h => store.mutate(s => { s.settings.amFrom = h; }, { immediate: true }),
   setTheme: theme => store.setTheme(theme),
   toggleSetting(key) {
     const s = store.getState();
@@ -207,7 +202,8 @@ window.App = {
     store.mutate(st => {
       // A start equal to the role's default is stored blank (it inherits).
       const def = st.defaults.byRole[r]?.in || st.defaults.global.in || '';
-      const start = inRaw && parseTime(inRaw).value !== parseTime(def).value ? inRaw : '';
+      const a = parseTime(inRaw), b = parseTime(def);
+      const start = inRaw && !(a.value != null && b.value != null && inAbsOf(a) === inAbsOf(b)) ? inRaw : '';
       const blank = st.staff.find(p => !p.name.trim() && p.role === r);
       if (blank) { blank.name = n; blank.in = start; }
       else st.staff.push({ ...store.newStaff(r), name: n, in: start });
@@ -215,14 +211,6 @@ window.App = {
     rememberName(n, r);
   },
   editStaff: id => openStaffEditor(id),
-  // "+ Add bartender": a new blank person, editor open with the name focused
-  // (synchronously, inside the tap, so iOS raises the keyboard).
-  addBlank(role = 'bartender') {
-    const r = rolesOn() ? role : 'bartender';
-    // Reuse a blank row of that role (fresh sessions start with some).
-    const blank = store.getState().staff.find(p => !p.name.trim() && p.role === r);
-    openStaffEditor(blank ? blank.id : store.addStaff(r), { focusName: true });
-  },
   openRoster: openRosterSheet,
   // Each pick fills a blank row of their role, or gets a new row.
   rosterAddSelected() {
@@ -259,8 +247,8 @@ window.App = {
   },
 
   // defaults
-  roleDefault: (role, field, value) => store.setRoleDefault(role, field, value.trim()),
-  globalDefault: (field, value) => store.setGlobalDefault(field, value.trim()),
+  roleDefault: (role, field, value, immediate = false) => store.setRoleDefault(role, field, value.trim(), immediate),
+  globalDefault: (field, value, immediate = false) => store.setGlobalDefault(field, value.trim(), immediate),
   supportDefault: value => store.setSupportDefault(value.trim()),
 
   // pools
@@ -268,11 +256,42 @@ window.App = {
   openPool: id => openPoolSheet(id),
   openPoolSummary: id => openPoolSummary(id),
   removePool: store.removePool,
-  selectPool: store.selectPool,
-  poolMode: store.setPoolEntryMode,
   poolRole: store.togglePoolRole,
   poolLabel: (id, value) => store.updatePool(id, p => { p.label = value; }),
-  poolWindow: (id, field, value) => store.updatePool(id, p => { p.window[field] = value; }),
+  poolWindow: (id, field, value, immediate = false) => store.updatePool(id, p => { p.window[field] = value; }, immediate),
+  // Night (one pool) / Day (Day + Mid): the pools are rebuilt, keeping cash
+  // where it maps over and any parties; the default times switch to the
+  // type's remembered ones.
+  setShiftType(type) {
+    const st = store.getState();
+    if ((st.meta.shiftType || 'night') === type) return;
+    const cashOf = p => countedValue(p.cash.billCounts) + (parseInt(p.cash.netTotal, 10) || 0);
+    const lost = cashLostBySwitch(st.pools, type, cashOf);
+    const ask = `Switch to a ${SHIFT_LABEL[type].toLowerCase()} shift? The $${lost} entered in the pools that go away will be cleared.`;
+    if (lost > 0 && !window.confirm(ask)) return;
+    closeSheet('sheet-pool');
+    store.mutate(s => {
+      s.meta.shiftType = type;
+      const t = timesFor(type, s.settings.shiftTimes);
+      s.defaults.global = t.global;
+      s.defaults.byRole = t.byRole;
+      s.pools = switchPools(s.pools, type);
+      s.ui.selectedPool = s.pools[0].id;
+      if (type === 'day') s.settings.allRoles = true;
+      if (s.pools.length > 1) s.settings.multiPool = true;
+    }, { immediate: true });
+  },
+  // A private party: its own pool over the floor pools, window to set.
+  addParty() {
+    let id;
+    store.mutate(s => {
+      const p = partyPool(s.pools);
+      id = p.id;
+      s.pools.push(p);
+      s.settings.multiPool = true;
+    }, { immediate: true });
+    openPoolSheet(id);
+  },
   poolBill: (id, denom, value) => store.updatePool(id, p => { p.cash.billCounts[denom] = value; }),
   poolNet: (id, value) => store.updatePool(id, p => { p.cash.netTotal = value; }),
   poolAdjust: (id, value) => store.updatePool(id, p => { p.cash.adjust = value; }),
@@ -282,7 +301,7 @@ window.App = {
     store.mutate(s => {
       const p = s.pools.find(x => x.id === id);
       if (!p) return;
-      const counted = [100, 50, 20, 10, 5, 1].reduce((t, d) => t + d * (parseInt(p.cash.billCounts[d], 10) || 0), 0);
+      const counted = countedValue(p.cash.billCounts);
       const n = parseInt(p.cash.netTotal, 10) || 0;
       if (on) {
         if (!counted) p.cash.restMode = 'total';
@@ -300,7 +319,7 @@ window.App = {
     store.mutate(s => {
       const p = s.pools.find(x => x.id === id);
       if (!p || (p.cash.restMode || 'rest') === mode) return;
-      const counted = [100, 50, 20, 10, 5, 1].reduce((t, d) => t + d * (parseInt(p.cash.billCounts[d], 10) || 0), 0);
+      const counted = countedValue(p.cash.billCounts);
       const n = parseInt(p.cash.netTotal, 10);
       if (Number.isFinite(n)) p.cash.netTotal = String(mode === 'total' ? n + counted : Math.max(0, n - counted));
       p.cash.restMode = mode;
@@ -318,15 +337,14 @@ window.App = {
       p.support.hours[staffId] = value;
     });
   },
-  // −/+ steppers on a bill row. The input is updated directly because the
-  // keystroke patch path never rewrites input values (it would steal focus).
+  // −/+ steppers on a bill row: a tap renders at once (no typing debounce).
   billStep(id, denom, delta) {
-    const pool = store.getState().pools.find(p => p.id === id);
-    if (!pool) return;
-    const next = Math.max(0, (parseInt(pool.cash.billCounts[denom], 10) || 0) + delta);
-    store.updatePool(id, p => { p.cash.billCounts[denom] = next ? String(next) : ''; });
-    const input = document.querySelector(`[data-pid="${id}"] [data-bill="${denom}"]`);
-    if (input) input.value = next ? String(next) : '';
+    store.mutate(s => {
+      const p = s.pools.find(x => x.id === id);
+      if (!p) return;
+      const next = Math.max(0, (parseInt(p.cash.billCounts[denom], 10) || 0) + delta);
+      p.cash.billCounts[denom] = next ? String(next) : '';
+    }, { immediate: true });
   },
   // Enter / "next" hops down the denomination rows ($100 → $50 → … → $1)
   billKey(e, poolId) {
@@ -355,8 +373,7 @@ window.App = {
   // Summary as plain text on the clipboard (for Notes).
   async copySummary() {
     const st = store.getState();
-    const name = sessions.list().find(e => e.id === sessions.currentId())?.name || '';
-    const text = lastVm?.shares && lastVm.totalCash > 0 ? summaryText(lastVm, [name || 'Tips', fmtHdrDate(st.meta.date)].join(' · ')) : '';
+    const text = lastVm?.shares && lastVm.totalCash > 0 ? summaryText(lastVm, [sessionName() || 'Tips', fmtHdrDate(st.meta.date)].join(' · ')) : '';
     if (!text) { toast('Nothing to copy yet'); return; }
     toast(await copyText(text) ? 'Copied — paste into Notes' : 'Couldn’t copy on this device');
   },
@@ -509,11 +526,11 @@ if (window.visualViewport) {
 })();
 
 // Swipe left/right on the page to move between the bottom tabs (Summary ·
-// Staff · Tips · Payout). Only from the first tab does a right swipe open the
-// left panel, and only from the last does a left swipe open the shift panel
-// (the screen edges always drag the panels). Ignored inside
-// sideways-scrolling areas and staff rows, at the screen edges (those drag
-// the panels), while typing, or on vertical drags.
+// Staff · Tips · Payout). Only from the first tab does
+// a right swipe open the left panel, and only from the last does a left swipe
+// open the shift panel (the screen edges always drag the panels). Ignored
+// inside sideways-scrolling areas and drag times, at the screen edges, while
+// typing, or on vertical drags.
 (() => {
   const area = $('mainContent');
   let x0 = 0, y0 = 0, t0 = 0, tracking = false;
@@ -522,7 +539,7 @@ if (window.visualViewport) {
     const t = e.target;
     const x = e.touches[0].clientX, box = document.body.getBoundingClientRect();
     tracking = x - box.left >= EDGE && box.right - x >= EDGE
-      && !t.closest('.overflow-x-auto') && !t.closest('.subtabs') && !t.closest('[data-drag]')
+      && !t.closest('.overflow-x-auto') && !t.closest('[data-drag]')
       && !(t.matches('input') && t === document.activeElement)
       && !document.body.classList.contains('keyboard-open');
     x0 = x;

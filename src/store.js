@@ -25,6 +25,7 @@ export function newPool(label = 'Pool') {
   return {
     id: nextId('p'),
     label,
+    kind: '',                      // 'night' | 'day' | 'mid' | 'party' | '' (shifts.js)
     window: { start: '', end: '' },
     roles: { bartender: true, server: true },
     includeSupport: false,
@@ -42,9 +43,10 @@ export function newPool(label = 'Pool') {
 }
 
 export function initialState() {
-  const pool = newPool();
+  const pool = newPool('Night');
+  pool.kind = 'night';
   const state = {
-    meta: { date: '' },
+    meta: { date: '', shiftType: 'night' },
     staff: [newStaff(), newStaff(), newStaff()],
     defaults: {
       supportPct: '',          // default support tip-out % per pool ('' = 10)
@@ -59,8 +61,10 @@ export function initialState() {
     overrides: { bonuses: {} },
     // Simple mode by default: one staff list, one pool. allRoles exposes the
     // server/support split; multiPool exposes add-pool / windows / labels.
-    settings: { allRoles: false, multiPool: false, clock24: false, size: 'm', theme: 'system' },
-    ui: { activeTab: 'summary', staffViewRole: 'bartender', selectedPool: pool.id, sub: {} },
+    // shiftTimes: the default times last used per shift type ({ night, day }).
+    // amFrom: bare In readings from this hour to 11:59 read as morning (default 9).
+    settings: { allRoles: false, multiPool: false, clock24: false, size: 'm', theme: 'system', shiftTimes: {}, amFrom: 9 },
+    ui: { activeTab: 'summary', selectedPool: pool.id },
   };
   return state;
 }
@@ -110,19 +114,21 @@ export function addStaff(role) {
   return person.id;
 }
 
+// The Staff table always ends each section with one blank row to type a new
+// name into. Idempotent; called before every render (main.js).
+export function ensureBlankRows(s) {
+  const roles = s.settings?.allRoles ? ROLES : ['bartender'];
+  roles.forEach(r => {
+    if (!s.staff.some(p => p.role === r && !p.name.trim())) s.staff.push(newStaff(r));
+  });
+}
+
 export function removeStaff(id) {
   mutate(s => {
     s.staff = s.staff.filter(p => p.id !== id);
     delete s.overrides.bonuses[id];
     s.pools.forEach(pool => { if (pool.support) delete pool.support.hours[id]; });
   }, { immediate: true });
-}
-
-export function updateStaff(id, field, value) {
-  mutate(s => {
-    const p = s.staff.find(x => x.id === id);
-    if (p) p[field] = value;
-  });
 }
 
 export function toggleCloserOverride(id) {
@@ -134,12 +140,12 @@ export function toggleCloserOverride(id) {
 
 // ── Defaults actions ──────────────────────────────────────────────────────────
 
-export function setGlobalDefault(field, value) {
-  mutate(s => { s.defaults.global[field] = value; });
+export function setGlobalDefault(field, value, immediate = false) {
+  mutate(s => { s.defaults.global[field] = value; rememberTimes(s); }, { immediate });
 }
 
-export function setRoleDefault(role, field, value) {
-  mutate(s => { s.defaults.byRole[role][field] = value; });
+export function setRoleDefault(role, field, value, immediate = false) {
+  mutate(s => { s.defaults.byRole[role][field] = value; rememberTimes(s); }, { immediate });
 }
 
 export function setSupportDefault(value) {
@@ -165,18 +171,11 @@ export function removePool(id) {
   }, { immediate: true });
 }
 
-export function updatePool(id, fn) {
+export function updatePool(id, fn, immediate = false) {
   mutate(s => {
     const pool = s.pools.find(p => p.id === id);
     if (pool) fn(pool);
-  });
-}
-
-export function setPoolEntryMode(id, mode) {
-  mutate(s => {
-    const pool = s.pools.find(p => p.id === id);
-    if (pool) pool.cash.entryMode = mode;
-  }, { immediate: true });
+  }, { immediate });
 }
 
 export function togglePoolRole(id, role) {
@@ -204,15 +203,43 @@ export function clearBonuses() {
 // roles or several pools keep those features visible.
 export function normalizeSettings(state) {
   const s = state.settings && typeof state.settings === 'object' ? state.settings : {};
-  const usesRoles = state.staff.some(p => p.role !== 'bartender') || state.pools.some(p => p.includeSupport);
+  const usesRoles = state.staff.some(p => p.role !== 'bartender') || state.pools.some(p => p.includeSupport)
+    || state.meta?.shiftType === 'day';
   state.settings = {
     allRoles: typeof s.allRoles === 'boolean' ? s.allRoles : usesRoles,
     multiPool: typeof s.multiPool === 'boolean' ? s.multiPool : state.pools.length > 1,
     clock24: typeof s.clock24 === 'boolean' ? s.clock24 : false,
     size: SIZES.includes(s.size) ? s.size : 'm',
     theme: THEMES.includes(s.theme) ? s.theme : 'system',
+    shiftTimes: validShiftTimes(s.shiftTimes),
+    amFrom: Number.isInteger(s.amFrom) && s.amFrom >= 1 && s.amFrom <= 11 ? s.amFrom : 9,
   };
+  if (!state.meta.shiftType || !['night', 'day'].includes(state.meta.shiftType)) {
+    state.meta.shiftType = state.pools.some(p => p.kind === 'day' || p.kind === 'mid') ? 'day' : 'night';
+  }
   return state;
+}
+
+// { night: { global, byRole }, day: … } with string times only.
+function validShiftTimes(v) {
+  const out = {};
+  if (!v || typeof v !== 'object') return out;
+  const str = x => (typeof x === 'string' ? x : '');
+  ['night', 'day'].forEach(t => {
+    const e = v[t];
+    if (!e || typeof e !== 'object' || !e.global) return;
+    const byRole = {};
+    ROLES.forEach(r => { byRole[r] = { in: str(e.byRole?.[r]?.in), out: str(e.byRole?.[r]?.out) }; });
+    out[t] = { global: { in: str(e.global.in), out: str(e.global.out) }, byRole };
+  });
+  return out;
+}
+
+// Remember this session's default times for its shift type (app-wide), so
+// the next session of that type starts from them.
+function rememberTimes(s) {
+  const t = s.meta.shiftType || 'night';
+  s.settings.shiftTimes = { ...(s.settings.shiftTimes || {}), [t]: JSON.parse(JSON.stringify({ global: s.defaults.global, byRole: s.defaults.byRole })) };
 }
 
 // Display size: s / m / l → root font size 12 / 13.5 / 16px (css/app.css).
@@ -232,7 +259,6 @@ export function setTheme(theme) {
 export function setSetting(key, value) {
   mutate(s => {
     s.settings[key] = !!value;
-    if (key === 'allRoles' && !value) s.ui.staffViewRole = 'bartender';
   }, { immediate: true });
 }
 
@@ -244,17 +270,4 @@ export function setDate(date) {
 
 export function setActiveTab(tab) {
   mutate(s => { s.ui.activeTab = tab; }, { immediate: true });
-}
-
-// Active sub-tab inside a tab (staff role filter, payout view).
-export function setSub(tab, value) {
-  mutate(s => { s.ui.sub = { ...(s.ui.sub || {}), [tab]: value }; }, { immediate: true });
-}
-
-export function setStaffViewRole(role) {
-  mutate(s => { s.ui.staffViewRole = role; }, { immediate: true });
-}
-
-export function selectPool(id) {
-  mutate(s => { s.ui.selectedPool = id; }, { immediate: true });
 }

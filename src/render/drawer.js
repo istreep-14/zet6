@@ -113,6 +113,11 @@ function Drawer({ vm, sessions, currentId }) {
         <${SwitchRow} icon="cash" on=${s.settings.multiPool || extraPools} disabled=${extraPools} onClick=${toggle('multiPool')} label="Multiple pools"
           hint=${extraPools ? `On while ${s.pools.length} pools exist — remove extras to turn off` : 'Split tips by time window (e.g. lunch / dinner)'} />
         <${SwitchRow} icon="clock" on=${s.settings.clock24} onClick=${toggle('clock24')} label="24-hour time" hint="Show 17:00 instead of 5:00p" />
+        <${Item} icon="sun" title="Morning starts at" chevron=${false}
+          sub=${'A bare ' + (s.settings.amFrom ?? 9) + ' to 11:59 reads as am, anything else as pm. Type or tap a / p on the keypad for any other time.'}>
+          <${Seg} value=${s.settings.amFrom ?? 9} onChange=${v => App.setAmFrom(v)}
+            items=${[5, 6, 7, 8, 9, 10].map(h => ({ value: h, label: h + 'a' }))} />
+        <//>
       <//>
     <//>
 

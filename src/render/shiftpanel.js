@@ -7,7 +7,11 @@
 // Re-rendered with every app render while open; Preact keeps input focus.
 
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Field, Section, ListRow, List, INPUT, ROLE_TEXT } from '../ui/pkit.js';
+import { cx, Icon, Card, Field, Section, ListRow, List, Seg, ROLE_TEXT } from '../ui/pkit.js';
+import { KeyTime } from '../ui/keytime.js';
+import { parseTime, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
+import { focusCell } from '../ui/keypad.js';
+import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
 import { todayISO } from '../sessions.js';
 import { isPanelOpen, onPanel } from '../ui/panels.js';
 
@@ -87,6 +91,44 @@ function Calendar({ selected, sessionDates }) {
   <//>`;
 }
 
+// ── Shift times: keypad / drag cells ─────────────────────────────────────────
+// Open → Close, then each role's In → Out. Next walks that order; ↓ / ↑ move
+// down / up the same column.
+const ROLES3 = ['bartender', 'server', 'support'];
+const rerender = () => { if (lastArgs) renderShiftPanel(...lastArgs, true); };
+const tap = k => focusCell(k);
+
+function order(rolesOn) {
+  return [['g:in', 'g:out'], ...(rolesOn ? ROLES3.map(r => ['r:' + r + ':in', 'r:' + r + ':out']) : [])];
+}
+function navFrom(k, rolesOn) {
+  const rows = order(rolesOn);
+  const r = rows.findIndex(row => row.includes(k)), c = rows[r].indexOf(k);
+  return dir => {
+    if (dir === 'next' || dir === 'prev') {
+      const flat = rows.flat(), j = flat.indexOf(k) + (dir === 'next' ? 1 : -1);
+      return flat[j] ? tap(flat[j]) : false;
+    }
+    const n = rows[r + (dir === 'down' ? 1 : -1)];
+    return n ? tap(n[c]) : false;
+  };
+}
+
+const parsed = raw => { const p = parseTime(raw); return p.value != null ? p : null; };
+const CELLCLS = 'h-11 w-full rounded-xl bg-surface-2 text-center text-[1.0625rem] tabular-nums transition';
+
+// One default time. `raw` is what's stored ('' = inherits `fallback`).
+function DefCell({ k, title, raw, fallback, field, inAbs, write, rolesOn }) {
+  const v = parsed(raw) ?? parsed(fallback);
+  const isIn = field === 'in';
+  const abs = v == null ? null : isIn ? inAbsOf(v) : afterAbsOf(v, inAbs ?? 17);
+  return html`<${KeyTime} k=${k} title=${title} abs=${abs} set=${!!String(raw || '').trim()} cls=${CELLCLS}
+    toAbs=${(x, mer) => (isIn ? inAbsOf({ value: x, mer }) : afterAbsOf({ value: x, mer }, inAbs ?? 17))}
+    fromAbs=${a => (isIn ? absToInRaw(Math.min(IN_MAX_ABS, Math.max(IN_MIN_ABS, a))) : absToOutRaw(a, inAbs ?? 17))}
+    min=${isIn ? IN_MIN_ABS : (inAbs ?? 17) + 0.25} max=${isIn ? IN_MAX_ABS : (inAbs ?? 17) + 12}
+    write=${write} next=${navFrom(k, rolesOn)} rerender=${rerender} clearable=${k.startsWith('r:')} />`;
+}
+
 // ── Panel ────────────────────────────────────────────────────────────────────
 
 function ShiftPanel({ vm, sessions, currentId }) {
@@ -95,30 +137,47 @@ function ShiftPanel({ vm, sessions, currentId }) {
   const entry = sessions.find(e => e.id === currentId) || {};
   const sessionDates = new Set(sessions.filter(e => e.id !== currentId).map(e => e.date));
   const ROLE_NAME = { bartender: 'Bar', server: 'Server', support: 'Support' };
+  const type = s.meta.shiftType || 'night';
+  const rolesOn = s.settings.allRoles;
+  const gv = parsed(d.global.in);
+  const gIn = gv != null ? inAbsOf(gv) : null;
 
   return html`
     <${Field} page label="Session name" value=${entry.name || ''} placeholder="e.g. Brunch, Private party" maxlength="40" enterkeyhint="done"
       onChange=${e => App.renameCurrent(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} />
 
+    <${Section} title="Shift type" footer=${type === 'day'
+      ? 'Day: bar + servers share the floor until the servers are out, then Mid is the bar’s. Add parties on the Tips tab.'
+      : 'Night: one pool for the whole shift. Add parties on the Tips tab.'}>
+      <${Seg} value=${type} onChange=${t => App.setShiftType(t)} items=${SHIFT_TYPES.map(t => ({ value: t, label: SHIFT_LABEL[t] }))} />
+    <//>
+
     <${Section} title="Date">
       <${Calendar} selected=${s.meta.date} sessionDates=${sessionDates} />
     <//>
 
-    <div id="shift-times" class="scroll-mt-2"><${Section} title="Shift times"
-      footer="Fills any blank In/Out. Blank Outs inherit the close time, which also decides the auto closers. Type 5, 10.5, 2 …">
-      <${Card} class="flex gap-3">
-        <${Field} label="Open (in)" inputmode="decimal" placeholder="5" value=${d.global.in} onInput=${e => App.globalDefault('in', e.target.value)} />
-        <${Field} label="Close (out)" inputmode="decimal" placeholder="2" value=${d.global.out} onInput=${e => App.globalDefault('out', e.target.value)} />
+    <div id="shift-times" class="scroll-mt-2"><${Section} title=${SHIFT_LABEL[type] + ' shift times'}
+      footer=${'Fills any blank In/Out; blank Outs leave at close, which also decides the auto closers. Tap a time to type it (530 = 5:30), drag to nudge. Remembered for the next ' + SHIFT_LABEL[type].toLowerCase() + ' shift.'}>
+      <${Card} class="grid grid-cols-2 gap-3">
+        <div class="flex flex-col gap-1.5"><span class="t-small font-medium text-ink-2">Open</span>
+          <${DefCell} k="g:in" title="Shift opens" raw=${d.global.in} field="in" rolesOn=${rolesOn} write=${r => App.globalDefault('in', r, true)} /></div>
+        <div class="flex flex-col gap-1.5"><span class="t-small font-medium text-ink-2">Close</span>
+          <${DefCell} k="g:out" title="Shift closes" raw=${d.global.out} field="out" inAbs=${gIn} rolesOn=${rolesOn} write=${r => App.globalDefault('out', r, true)} /></div>
       <//>
     <//></div>
-    ${s.settings.allRoles && html`<${Section} title="Per role" footer="Role times win over the shift times for that role.">
+    ${rolesOn && html`<${Section} title="Per role" footer=${'Role times win over the shift times for that role.' + (type === 'day' ? ' Servers’ Out is where Day hands over to Mid (unless a server stays later).' : '')}>
       <${Card}>
         <div class="grid grid-cols-[4.5rem_1fr_1fr] items-center gap-x-3 gap-y-2.5">
           <span></span><span class="t-small text-center font-medium text-ink-2">In</span><span class="t-small text-center font-medium text-ink-2">Out</span>
-          ${['bartender', 'server', 'support'].map(r => html`
+          ${ROLES3.map(r => {
+            const rin = parsed(d.byRole[r].in) ?? parsed(d.global.in);
+            return html`
             <span key=${r + 'l'} class=${cx('t-body font-semibold', ROLE_TEXT[r])}>${ROLE_NAME[r]}</span>
-            ${['in', 'out'].map(f => html`<input key=${r + f} class=${cx(INPUT, 'text-center font-semibold')} inputmode="decimal" placeholder="—"
-              value=${d.byRole[r][f] ?? ''} onInput=${e => App.roleDefault(r, f, e.target.value)} aria-label=${r + ' ' + f} />`)}`)}
+            <${DefCell} key=${r + 'in'} k=${'r:' + r + ':in'} title=${ROLE_NAME[r] + ' in'} raw=${d.byRole[r].in} fallback=${d.global.in} field="in" rolesOn=${rolesOn}
+              write=${v => App.roleDefault(r, 'in', v, true)} />
+            <${DefCell} key=${r + 'out'} k=${'r:' + r + ':out'} title=${ROLE_NAME[r] + ' out'} raw=${d.byRole[r].out} fallback=${d.global.out} field="out"
+              inAbs=${rin != null ? inAbsOf(rin) : null} rolesOn=${rolesOn} write=${v => App.roleDefault(r, 'out', v, true)} />`;
+          })}
         </div>
       <//>
     <//>`}

@@ -8,21 +8,22 @@ No server, no login, no build step. Add it to your iPhone home screen and it run
 
 ## Using it
 
-The tab bar has three tabs, in the order you use them:
+**Summary** is home — every session opens on it. Until the shift is complete it shows the three close-out steps (who worked → the tips → who gets what), each one tap away; Staff and Tips end with a **Next** button.
 
 | Tab | What it's for |
 |---|---|
-| **Staff** | Who worked. Type a name, or use Quick add to pick saved names with a start time (add the 4pm people, then the 5pm people…); tap a person to set their In/Out times, make them a closer or remove them. With roles on, bartenders, servers and support each get their own section and default times. |
-| **Tips** | The tips: count the bills you can see at a glance (say the $100s and $50s), type the rest as one amount (or the whole total — the counted bills are taken out of it), and if the register turns out over or short, enter that — the tips re-split and Summary shows was / now / change. |
-| **Payout** | The answer: total pool and rate, then each person's shift, hours, pay **and the bills for their envelope**. If the drawer can't make exact change, a fix card shows the fewest swaps and **Apply** updates the cash count. **Show the working** explains the maths; Close time and Bonus tools sit below. |
+| **Summary** | Who gets what: each person's hours and take-home, each on one line — name, In and Out times in lined-up columns (tap or drag to adjust), hours and tips (tap or drag a time to adjust); the total row's bar shows each pool's window. With several pools it opens on the **Pools** table — every person's hours and tips in each pool (Day / Mid / Party), their total hours and take-home, and a totals row. Switch between **Shift** (times), **Pools**, **Bills** (each person's envelope) and **Math** (hours × rate and the rounding). **Copy as text** puts a plain summary on the clipboard for Notes. |
+| **Staff** | Who worked, as a spreadsheet. Type a name in the **Add name** row — saved names pop up as you type, tap one to fill it. Times go in on the built-in **keypad**: `5`, `530` (5:30), `1045`, `5:3`; tap **a / p** for any time of day (a 7am start, a 9pm in). **Next** (or Tab, or the iPhone keyboard's arrows) moves along the row — Name → In → Out → next name — **‹** goes back, **↓** down the column, **Default** goes back to the default time. Drag a time sideways to nudge it 15 minutes. Tap **Hrs** for the rest (role, closer, remove); tap the circle to make someone a closer. **Quick add** picks several saved names with a start time. |
+| **Tips** | The shift type and the cash. **Night shift** is one pool. **Day shift** is two: **Day** (bar + servers, from open until the servers are out) and **Mid** (bar only, from then until the bar is out) — the hand-over follows when the servers actually leave. **+ Party** adds a private party's tips: set its window, and they're shared by bar and servers by the hours they worked inside it (support gets a tip-out). For each pool, type the amount, or turn on **Count bills** for the bills you can see at a glance; **Over / short** re-splits if the register is off. |
+| **Payout** | The bills: each person's envelope, bill by bill. If the drawer can't make exact change, a fix card shows the fewest swaps and **Apply** updates the cash count. **How the split works** explains the maths. |
 
-Tap the bottom tabs (or swipe the page sideways) to move around: **Summary** (the shift at a glance — rate, pool, hours, hours and what everyone takes home; the floating bar shows rate, pool, chump and the fewest $10 / $5 / $1s you need; **Copy as text** puts a plain summary on the clipboard for Notes), **Staff**, **Tips** and **Payout** (the cash side). Swiping right on Summary opens the sessions panel; swiping left on Payout opens this shift's panel. On Summary, switch between **Shift** (times), **Bills** (each person's envelope) and **Math** (hours × rate and the rounding).
+The floating bar shows rate, pool, chump and the fewest $10 / $5 / $1s you need; tap it to move on. Swipe the page sideways to step through the tabs; swiping right on Summary opens the sessions panel, swiping left on Payout opens this shift's panel.
 
-The menu button — or a swipe in from the left edge — opens the **sessions panel**: every saved shift (tap one to switch, Edit to rename or delete), **New session**, and app settings (theme Auto / Light / Dark, display size Small / Medium / Large, servers & support, multiple pools, 24-hour time, import). The date in the header — or a swipe in from the right edge — opens **this shift's panel**: name, a calendar to set the date, default shift times, closer bonus, close-time what-if, export and delete.
+The menu button — or a swipe in from the left edge — opens the **sessions panel**: every saved shift (tap one to switch, Edit to rename or delete), **New session**, and app settings (theme Auto / Light / Dark, display size Small / Medium / Large, servers & support, multiple pools, 24-hour time, import). The date in the header — or a swipe in from the right edge — opens **this shift's panel**: name, shift type (Night / Day), a calendar to set the date, default shift times (keypad or drag; remembered separately for day and night shifts, and a new session starts from them), and in app settings **Morning starts at** — a bare `7` reads as 7am if mornings start at 7 or earlier, else 7pm (a / p always overrides), closer bonus, close-time what-if, export and delete.
 
 ### Staff
 
-- **Saved names** appear as chips under the add box — tap one to add them. Names are remembered on this device, even after starting a new session. **Edit** removes saved names.
+- **Quick add** lists saved names — pick several, choose their start time, **Add**. Names are remembered on this device, even after starting a new session. **Edit** removes saved names.
 - **Tap a person** to edit them: their In and Out times (±15 minutes, or tap a half-hour time; **Use default** resets), make them a **closer**, or **remove** them.
 - Default times are typed as decimal 12-hour clock in this shift's panel: `5` = 5:00, `10.5` = 10:30, `2` = 2:00 (am or pm worked out from the shift). Quarter hours only (`.25`, `.5`, `.75`).
 - Faded times use the default for that role. A red Out time marks a closer.
@@ -33,6 +34,8 @@ The menu button — or a swipe in from the left edge — opens the **sessions pa
 2. Shares round down to whole dollars.
 3. The leftover dollars go to the closers (or however you set them in **Bonus**).
 4. Anything that still can't be split evenly stays in the drawer as the "chump".
+
+With **Support** sharing a pool, support staff get a tip-out first (10% of the pool by default, or a set $/hour, for the hours they worked); everyone else splits the rest by hours.
 
 With **Multiple pools** turned on (sessions panel), tips can be split by time window — e.g. a lunch pool and a dinner pool, each shared only by the people working then.
 

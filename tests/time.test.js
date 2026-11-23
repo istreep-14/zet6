@@ -91,3 +91,43 @@ assert.strictEqual(overlapHours(10, 14, 5, 9), 0);
 }
 
 console.log('time tests passed');
+
+// ── Explicit meridiem + the morning boundary (any time of day works) ──
+{
+  const t = await import('../src/time.js');
+  assert.deepStrictEqual(t.parseTime('7a'), { valid: true, empty: false, value: 7, mer: 'a' });
+  assert.strictEqual(t.parseTime('9.5p').value, 9.5);
+  assert.strictEqual(t.parseTime('9.5 PM').mer, 'p');
+  assert.strictEqual(t.parseTime('0a').valid, false);
+  assert.strictEqual(t.inAbsOf(t.parseTime('7a')), 7);          // before 9am, exact
+  assert.strictEqual(t.inAbsOf(t.parseTime('9p')), 21);         // past 8:45p, exact
+  assert.strictEqual(t.inAbsOf(t.parseTime('12a')), 0);
+  assert.strictEqual(t.inAbsOf(t.parseTime('12p')), 12);
+  assert.strictEqual(t.afterAbsOf(t.parseTime('2a'), 17), 26);  // 5p in, 2a out
+  assert.strictEqual(t.afterAbsOf(t.parseTime('5p'), 11), 17);
+  assert.strictEqual(t.afterAbsOf(t.parseTime('3a'), 7), 27);   // explicit a steps a whole day
+
+  // Drags / keypad writes round-trip exactly (the old 9p → '9' → 9am bug).
+  for (const abs of [6, 7.25, 9, 11.5, 12, 13, 20.75, 21, 22.5, 23.75]) {
+    assert.strictEqual(t.inAbsOf(t.parseTime(t.absToInRaw(abs))), abs, 'in ' + abs);
+  }
+  assert.strictEqual(t.absToInRaw(17), '5');      // bare when the rule agrees
+  assert.strictEqual(t.absToInRaw(21), '9p');
+  assert.strictEqual(t.absToInRaw(7), '7a');
+  assert.strictEqual(t.absToOutRaw(26, 17), '2');
+  assert.strictEqual(t.absToOutRaw(17, 7), '5');   // 5p after a 7a open reads back bare
+  assert.strictEqual(t.afterAbsOf(t.parseTime(t.absToOutRaw(17, 7)), 7), 17);
+
+  // Morning boundary setting: 6 → bare 6–11:59 read as am.
+  t.setAmFrom(6);
+  assert.strictEqual(t.resolveIn(7), 7);
+  assert.strictEqual(t.resolveIn(5), 17);
+  assert.strictEqual(t.absToInRaw(7), '7');
+  t.setAmFrom(9);
+  assert.strictEqual(t.resolveIn(7), 19);
+
+  // Keypad entry keeps a typed meridiem.
+  assert.deepStrictEqual([t.parseClockEntry('730a').value, t.parseClockEntry('730a').mer], [7.5, 'a']);
+  assert.strictEqual(t.parseClockEntry('9p').mer, 'p');
+}
+console.log('time meridiem tests passed');
