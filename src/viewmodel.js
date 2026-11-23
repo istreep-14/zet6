@@ -4,6 +4,7 @@
 import { resolveStaff, resolvePools } from './resolve.js';
 import { computeShares } from './shares.js';
 import { distribute, getSmallBillRequirements, drawerBills } from './engine.js';
+import { distributeWithStacks, stackSizes } from './stacks.js';
 
 export function buildViewModel(state, opts = {}) {
   const resolved = resolveStaff(state, opts);
@@ -28,6 +29,8 @@ export function buildViewModel(state, opts = {}) {
     dist: null,
     people: [],
     req: null,
+    stacks: {},                 // bundled small-bill stacks handed to managers: { id: { d: n } }
+    stackSizes: null,
     blocked: '',
     blockedTab: '',             // where the blocker is fixed: 'staff' | 'tips'
     inputError: false,
@@ -68,7 +71,17 @@ export function buildViewModel(state, opts = {}) {
   vm.looseBills = drawer.added;
   vm.cashNote = drawer.note;
 
-  vm.dist = distribute(vm.people, vm.bills, vm.shares.leftover);
+  // Stacks of small bills for the people picked to take them (Payout), when
+  // everyone else still gets exact change; else the plain split.
+  const takers = state.overrides.stackTo || [];
+  vm.stackSizes = stackSizes(state.settings);
+  if (takers.length) {
+    const r = distributeWithStacks(vm.people, vm.bills, vm.shares.leftover, takers, vm.stackSizes);
+    vm.stacks = r.stacks;
+    vm.dist = { byPerson: r.byPerson, poolAfter: r.poolAfter, remainderBills: r.remainderBills, error: r.error };
+  } else {
+    vm.dist = distribute(vm.people, vm.bills, vm.shares.leftover);
+  }
   vm.req = getSmallBillRequirements(vm.people, vm.bills, vm.shares.leftover);
 
   return vm;

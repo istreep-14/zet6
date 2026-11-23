@@ -19,7 +19,8 @@ import { getRoster } from '../roster.js';
 import { html, render, useRef, useLayoutEffect } from '../ui/preact.js';
 import { cx, Clock, Icon, Card, Button, Alert, Seg, SwitchRow, List, Item, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_PLURAL, TABLE_HEAD, THEAD, Sentinel, zebra } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, sheetFoot, setSheetTitle, onSheetClose } from '../ui/sheet.js';
-import { DragTime, TIME_TEXT } from '../ui/dragtime.js';
+import { DragTime, TIME_TEXT, ARROW_BEFORE } from '../ui/dragtime.js';
+import { SwipeRow } from '../ui/swipe.js';
 import { openKeypad, closeKeypad, activeKey, bufferAbs, focusCell } from '../ui/keypad.js';
 
 export { DragTime };
@@ -286,12 +287,20 @@ export function openTimeCell(id, field) {
     toAbs: (v, mer) => absFor(lastVm, person(id), field, v, mer),
     commit: (v, mer) => {
       const p = person(id);
-      App.staffField(id, field, rawAt(lastVm, p, field, absFor(lastVm, p, field, v, mer)), true);
+      const abs = absFor(lastVm, p, field, v, mer);
+      App.reviewed((p.name.trim() || 'New row') + ' · ' + (field === 'in' ? 'In ' : 'Out ') + fmtTimeAbs(abs),
+        () => App.staffField(id, field, rawAt(lastVm, p, field, abs), true));
     },
     onClear: () => App.staffField(id, field, '', true),
     onMore: p0.name.trim() ? () => App.editStaff(id) : null,
     nav: dir => moveFrom(id, field, dir),
-    onChange: rerender,
+    // Each keystroke previews what the typed time would do (HUD, Summary);
+    // closing the keypad (buffer gone) ends the preview.
+    onChange: () => {
+      rerender();
+      const a = bufferAbs(), p = person(id);
+      App.previewStaff(id, field, a == null || !p ? null : rawAt(lastVm, p, field, a));
+    },
   });
   return true;
 }
@@ -370,7 +379,7 @@ function Suggestions({ vm, p }) {
 
 // A person's In / Out in the table: keypad cell + drag. Set like Summary's
 // times (TIME_TEXT: smaller number, "am" / "pm" under it, medium weight);
-// a typed time reads ink-2, an inherited default ink-3. `mins`: the column
+// a typed time reads ink-2 medium, one that follows the default regular ink-3 (fainter) — the same "pinned to default" look as Summary. `mins`: the column
 // shows minutes on every row (one has them).
 const TABLE_TIME = 'h-10 w-full rounded-lg transition ' + TIME_TEXT;
 function TimeCell({ vm, p, field, mins }) {
@@ -379,9 +388,9 @@ function TimeCell({ vm, p, field, mins }) {
   const key = p.id + ':' + field;
   const active = activeKey() === key;
   return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${field === 'in' ? t.inSet : t.outSet} bad=${t.bad}
-    min=${k.min} max=${k.max} onSet=${k.onSet} onTap=${() => openTimeCell(p.id, field)}
+    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} onTap=${() => openTimeCell(p.id, field)}
     kcell=${key} active=${active} preview=${active ? bufferAbs() : null}
-    cls=${TABLE_TIME} tone=${cx('font-medium', (field === 'in' ? t.inSet : t.outSet) ? 'text-ink-2' : 'text-ink-3')} mins=${mins}
+    cls=${field === 'out' ? TABLE_TIME + ' ' + ARROW_BEFORE('0.75rem') : TABLE_TIME} tone=${(field === 'in' ? t.inSet : t.outSet) ? 'font-medium text-ink-2' : 'font-normal text-ink-3/80'} mins=${mins}
     label=${(p.name || 'New row') + ' ' + field + ' time'} />`;
 }
 
@@ -390,7 +399,7 @@ function TimePill({ vm, p, field, cls, tone, full, mins }) {
   const t = times(vm.state, p, vm);
   const k = pickerFor(vm, p, field);
   return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${field === 'in' ? t.inSet : t.outSet} bad=${t.bad}
-    min=${k.min} max=${k.max} onSet=${k.onSet} onTap=${() => App.editTime(p.id, field)} cls=${cls} tone=${tone} full=${full} mins=${mins}
+    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} onTap=${() => App.editTime(p.id, field)} cls=${cls} tone=${tone} full=${full} mins=${mins}
     label=${p.name + ' ' + field + ' time'} />`;
 }
 
@@ -410,7 +419,9 @@ export function DefaultTime({ vm, field, cls, tone, full, mins }) {
   const isIn = field === 'in';
   return html`<${DragTime} abs=${isIn ? inAbs : outAbs} set=${true}
     min=${isIn ? IN_MIN_ABS : (inAbs ?? 17) + 0.25} max=${isIn ? IN_MAX_ABS : (inAbs ?? 17) + 12}
-    onSet=${abs => App.globalDefault(field, isIn ? absToInRaw(abs) : absToOutRaw(abs, inAbs), true)}
+    onSet=${abs => App.reviewed('Default ' + (isIn ? 'open ' : 'close ') + fmtTimeAbs(abs),
+      () => App.globalDefault(field, isIn ? absToInRaw(abs) : absToOutRaw(abs, inAbs), true))}
+    onPreview=${abs => App.previewDefault(field, abs == null ? null : isIn ? absToInRaw(abs) : absToOutRaw(abs, inAbs))}
     onTap=${() => App.openDefaults()} cls=${cls} tone=${tone} full=${full} mins=${mins} label=${'Default ' + (isIn ? 'open' : 'close') + ' time'} />`;
 }
 
@@ -419,19 +430,21 @@ function PersonRow({ vm, p, i = 0, col = {} }) {
   const t = times(vm.state, p, vm);
   const closer = t.forced ? 'bg-bad text-white'
     : t.closer ? 'bg-bad/25 text-bad' : 'bg-surface-2 text-transparent';
-  return html`<div class=${cx(STAFF_ROW, 'min-h-[3.375rem] py-1.5', zebra(i), !named && 'opacity-80')}>
+  // Swipe a named row left → Remove (Undo · Apply in the HUD).
+  return html`<${SwipeRow} enabled=${named} onAction=${() => App.reviewed('Removed ' + p.name.trim(), () => App.removePerson(p.id))}>
+  <div class=${cx(STAFF_ROW, 'min-h-[3.375rem] py-1.5', zebra(i), !named && 'opacity-80')}>
     <${NameCell} p=${p} />
     <${TimeCell} vm=${vm} p=${p} field="in" mins=${col.inMins} />
     <${TimeCell} vm=${vm} p=${p} field="out" mins=${col.outMins} />
     ${named
-      ? html`<button class=${cx('t-body h-10 rounded-lg text-center font-medium tabular-nums active:bg-ink/10', t.hrs == null ? 'text-bad' : 'text-ink/80')}
+      ? html`<button class=${cx('t-body h-11 rounded-lg text-center font-medium tabular-nums active:bg-ink/10', t.hrs == null ? 'text-bad' : 'text-ink/80')}
           onClick=${() => App.editStaff(p.id)} aria-label=${p.name + ' — more'}>${t.hrs != null ? hrsText(t.hrs, col.hdp) : '?'}</button>
-        <button class="grid h-10 place-items-center" onClick=${() => App.toggleCloser(p.id)}
+        <button class="grid h-11 place-items-center" onClick=${() => App.toggleCloser(p.id)}
           aria-pressed=${String(t.forced)} aria-label=${p.name + ' closer'}>
-          <span class=${cx('grid size-7 place-items-center rounded-full transition', closer)}><${Icon} name="check" class="size-4" /></span>
+          <span class=${cx('grid size-8 place-items-center rounded-full transition', closer)}><${Icon} name="check" class="size-4" /></span>
         </button>`
       : html`<span></span><span></span>`}
-  </div>
+  </div><//>
   ${nameFocus === p.id && html`<${Suggestions} vm=${vm} p=${p} />`}`;
 }
 
@@ -542,14 +555,18 @@ function pickerFor(vm, p, field) {
   const t = times(vm.state, p, vm);
   const def = t.def;
   const set = raw => App.staffField(p.id, field, raw, true);
+  // A drag / picker write waits for Undo · Apply in the HUD (App.reviewed).
+  const said = abs => (p.name.trim() || 'New row') + ' · ' + (field === 'in' ? 'In ' : 'Out ') + fmtTimeAbs(abs);
   if (field === 'in') {
     const dp = parseTime(def.in);
     return { label: 'In', abs: t.inAbs, isSet: t.inSet, defAbs: dp.value != null ? inAbsOf(dp) : null,
-      min: IN_MIN_ABS, max: IN_MAX_ABS, onSet: abs => set(inRaw(abs, def)), onReset: () => set('') };
+      min: IN_MIN_ABS, max: IN_MAX_ABS, onSet: abs => App.reviewed(said(abs), () => set(inRaw(abs, def))), onReset: () => set(''),
+      onPreview: abs => App.previewStaff(p.id, field, abs == null ? null : inRaw(abs, def)) };
   }
   const dp = parseTime(def.out);
   return { label: 'Out', abs: t.outAbs, isSet: t.outSet, defAbs: dp.value != null && t.inAbs != null ? afterAbsOf(dp, t.inAbs) : null,
-    min: (t.inAbs ?? 17) + 0.25, max: (t.inAbs ?? 17) + 12, onSet: abs => set(outRaw(abs, def, t.inAbs)), onReset: () => set('') };
+    min: (t.inAbs ?? 17) + 0.25, max: (t.inAbs ?? 17) + 12, onSet: abs => App.reviewed(said(abs), () => set(outRaw(abs, def, t.inAbs))), onReset: () => set(''),
+    onPreview: abs => App.previewStaff(p.id, field, abs == null ? null : outRaw(abs, def, t.inAbs)) };
 }
 
 function Editor({ vm, p }) {

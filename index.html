@@ -79,8 +79,8 @@
   <section class="panel" id="tab-payout"><h1 class="page-title t-title">Payout</h1><div id="payout-root"></div></section>
 </main>
 
-<!-- Live HUD — rate / pool / chump while editing Staff & Tips -->
-<button class="hud is-empty" id="pipHud" onclick="App.hudTap()" aria-label="Next: summary or payout"></button>
+<!-- Live HUD — rate / pool / chump / small bills; each cell is its own button (render/tabs.js) -->
+<div class="hud is-empty" id="pipHud" role="group" aria-label="Live totals"></div>
 
 <nav class="tabbar">
   <button class="tab" id="tb-summary" onclick="App.tab('summary')">

@@ -85,6 +85,9 @@ export function validateV4(state) {
 // Older v4 snapshots predate the support tip-out fields — fill them in.
 function normalizeV4(state) {
   if (typeof state.defaults.supportPct !== 'string') state.defaults.supportPct = '';
+  // Stacks for managers (Payout): ids of the people taking them.
+  if (!Array.isArray(state.overrides.stackTo)) state.overrides.stackTo = [];
+  state.overrides.stackTo = state.overrides.stackTo.filter(id => typeof id === 'string');
   state.pools.forEach(pool => {
     if (!isPlainObject(pool.support)) pool.support = { pct: '', rate: '', hours: {} };
     if (typeof pool.support.pct !== 'string') pool.support.pct = '';

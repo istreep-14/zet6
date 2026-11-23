@@ -7,7 +7,8 @@
 
 import { poolValue, fmtMoney, fmtMoneyShort } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon } from '../ui/pkit.js';
+import { cx, Icon, Figure } from '../ui/pkit.js';
+import { figDelta, payDelta, isPreview, movedCount } from '../ui/changes.js';
 
 const $ = id => document.getElementById(id);
 
@@ -61,11 +62,6 @@ export function updateTabIndicators(vm) {
   updateHud(vm, named, total, short);
 }
 
-// One figure cell: value over a small label (cells are split by hairlines).
-const S = ({ k, v, cls }) => html`<span class="flex min-w-0 flex-1 flex-col items-center px-1 leading-tight">
-  <span class=${cx('t-head max-w-full truncate tabular-nums', cls)}>${v}</span>
-  <span class="t-small max-w-full truncate text-ink-3">${k}</span></span>`;
-
 // The fewest $10 / $5 / $1s that make every payout exact — what the drawer
 // should hold, after a swap if one is needed. vm.req places the drawer's
 // $100s / $50s first, so a $50 that evens out an odd-tens payout saves a $10.
@@ -81,28 +77,64 @@ export function smallBillsNeeded(vm) {
 
 // Fourth cell: the small bills as "1 · 1 · 16" over "$10 · $5 · $1", each
 // count in its bill's tint — reference for pulling change.
-function BillsCell({ vm }) {
+function BillsFig({ vm }) {
   const need = smallBillsNeeded(vm);
   if (!need) return null;
   const dot = html`<span class="mx-0.5 text-ink-3">·</span>`;
-  return html`<${S} k="$10 · $5 · $1"
+  return html`<${Figure} k="$10 · $5 · $1"
     v=${need.map((c, i) => html`${i > 0 && dot}<span class="bill-col !font-semibold" data-d=${c.d}>${c.n}</span>`)} />`;
 }
 
-// HUD: Rate · Pool · Chump · small bills as one row of figures, the blocking
-// reason otherwise. Hidden on a pristine session.
-function Hud({ vm, total, short }) {
-  const msg = t => html`<span class=${cx('t-small truncate px-2 font-medium', vm.inputError || short ? 'text-bad' : 'text-ink-2')}>${t}</span>`;
+// HUD: Rate · Pool · Chump · small bills as one row of figures, each its own
+// tap target — Chump opens Closer bonus & chump, the rest go on (Staff / Tips
+// → Summary, Summary → Payout). The blocking reason otherwise. While an edit
+// is previewed (a time being dragged / typed) the figures are the would-be
+// ones, with the change after each label, an accent ring,
+// and the person being edited in place of Pool; just after an edit lands the
+// labels show what moved for a few seconds.
+const CELL = 'flex min-w-0 flex-1 items-center self-stretch rounded-xl transition active:bg-surface-2';
+// A drag / keypad edit just landed (vm.changes.review): a row over the
+// figures saying what it was and how many payouts it moved, with Undo (put
+// it back) and Apply (keep it — the change marks go).
+function Hud(props) {
+  const { vm } = props;
+  const r = !isPreview(vm) && vm.changes?.review;
+  if (!r) return html`<${Figures} ...${props} />`;
+  const n = movedCount(vm);
+  const btn = 't-small inline-flex h-9 shrink-0 items-center gap-1 rounded-full px-3 font-semibold transition active:scale-95';
+  return html`<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+    <div class="flex min-w-0 items-center gap-2 border-b border-line pb-2 pl-2">
+      <span class="flex min-w-0 flex-1 flex-col leading-tight">
+        <span class="t-small truncate font-semibold text-ink">${r.label}</span>
+        <span class="t-small truncate text-ink-3">${n ? n + (n === 1 ? ' payout changed' : ' payouts changed') : 'No payouts changed'}</span>
+      </span>
+      <button class=${cx(btn, 'bg-surface-2 text-ink')} onClick=${() => App.reviewUndo()}><${Icon} name="undo" class="size-4" />Undo</button>
+      <button class=${cx(btn, 'bg-accent text-on-accent')} onClick=${() => App.reviewApply()}><${Icon} name="check" class="size-4" />Apply</button>
+    </div>
+    <div class="flex min-w-0 items-stretch"><${Figures} ...${props} /></div>
+  </div>`;
+}
+
+function Figures({ vm, total, short }) {
   const sh = vm.shares;
-  return html`${sh && total > 0 && !vm.blocked
-      ? html`<span class="flex min-w-0 flex-1 items-center divide-x divide-line">
-          <${S} k="Rate" v=${'$' + sh.rate.toFixed(2)} cls="text-good" />
-          <${S} k="Pool" v=${fmtMoney(sh.totalCash)} />
-          <${S} k="Chump" v=${sh.leftover > 0 ? fmtMoney(sh.leftover) : '—'} cls=${sh.leftover > 0 ? '' : 'text-ink-3'} />
-          <${BillsCell} vm=${vm} />
-        </span>`
-      : html`<span class="flex min-w-0 flex-1 items-center">${msg(vm.blocked || 'Enter cash to calculate')}</span>`}
-    <${Icon} name="chevR" class="size-4 shrink-0 text-ink-3" />`;
+  const go = () => App.hudTap();
+  if (!(sh && total > 0 && !vm.blocked)) {
+    return html`<button class=${cx(CELL, 'gap-2 px-2')} onClick=${go}>
+      <span class=${cx('t-small min-w-0 flex-1 truncate text-left font-medium', vm.inputError || short ? 'text-bad' : 'text-ink-2')}>${vm.blocked || 'Enter cash to calculate'}</span>
+      <${Icon} name="chevR" class="size-4 shrink-0 text-ink-3" /></button>`;
+  }
+  const focus = isPreview(vm) && vm.preview.focus ? sh.perPerson.find(p => p.id === vm.preview.focus) : null;
+  return html`<span class="flex min-w-0 flex-1 items-stretch divide-x divide-line">
+    <button class=${CELL} onClick=${go} aria-label="Rate"><${Figure} k="Rate" v=${'$' + sh.rate.toFixed(2)} tone="text-good" d=${figDelta(vm, 'rate')} /></button>
+    ${focus
+      ? html`<button class=${CELL} onClick=${go}><${Figure} v=${fmtMoney(focus.final)} tone="text-accent"
+        k=${focus.name} d=${payDelta(vm, focus.id, focus.final)} /></button>`
+      : html`<button class=${CELL} onClick=${go} aria-label="Pool"><${Figure} k="Pool" v=${fmtMoney(sh.totalCash)} d=${figDelta(vm, 'total')} /></button>`}
+    <button class=${CELL} onClick=${() => App.openBonus()} aria-label="Chump — closer bonus and chump">
+      <${Figure} k="Chump" v=${sh.leftover > 0 ? fmtMoney(sh.leftover) : '—'} tone=${sh.leftover > 0 ? '' : 'text-ink-3'} d=${figDelta(vm, 'chump')} /></button>
+    <button class=${CELL} onClick=${go} aria-label="Small bills needed"><${BillsFig} vm=${vm} /></button>
+  </span>
+  <button class="grid self-stretch place-items-center px-0.5 text-ink-3" onClick=${go} aria-label="Next"><${Icon} name="chevR" class="size-4" /></button>`;
 }
 
 function updateHud(vm, named, total, short) {
@@ -111,5 +143,7 @@ function updateHud(vm, named, total, short) {
   const pristine = named === 0 && total === 0;
   hud.classList.toggle('is-empty', pristine);
   hud.classList.toggle('is-warn', !pristine && vm.inputError);   // red only for a real input error; a missing step reads plain
+  hud.classList.toggle('is-preview', !pristine && isPreview(vm));
+  hud.classList.toggle('is-review', !pristine && !isPreview(vm) && !!vm.changes?.review);
   render(pristine ? null : html`<${Hud} vm=${vm} total=${total} short=${short} />`, hud);
 }

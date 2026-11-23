@@ -58,7 +58,7 @@ export function initialState() {
       },
     },
     pools: [pool],
-    overrides: { bonuses: {} },
+    overrides: { bonuses: {}, stackTo: [] },
     // Simple mode by default: one staff list, one pool. allRoles exposes the
     // server/support split; multiPool exposes add-pool / windows / labels.
     // shiftTimes: the default times last used per shift type ({ night, day }).
@@ -123,10 +123,23 @@ export function ensureBlankRows(s) {
   });
 }
 
+// Stacks for managers (Payout): pick who takes bundled small bills, and how
+// big a stack of each bill is (an app preference, settings.stacks).
+export function toggleStackTo(id) {
+  mutate(s => {
+    const cur = s.overrides.stackTo || [];
+    s.overrides.stackTo = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id];
+  }, { immediate: true });
+}
+export function setStackSize(d, dollars) {
+  mutate(s => { s.settings.stacks = { ...(s.settings.stacks || {}), [d]: String(dollars ?? '').replace(/[^0-9]/g, '') }; });
+}
+
 export function removeStaff(id) {
   mutate(s => {
     s.staff = s.staff.filter(p => p.id !== id);
     delete s.overrides.bonuses[id];
+    if (s.overrides.stackTo) s.overrides.stackTo = s.overrides.stackTo.filter(x => x !== id);
     s.pools.forEach(pool => { if (pool.support) delete pool.support.hours[id]; });
   }, { immediate: true });
 }

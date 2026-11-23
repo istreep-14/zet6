@@ -7,11 +7,16 @@ import { fmtTimeAbs } from '../time.js';
 import { setBonuses, clearBonuses } from '../store.js';
 import { html, render } from '../ui/preact.js';
 import {
-  cx, Button, Stepper, Badge, Stat, Field, Label, Money, Denom, LiveStrip, List, Item,
+  cx, Button, Stepper, Badge, Stat, Label, Money, Denom, LiveStrip, List, Item,
 } from '../ui/pkit.js';
 import { closeSheet, isOpen, openSheet, sheetBody, onSheetClose } from '../ui/sheet.js';
+import { StaffTime } from './staff.js';
 
 // ── Person ───────────────────────────────────────────────────────────────────
+
+// The shift's In / Out in the Person sheet: the same time box as Staff and
+// Summary (tap → quick time sheet, hold and drag → 15-min steps, Undo · Apply).
+const SHEET_TIME = 'h-12 w-full rounded-xl bg-surface text-center text-[1.125rem] tabular-nums transition';
 
 let personId = null;
 onSheetClose('sheet-person', () => { personId = null; });
@@ -23,7 +28,6 @@ export function openPerson(vm, id) {
 }
 
 function Person({ vm, p }) {
-  const raw = vm.state.staff.find(x => x.id === p.id);
   const inStr = fmtTimeAbs(p.inAbs), outStr = fmtTimeAbs(p.outAbs);
   const bills = vm.dist?.byPerson[p.id];
   const hasBills = bills && DENOMS.some(d => (bills[d] || 0) > 0);
@@ -50,10 +54,12 @@ function Person({ vm, p }) {
       ? html`<div class="grid grid-cols-3 gap-1.5">${DENOMS.map(d => html`<div key=${d} class=${cx('flex items-center justify-between rounded-xl bg-surface px-3 py-2.5', !bills[d] && 'opacity-40')}>
           <${Denom} d=${d} /><span class="t-head tabular-nums">${bills[d] || '—'}</span></div>`)}</div>`
       : html`<div class="t-small px-4 text-ink-3">No bill split yet.</div>`}
-    <${Label}>Shift<//>
-    <div class="flex gap-3">
-      <${Field} page label="In" value=${raw?.in ?? ''} placeholder=${inStr} inputmode="decimal" onChange=${e => App.staffField(p.id, 'in', e.target.value)} />
-      <${Field} page label="Out" value=${raw?.out ?? ''} placeholder=${p.usedCloseTime ? 'close' : outStr} inputmode="decimal" onChange=${e => App.staffField(p.id, 'out', e.target.value)} />
+    <${Label} aside="tap to set · hold and drag to nudge">Shift<//>
+    <div class="grid grid-cols-2 gap-3">
+      ${['in', 'out'].map(f => html`<div key=${f} class="flex flex-col gap-1.5">
+        <span class="t-small px-1 font-medium text-ink-2">${f === 'in' ? 'In' : 'Out'}</span>
+        <${StaffTime} vm=${vm} id=${p.id} field=${f} full cls=${SHEET_TIME} />
+      </div>`)}
     </div>`;
 }
 

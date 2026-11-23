@@ -47,7 +47,7 @@ const BTN_VARIANT = {
   ghost: 'text-accent',
 };
 const BTN_SIZE = {
-  sm: 'h-8 px-3 rounded-full t-small',
+  sm: 'h-9 px-3.5 rounded-full t-small',
   md: 'h-11 px-4 rounded-xl t-body',
   lg: 'h-12 px-5 rounded-xl t-body',
 };
@@ -144,12 +144,15 @@ const INPUT_BASE = 'h-11 w-full min-w-0 rounded-xl px-3 text-[1.0625rem] text-in
 export const INPUT = cx(INPUT_BASE, 'bg-surface-2');
 export const INPUT_PAGE = cx(INPUT_BASE, 'bg-surface');
 
-// Segmented control: items [{ value, label }], onChange(value).
+// Segmented control: items [{ value, label, icon }], onChange(value).
+// Sizes (SEG_H): sm (inside a card row) · md (default) · lg — a view switch
+// you hit with a thumb (Summary's List · Shift · Pools · Bills · Math).
+const SEG_H = { sm: 'h-8 t-small', md: 'h-10 t-small', lg: 'h-11 text-[0.875rem] leading-tight' };
 export function Seg({ items, value, onChange, size = 'md', class: cls = '' }) {
-  const h = size === 'sm' ? 'h-7' : 'h-8';
-  return html`<div class=${cx('flex rounded-xl bg-surface-2 p-0.5', cls)} role="tablist">
+  const h = SEG_H[size] || SEG_H.md;
+  return html`<div class=${cx('flex rounded-xl bg-surface-2 p-0.5', size === 'lg' && 'rounded-[0.875rem] p-1', cls)} role="tablist">
     ${items.map(it => html`<button key=${it.value} role="tab" aria-selected=${String(it.value === value)} class=${cx(
-      't-small flex flex-1 items-center justify-center gap-1.5 rounded-[0.625rem] px-2 font-semibold transition', h,
+      'flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[0.625rem] px-2 font-semibold transition active:scale-[.97]', h,
       it.value === value ? 'bg-raised text-ink shadow-[0_1px_3px_rgb(0_0_0/.14)]' : 'text-ink-3',
     )} onClick=${() => onChange(it.value)}>${it.icon && html`<${Icon} name=${it.icon} class="size-4" />`}${it.label}</button>`)}
   </div>`;
@@ -158,7 +161,7 @@ export function Seg({ items, value, onChange, size = 'md', class: cls = '' }) {
 // Role toggle chip ("Shared by"): on = accent tint, off = a plain fill.
 export function Chip({ on, role, onClick, children }) {
   return html`<button class=${cx(
-    't-small inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full font-semibold transition active:scale-95',
+    't-small inline-flex h-[var(--tap)] flex-1 items-center justify-center gap-1.5 rounded-full font-semibold transition active:scale-95',
     on ? 'bg-accent/12 text-accent' : 'bg-surface-2 text-ink-3',
   )} aria-pressed=${String(!!on)} onClick=${onClick}>
     <span class=${cx('size-2 rounded-full', on ? ROLE_DOT[role] : 'bg-ink-3/50')}></span>${children}</button>`;
@@ -186,14 +189,75 @@ export function ListRow({ onClick, icon, tone = '', chevron = true, aside, child
     trail=${aside && html`<span class="t-small text-ink-3">${aside}</span>`} />`;
 }
 
-// − value + : a small number control for a row's trail.
+// Press and hold a −/+ button to keep stepping: one step on the press, then
+// repeating — faster the longer it's held — until the finger lifts or slides
+// off. A keyboard press (click with detail 0) steps once. One hold at a time,
+// so one shared timer (a re-render mid-hold can't orphan it).
+let repeatTimer = 0;
+const stopRepeat = () => { clearTimeout(repeatTimer); repeatTimer = 0; };
+export function holdRepeat(fn) {
+  return {
+    onPointerDown: e => {
+      if (e.button > 0) return;
+      e.preventDefault();
+      stopRepeat();
+      fn();
+      let n = 0;
+      const tick = () => { fn(); n++; repeatTimer = setTimeout(tick, n < 4 ? 170 : n < 12 ? 90 : 45); };
+      repeatTimer = setTimeout(tick, 420);
+    },
+    onPointerUp: stopRepeat, onPointerLeave: stopRepeat, onPointerCancel: stopRepeat,
+    onClick: e => { if (e.detail === 0) fn(); },
+    onContextMenu: e => e.preventDefault(),
+  };
+}
+
+// − value + : a small number control for a row's trail (hold to repeat).
 export function Stepper({ value, onDec, onInc, decDisabled = false, incDisabled = false, on = false }) {
-  const b = 'grid size-8 place-items-center rounded-full bg-surface-2 text-[1.125rem] leading-none text-ink transition active:scale-95 disabled:opacity-30';
-  return html`<span class="flex shrink-0 items-center gap-1.5">
-    <button class=${b} onClick=${onDec} disabled=${decDisabled} aria-label="Less">−</button>
+  const b = 'grid size-10 select-none place-items-center rounded-full bg-surface-2 text-[1.25rem] leading-none text-ink transition active:scale-95 disabled:opacity-30 [-webkit-touch-callout:none]';
+  return html`<span class="flex shrink-0 items-center gap-1">
+    <button class=${b} ...${holdRepeat(onDec)} disabled=${decDisabled} aria-label="Less">−</button>
     <span class=${cx('t-body min-w-8 text-center font-semibold tabular-nums', on ? 'text-accent' : 'text-ink-2')}>${value}</span>
-    <button class=${b} onClick=${onInc} disabled=${incDisabled} aria-label="More">+</button>
+    <button class=${b} ...${holdRepeat(onInc)} disabled=${incDisabled} aria-label="More">+</button>
   </span>`;
+}
+
+// One figure: value over a small label — the HUD's cells, Stats, LiveStrip.
+// `d`: a Delta shown after the label while a change is fresh or being
+// previewed ("Rate +$0.54").
+export function Figure({ v, k, tone = '', d = null }) {
+  return html`<span class="flex min-w-0 flex-1 flex-col items-center px-1.5 text-center leading-tight">
+    <span class=${cx('t-head max-w-full truncate tabular-nums', tone)}>${v}</span>
+    <span class="t-small max-w-full truncate text-ink-3">${k}${d && html` <${Delta} d=${d} class="!text-[0.8125rem]" />`}</span>
+  </span>`;
+}
+
+// A change in money: "+$4" (good) / "−$3" (bad), from ui/changes.js
+// ({ v, kind, stamp }). kind 'change' = just landed (fades in, then main.js
+// clears it), 'preview' = an edit in progress (shown while you drag / type).
+// `under`: absolutely under the figure in its (relative) parent, so it never
+// moves the layout. `unit`: '$' (default), '' or e.g. '/h'.
+const fmtD = v => (Number.isInteger(v) ? Math.abs(v).toLocaleString('en-US') : Math.abs(v).toFixed(2));
+export function Delta({ d, under = false, unit = '$', class: cls = '' }) {
+  if (!d || !d.v) return null;
+  const txt = (d.v > 0 ? '+' : '−') + (unit === '$' ? '$' + fmtD(d.v) : fmtD(d.v) + unit);
+  return html`<span key=${d.stamp} class=${cx('delta', d.kind === 'preview' ? 'delta--preview' : 'delta--change',
+    d.v > 0 ? 'text-good' : 'text-bad', under && 'delta--under', cls)}>${txt}</span>`;
+}
+// A row's highlight when its figures just changed (a fading accent wash over
+// the row; the row must be position: relative).
+export const Flash = ({ d }) => (d?.kind === 'change'
+  ? html`<span key=${'f' + d.stamp} class="flash pointer-events-none absolute inset-0" aria-hidden="true"></span>` : null);
+
+// Shift tools as thumb-sized chips in one sideways row (Summary, Payout):
+// items [{ icon, label, value, onClick }]. The tools that used to sit at the
+// bottom of a page (Close-time what-if, Closer bonus & chump, Copy).
+export function ToolChips({ items, class: cls = '' }) {
+  return html`<div class=${cx('-mx-[var(--gutter)] overflow-x-auto px-[var(--gutter)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', cls)}>
+    <div class="flex w-max gap-2">${items.filter(Boolean).map(it => html`<button key=${it.label}
+      class="t-small inline-flex h-[var(--tap)] items-center gap-1.5 rounded-full bg-surface pl-3 pr-3.5 font-semibold text-ink transition active:scale-95"
+      onClick=${it.onClick}><${Icon} name=${it.icon} class="size-4 text-accent" />${it.label}${it.value != null && it.value !== '' && html`<span class="font-medium text-ink-3">${it.value}</span>`}</button>`)}</div>
+  </div>`;
 }
 
 export function Stat({ label, value, sub, tone = '', big = false }) {
@@ -298,10 +362,12 @@ export const Row = Item;
 // a surface-2 fill. `fixed` = table-fixed (widths from cols[].w).
 export const T_HEAD = 't-cap text-ink-3';
 export const TOTAL_FILL = 'bg-surface-2';
-export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, scroll = false, class: cls = '', ...rest }) {
+// `lines`: hairlines between columns too (a grid — envelopes, math).
+export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, scroll = false, lines = false, class: cls = '', ...rest }) {
   const align = c => ({ left: 'text-left', right: 'text-right' }[c.align] || 'text-center');
   const first = cx('pl-4 pr-2 text-left', stickyFirst && 'sticky left-0 z-[1] bg-inherit');
-  const cell = (c, i) => cx('px-1.5 tabular-nums', i === 0 ? first : align(c), i === cols.length - 1 && i > 0 && 'pr-4', c.hl && 'bg-accent/12');
+  const cell = (c, i) => cx('px-1.5 tabular-nums', i === 0 ? first : align(c), i === cols.length - 1 && i > 0 && 'pr-4', c.hl && 'bg-accent/12',
+    lines && i > 0 && 'border-l border-line');
   const table = html`<table class=${cx('t-body w-full border-collapse whitespace-nowrap', fixed && 'table-fixed')}>
       ${fixed && html`<colgroup>${cols.map((c, i) => html`<col key=${i} class=${c.w || ''} />`)}</colgroup>`}
       <thead class="thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--line)]"><tr>
@@ -311,10 +377,10 @@ export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, sc
       <tbody>${rows.map((r, n) => r.section
         ? html`<tr key=${'s' + n} class="bg-surface"><td colspan=${cols.length} class="t-cap px-4 pb-1 pt-3 text-ink-3">${r.section}</td></tr>`
         : html`<tr key=${r.key ?? n} class=${cx(zebra(n), r.onClick && 'cursor-pointer transition active:bg-surface-2', r.tone === 'muted' && 'text-ink-2')} onClick=${r.onClick}>
-            ${r.cells.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-11', i === 0 && 'max-w-[7rem] truncate font-medium')}>${v}</td>`)}
+            ${r.cells.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-[var(--row)]', i === 0 && 'max-w-[7rem] truncate font-medium')}>${v}</td>`)}
           </tr>`)}</tbody>
       ${foot && html`<tfoot><tr class=${cx('font-semibold', TOTAL_FILL)}>
-        ${foot.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-12')}>${v}</td>`)}
+        ${foot.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-[var(--row-lg)]')}>${v}</td>`)}
       </tr></tfoot>`}
     </table>`;
   return html`<${Card} flush class=${cls} ...${rest}><${Sentinel} />${scroll
@@ -347,10 +413,7 @@ export function Banner({ tone = 'ok', icon, title, sub, onClick, children }) {
 // 2–4 figures side by side in one block, split by hairlines: items [{ label, value, tone }].
 export function Stats({ items, class: cls = '' }) {
   return html`<div class=${cx('figures', cls)}>
-    ${items.map(it => html`<div key=${it.label} class="flex min-w-0 flex-col items-center px-1.5 text-center">
-      <span class=${cx('t-head max-w-full truncate tabular-nums', it.tone)}>${it.value}</span>
-      <span class="t-small max-w-full truncate text-ink-3">${it.label}</span>
-    </div>`)}
+    ${items.map(it => html`<${Figure} key=${it.label} v=${it.value} k=${it.label} tone=${it.tone} d=${it.d} />`)}
   </div>`;
 }
 

@@ -19,10 +19,12 @@
 // Tap a person → Person sheet.
 
 import { fmtHrs, fmtMoney, hasMinutes, hrsDecimals, hrsText } from '../util.js';
-import { TIME_TEXT } from '../ui/dragtime.js';
+import { TIME_TEXT, ARROW_BEFORE, DragAmount } from '../ui/dragtime.js';
 import { html, render, useRef, useState, useEffect, useLayoutEffect } from '../ui/preact.js';
-import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Seg, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL } from '../ui/pkit.js';
+import { payDelta, sumDelta, timeMoved, defaultMoved } from '../ui/changes.js';
+import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Seg, Delta, Flash, ToolChips, Table, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL } from '../ui/pkit.js';
 import { StaffTime, DefaultTime } from './staff.js';
+import { EnvelopeTable } from './payout.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
@@ -50,6 +52,7 @@ function Cents({ value, class: cls = '' }) {
   const whole = Math.floor(c / 100), frac = c % 100;
   return html`<span class=${cx('whitespace-nowrap tabular-nums', cls)}><small class="mr-px align-[.12em] text-[.68em] font-semibold">$</small>${whole.toLocaleString('en-US')}${frac > 0 && html`<small class="text-[.68em] font-semibold">.${String(frac).padStart(2, '0')}</small>`}</span>`;
 }
+const r2 = v => (Number(v) || 0).toFixed(2);
 const rate2 = r => '$' + (Math.round(r * 100) / 100).toFixed(2);
 
 // Column widths = each column's widest cell + a share of the spare width by
@@ -151,7 +154,6 @@ const dec2 = v => (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigi
 // With a register over / short (Tips tab) the money columns become
 // Was · Now · ± — the split before and after the adjustment.
 // Tips' width (--pw) = the widest amount in the list (PayoutList).
-const PAY_GRID_BARE = 'grid grid-cols-[2rem_minmax(0,1fr)_var(--pw,4.5rem)] items-center gap-x-3';   // Bills / Math: no Hrs column
 // List view (the glance): name over "5p – 2a" · Hrs · Tips. Hrs is set small
 // (t-small medium ink-2) here and in the Shift view.
 const PAY_GRID_LIST = 'grid grid-cols-[2rem_minmax(0,1fr)_2.5rem_var(--pw,4.5rem)] items-center gap-x-3';
@@ -170,7 +172,7 @@ const PAY_GRID_LIST = 'grid grid-cols-[2rem_minmax(0,1fr)_2.5rem_var(--pw,4.5rem
 // so its cells join this grid.
 const PAY_GRID_SHIFT = 'grid grid-cols-[calc(2.75rem-var(--g,0.75rem))_minmax(var(--nmin,0px),1fr)_repeat(2,minmax(var(--tmin,2.5rem),0.4fr))_2.5rem_minmax(var(--vmin,2.75rem),0.5fr)] items-center gap-x-[var(--g,0.75rem)]';
 const PAY_GRID_ADJ = 'grid grid-cols-[2rem_minmax(0,1fr)_3.25rem_3.75rem_2.75rem] items-center gap-x-2.5';
-const gridFor = (adj, view) => (adj ? PAY_GRID_ADJ : view === 'shift' ? PAY_GRID_SHIFT : view === 'list' ? PAY_GRID_LIST : PAY_GRID_BARE);
+const gridFor = (adj, view) => (adj ? PAY_GRID_ADJ : view === 'shift' ? PAY_GRID_SHIFT : PAY_GRID_LIST);
 const hasHrs = view => view === 'shift' || view === 'list';
 // The times' wrapper: its own grid inside the name cell when the register
 // was adjusted (Was · Now · ± take the right), else dissolved into the row.
@@ -193,13 +195,24 @@ const LINE = 'grid min-w-0 grid-cols-[minmax(0,1fr)_repeat(2,minmax(var(--tmin,2
 // shared with the Staff table — see dragtime.js).
 const TIME_CELL = 'flex size-full items-center justify-center rounded-lg transition ' + TIME_TEXT;
 // The cell: fills the column and stretches over the row's py-1.5.
-const TimeCol = ({ children }) => html`<span data-tc class="-my-1.5 flex self-stretch">${children}</span>`;
+// `arrow`: the Out cell, with a "→" in the gap before it (ARROW_BEFORE).
+const TimeCol = ({ children, arrow }) => html`<span data-tc class=${cx('-my-1.5 flex self-stretch', arrow && ARROW_BEFORE('var(--g,0.75rem)'))}>${children}</span>`;
 // Quiet (ink-3; support dimmer) so the times don't compete with the name,
 // hours and tips.
-const TIME_TONE = p => cx('font-medium', isSup(p) ? 'text-ink-3/70' : 'text-ink-3');
+// Times you typed for this person: medium weight; times that follow the
+// shift default: regular weight, a shade fainter — a subtle "pinned to the
+// default" look (DragTime calls the function with whether it's set). A time
+// that moves with an edit (preview in progress, or waiting for Undo · Apply —
+// say everyone on the default close while you drag it) reads accent.
+const TIME_TONE = (p, mv) => (mv === 'preview' ? 'font-semibold text-accent' : mv ? 'font-medium text-accent'
+  : set => (set ? cx('font-medium', isSup(p) ? 'text-ink-3/80' : 'text-ink-3') : cx('font-normal', isSup(p) ? 'text-ink-3/55' : 'text-ink-3/70')));
 
 // Was · Now · ± cells (register adjusted), or Hrs · Tips.
-function MoneyCells({ adj, before, now, hours, sup, bold, noHrs, hdp = 0, small = false }) {
+// `d`: the change in this row's pay (ui/changes.js) — shown under the amount;
+// while previewed the amount itself reads accent.
+// `amount`: a node in place of the plain amount (the Total row's draggable
+// tips total).
+function MoneyCells({ adj, before, now, hours, sup, bold, noHrs, hdp = 0, small = false, d = null, amount = null }) {
   if (adj) {
     const d = now - before;
     return html`
@@ -209,7 +222,7 @@ function MoneyCells({ adj, before, now, hours, sup, bold, noHrs, hdp = 0, small 
   }
   return html`
     ${!noHrs && html`<span class=${cx(small ? 't-small text-center font-medium tabular-nums' : HRS_CELL, bold ? 'font-semibold' : sup ? 'text-ink-3' : small ? 'text-ink-2' : 'text-ink/80')}><span data-cw>${hrsText(hours, hdp)}</span></span>`}
-    <span data-pw class="t-body text-right"><${Money} value=${now} class=${cx('t-body font-semibold', sup && SUP_TEXT, !(now > 0) && 'text-ink-3')} /></span>`;
+    <span data-pw class="t-body relative text-right">${amount || html`<${Money} value=${now} class=${cx('t-body font-semibold', sup && SUP_TEXT, !(now > 0) && 'text-ink-3', d?.kind === 'preview' && '!text-accent')} />`}<${Delta} d=${d} under /></span>`;
 }
 
 // The times as a subtext line under a name: "5 pm – 2 am" (still the Staff
@@ -219,77 +232,69 @@ function MoneyCells({ adj, before, now, hours, sup, bold, noHrs, hdp = 0, small 
 // a / p spelled out with a space: "11 am – 5 pm" (Clock's suffix span + "m").
 const TIME_SUB = 'relative z-[1] -mx-1 -my-1.5 rounded px-1 py-1.5 tabular-nums transition [&>span>span]:ml-[0.25em] [&>span>span]:after:content-[\'m\']';
 const TimesSub = ({ a, b }) => html`<span class="t-small whitespace-nowrap text-ink-3">${a}<span class="mx-0.5">–</span>${b}</span>`;
-const PersonTimes = ({ vm, id }) => html`<${TimesSub}
-  a=${html`<${StaffTime} vm=${vm} id=${id} field="in" cls=${TIME_SUB} tone="text-ink-3" />`}
-  b=${html`<${StaffTime} vm=${vm} id=${id} field="out" cls=${TIME_SUB} tone="text-ink-3" />`} />`;
+const PersonTimes = ({ vm, id, sup = false }) => html`<${TimesSub}
+  a=${html`<${StaffTime} vm=${vm} id=${id} field="in" cls=${TIME_SUB} tone=${SUB_TONE(sup, timeMoved(vm, id, 'in'))} />`}
+  b=${html`<${StaffTime} vm=${vm} id=${id} field="out" cls=${TIME_SUB} tone=${SUB_TONE(sup, timeMoved(vm, id, 'out'))} />`} />`;
+// The same rule for the subtext times (List view, Pools table).
+const SUB_TONE = (sup, mv) => (mv === 'preview' ? 'font-semibold text-accent' : mv ? 'font-medium text-accent'
+  : set => (set ? (sup ? 'text-ink-3/80' : 'text-ink-3') : (sup ? 'text-ink-3/55' : 'text-ink-3/70')));
 
-// What sits under a name, by the view picked above the list:
-//   list   the times, "5p – 2a"
-//   bills  the person's envelope as bill tags ($100×1 $20×5 …, bill tints)
-//   math   hours × rate = exact share, then the rounding (↓ down, ↑ up)
-const DEN = [100, 50, 20, 10, 5, 1];
-function BillTags({ bills }) {
-  const ds = DEN.filter(d => (bills?.[d] || 0) > 0);
-  if (!ds.length) return html`<span class="t-small text-ink-3">—</span>`;
-  return html`<span class="flex flex-wrap gap-1 pt-1">${ds.map(d => html`<span key=${d} class="billtag" data-d=${d}>$${d}<i>×${bills[d]}</i></span>`)}</span>`;
-}
-const r2 = v => (Number(v) || 0).toFixed(2);
-function MathLine({ p }) {
-  if (!(p.exact > 0)) return html`<span class="t-small text-ink-3">—</span>`;
-  const parts = Object.values(p.perPool || {}).filter(x => x.hours > 0).map(x => `${fmtHrs(x.hours)}h × ${r2(x.raw / x.hours)}`);
-  const diff = p.final - p.exact;
-  const up = diff > 0.004;
-  return html`<span class="t-small tabular-nums text-ink-3">${parts.join(' + ') || '0h'} = ${r2(p.exact)}
-    <span class=${cx('ml-1 whitespace-nowrap', up ? 'font-medium text-good' : 'text-ink-3')}>${up ? '↑' : '↓'} ${(up ? '+' : '−') + r2(Math.abs(diff))}</span></span>`;
-}
-function Sub({ vm, p, view }) {
-  if (view === 'bills') return html`<${BillTags} bills=${vm.dist && !vm.dist.error ? vm.dist.byPerson[p.id] : null} />`;
-  if (view === 'math') return html`<${MathLine} p=${p} />`;
-  if (view === 'list') return html`<${PersonTimes} vm=${vm} id=${p.id} />`;
-  return null;
-}
+// A closer: a small red dot after the name (the # tile stays plain).
+const CloserDot = () => html`<span data-closer class="ml-1.5 inline-block size-1.5 shrink-0 rounded-full bg-bad/75" aria-label="closer"></span>`;
 
-const NAME_TEXT = 't-body flex min-w-0 items-baseline';
+const NAME_TEXT = 't-body flex min-w-0 items-center';
 
+// List and Shift views (Bills / Math are tables: BillsTable, MathTable).
 function PayRow({ vm, p, n, tint, before, view, col = {} }) {
   const adj = !!vm.sharesBefore;
+  const d = payDelta(vm, p.id, p.final);
   return html`<div role="button" tabindex="0" style=${{ '--inset': '3.5rem' }}
     class=${cx(ROW, gridFor(adj, view), 'cursor-pointer text-left transition active:bg-surface-2')}
     onClick=${() => App.personModal(p.id)} onKeyDown=${e => { if (e.key === 'Enter') App.personModal(p.id); }}>
-    <span class=${cx(TILE, 't-small font-semibold tabular-nums', tint ? ROLE_TINT[p.role] : 'bg-surface-2 text-ink-2', p.closer && 'ring-1 ring-inset ring-bad/45')}
-      aria-label=${'#' + n + (p.closer ? ', closer' : '')}>${n}</span>
+    <span class=${cx(TILE, 't-small font-semibold tabular-nums', tint ? ROLE_TINT[p.role] : 'bg-surface-2 text-ink-2')}
+      aria-label=${'#' + n}>${n}</span>
     ${view === 'shift' ? html`<span class=${lineCls(adj)}>
-        <span class="flex min-w-0"><span data-nw class="t-body min-w-0 truncate font-medium">${p.name}</span></span>
-        <${TimeCol}><${StaffTime} vm=${vm} id=${p.id} field="in" cls=${TIME_CELL} tone=${TIME_TONE(p)} mins=${col.inMins} /><//>
-        <${TimeCol}><${StaffTime} vm=${vm} id=${p.id} field="out" cls=${TIME_CELL} tone=${TIME_TONE(p)} mins=${col.outMins} /><//>
+        <span class="flex min-w-0 items-center"><span data-nw class="t-body min-w-0 truncate font-medium">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span>
+        <${TimeCol}><${StaffTime} vm=${vm} id=${p.id} field="in" cls=${TIME_CELL} tone=${TIME_TONE(p, timeMoved(vm, p.id, 'in'))} mins=${col.inMins} /><//>
+        <${TimeCol} arrow><${StaffTime} vm=${vm} id=${p.id} field="out" cls=${TIME_CELL} tone=${TIME_TONE(p, timeMoved(vm, p.id, 'out'))} mins=${col.outMins} /><//>
       </span>`
       : html`<span class="flex min-w-0 flex-col">
-        <span class=${cx(NAME_TEXT, 'font-medium')}><span class="truncate">${p.name}</span></span>
-        <${Sub} vm=${vm} p=${p} view=${view} />
+        <span class=${cx(NAME_TEXT, 'font-medium')}><span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span>
+        <${PersonTimes} vm=${vm} id=${p.id} sup=${isSup(p)} />
       </span>`}
-    <${MoneyCells} adj=${adj} before=${before} now=${p.final} hours=${p.shiftHours ?? p.hours} sup=${isSup(p)} noHrs=${!hasHrs(view)} small=${hasHrs(view)} hdp=${col.hdp} />
+    <${MoneyCells} adj=${adj} before=${before} now=${p.final} hours=${p.shiftHours ?? p.hours} sup=${isSup(p)} small hdp=${col.hdp} d=${d} />
+    <${Flash} d=${d} />
   </div>`;
 }
 
+// The Total row's open / close: semibold ink-2, accent while it's moving.
+const TOTAL_TONE = mv => (mv === 'preview' ? 'font-semibold text-accent' : mv ? 'font-semibold text-accent' : 'font-semibold text-ink-2');
+
 function TotalRow({ vm, hours, paidOut, before, view, col = {} }) {
-  const s = vm.shares;
   const adj = !!vm.sharesBefore;
+  // One pool: the tips total drags like a time — hold, then $1 per 6px
+  // (App.nudgeCash moves the uncounted rest; previewed while dragging,
+  // Undo · Apply after). Tap → Tips. Not below the counted bills.
+  const vmPool = vm.state.pools.length === 1 ? vm.pools[0] : null;
+  const amount = vmPool && !adj && html`<${DragAmount} value=${paidOut} min=${Math.max(0, paidOut - (vmPool.rest || 0))}
+    cls="-mx-1.5" moneyCls="t-body font-semibold" label="Tips total"
+    onSet=${(v, v0) => App.nudgeCash(v - v0)} onPreview=${(v, v0) => App.previewCash(v == null ? null : v - v0)}
+    onTap=${() => App.tab('tips')} />`;
+  const tIn = TOTAL_TONE(defaultMoved(vm, 'in')), tOut = TOTAL_TONE(defaultMoved(vm, 'out'));
   return html`<div style=${{ '--inset': '3.5rem' }} class=${cx(ROW, gridFor(adj, view), 'bg-surface-2/60')}>
     <span class=${cx(TILE, 'bg-surface-2 text-ink-2')}><${Icon} name="users" class="size-[1.125rem]" /></span>
     ${view === 'shift' ? html`<span class=${lineCls(adj)}>
         <span class="flex min-w-0"><span data-nw class="t-body min-w-0 truncate font-semibold">Total</span></span>
-        <${TimeCol}><${DefaultTime} vm=${vm} field="in" cls=${TIME_CELL} tone="font-semibold text-ink-2" mins=${col.inMins} /><//>
-        <${TimeCol}><${DefaultTime} vm=${vm} field="out" cls=${TIME_CELL} tone="font-semibold text-ink-2" mins=${col.outMins} /><//>
+        <${TimeCol}><${DefaultTime} vm=${vm} field="in" cls=${TIME_CELL} tone=${tIn} mins=${col.inMins} /><//>
+        <${TimeCol} arrow><${DefaultTime} vm=${vm} field="out" cls=${TIME_CELL} tone=${tOut} mins=${col.outMins} /><//>
       </span>`
       : html`<span class="flex min-w-0 flex-col">
         <span class=${cx(NAME_TEXT, 'font-semibold')}>Total</span>
-        ${view === 'bills' ? html`<${BillTags} bills=${vm.bills} />`
-          : view === 'list' ? html`<${TimesSub}
-            a=${html`<${DefaultTime} vm=${vm} field="in" cls=${TIME_SUB} tone="text-ink-2" />`}
-            b=${html`<${DefaultTime} vm=${vm} field="out" cls=${TIME_SUB} tone="text-ink-2" />`} />`
-          : html`<span class="t-small tabular-nums text-ink-3">${fmtMoney(s.totalCash)} ÷ ${fmtHrs(s.totalHours)}h = ${r2(s.rate)}/h${s.leftover > 0 ? ' · chump ' + fmtMoney(s.leftover) : ''}</span>`}
+        <${TimesSub}
+          a=${html`<${DefaultTime} vm=${vm} field="in" cls=${TIME_SUB} tone=${tIn.replace('font-semibold ', '')} />`}
+          b=${html`<${DefaultTime} vm=${vm} field="out" cls=${TIME_SUB} tone=${tOut.replace('font-semibold ', '')} />`} />
       </span>`}
-    <${MoneyCells} adj=${adj} before=${before} now=${paidOut} hours=${hours} bold noHrs=${!hasHrs(view)} small=${hasHrs(view)} hdp=${col.hdp} />
+    <${MoneyCells} adj=${adj} before=${before} now=${paidOut} hours=${hours} bold small hdp=${col.hdp} d=${sumDelta(vm, paidOut)} amount=${amount} />
   </div>`;
 }
 
@@ -301,7 +306,7 @@ function TotalRow({ vm, hours, paidOut, before, view, col = {} }) {
 const widest = (el, sel) => Math.max(0, ...[...el.querySelectorAll(sel)].map(x => x.getBoundingClientRect().width));
 function fitShift(el, view) {
   if (!el) return;
-  const pw = Math.ceil(widest(el, '[data-pw] > span, [data-pwcap]'));
+  const pw = Math.ceil(widest(el, '[data-pw] > span, [data-pw] > button > span, [data-pwcap]'));
   if (pw > 0) el.style.setProperty('--pw', pw + 1 + 'px');
   if (view !== 'shift') return;
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
@@ -310,7 +315,9 @@ function fitShift(el, view) {
   const T = Math.ceil(Math.max(widest(el, '[data-tc] button > span'), widest(el, '[data-capt]')));
   const V = Math.ceil(pw);   // Tips (Hrs is a fixed 2.5rem)
   if (!(T > 0) || !(V > 0)) return;
-  const N = Math.max(0, ...[...el.querySelectorAll('[data-nw]')].map(x => x.scrollWidth)) + 1;
+  // (+ the closer dot after a name, when there is one)
+  const N = Math.max(0, ...[...el.querySelectorAll('[data-nw]')].map(x => x.scrollWidth
+    + (x.nextElementSibling?.matches('[data-closer]') ? x.nextElementSibling.offsetWidth + 6 : 0))) + 1;
   const row = el.querySelector('.li');
   let pad = 0.75 * rem, g = 0.75 * rem, nmin = N;
   if (row) {
@@ -346,9 +353,12 @@ function PayoutList({ vm, name, view }) {
   const hours = ordered.filter(p => !isSup(p)).reduce((t, p) => t + (p.shiftHours ?? p.hours), 0);
   const paidOut = ordered.reduce((t, p) => t + p.final, 0);
   const paidBefore = adj ? vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0) : 0;
-  const footer = tint && html`<span class="flex flex-wrap items-center gap-x-3 gap-y-1">
-    ${roles.map(r => html`<span key=${r} class="inline-flex items-center gap-1.5"><span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_PLURAL[r]}</span>`)}
-    ${roles.includes('support') && html`<span>· support is a tip-out, not counted in hours</span>`}</span>`;
+  // Key: roles (several), closers, and the faint "follows the default" times.
+  const footer = html`<span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+    ${tint && roles.map(r => html`<span key=${r} class="inline-flex items-center gap-1.5"><span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_PLURAL[r]}</span>`)}
+    ${ordered.some(p => p.closer) && html`<span class="inline-flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-bad/75"></span>Closer</span>`}
+    <span>Faint times follow the shift default</span>
+    ${tint && roles.includes('support') && html`<span>· support is a tip-out, not counted in hours</span>`}</span>`;
   const cap = 't-cap text-ink-3';
   // One look per column: if any time in the In (or Out) column has minutes,
   // every row shows them ("5:00p" over "5:30p"); Hrs likewise share the most
@@ -444,8 +454,8 @@ function PoolGrid({ vm }) {
               <td class=${cx(NAME, 'py-2 align-top')}><span class="flex max-w-[9rem] flex-col">
                 <span class="flex min-w-0 items-center gap-1.5">
                   ${tint && html`<${RoleDot} role=${p.role} />`}
-                  <span class=${cx('truncate font-medium leading-tight', p.closer && 'underline decoration-bad/50 decoration-2 underline-offset-4')}>${p.name}</span></span>
-                <${PersonTimes} vm=${vm} id=${p.id} /></span></td>
+                  <span class="truncate font-medium leading-tight">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span>
+                <${PersonTimes} vm=${vm} id=${p.id} sup=${isSup(p)} /></span></td>
               ${pools.map(pl => {
                 const x = p.perPool?.[pl.id];
                 const on = shares(pl, p);
@@ -453,7 +463,7 @@ function PoolGrid({ vm }) {
                   x ? html`<${Two} top=${r2(x.raw)} sub=${fmtHrs(x.hours) + 'h'} subCls=${subCls} />`
                     : on ? html`<span class="block leading-tight text-ink-3">—</span>` : ''}</td>`;
               })}
-              <td class=${cx(TD, SEP, 'pr-4')}><${Two} top=${html`<${Money} value=${p.final} class=${cx('font-semibold', isSup(p) && SUP_TEXT)} />`} sub=${fmtHrs(hrs) + 'h'} subCls=${subCls} /></td>
+              <td class=${cx(TD, SEP, 'pr-4')}><${Two} top=${html`<${Money} value=${p.final} class=${cx('font-semibold', isSup(p) && SUP_TEXT)} />`} sub=${html`${fmtHrs(hrs)}h <${Delta} d=${payDelta(vm, p.id, p.final)} class="ml-1" />`} subCls=${subCls} /></td>
             </tr>`;
           })}
         </tbody>
@@ -470,7 +480,7 @@ function PoolGrid({ vm }) {
       <span>Each pool: what it paid · their hours in it. Pool shares are exact; take-home is rounded${s.leftover > 0 ? ' · chump ' + fmtMoney(s.leftover) : ''}.</span>
       <span>Blank = their role isn’t in that pool · — = didn’t work its window.</span>
       ${tint && roles.map(r => html`<span key=${r} class="inline-flex items-center gap-1.5"><span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_PLURAL[r]}</span>`)}
-      <span class="inline-flex items-center gap-1.5"><span class="underline decoration-bad/50 decoration-2 underline-offset-4">Name</span> closer</span>
+      <span class="inline-flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-bad/75"></span>Closer</span>
     </div>
   <//>`;
 }
@@ -559,13 +569,59 @@ function renderPoolSheet(vm) {
   render(html`<${PoolTable} key=${pools[i].id} vm=${vm} pool=${pools[i]} index=${i} />`, sheetBody('sheet-poolsum'));
 }
 
-function Tools() {
-  return html`<${List}>
-    <${Item} icon="clock" title="Close-time what-if" sub="Payouts at other close times" onClick=${() => App.openCloseTime()} />
-    <${Item} icon="gift" title="Closer bonus & chump" sub="Who gets the dollars left after rounding" onClick=${() => App.openBonus()} />
-    <${Item} icon="copy" title="Copy as text" sub="Names, times, hours and tips — paste into Notes" chevron=${false} onClick=${() => App.copySummary()} />
+// The shift's tools, up top where a thumb finds them (they used to sit at
+// the foot of the page): Close-time what-if (with the close time), Closer
+// bonus & chump (with the chump), Copy as text.
+function Tools({ vm }) {
+  const close = vm.resolved?.closeAbs;
+  const chump = vm.shares?.leftover || 0;
+  return html`<${ToolChips} items=${[
+    { icon: 'clock', label: 'Close time', value: close != null ? html`<${Clock} abs=${close} />` : '', onClick: () => App.openCloseTime() },
+    { icon: 'gift', label: 'Bonus & chump', value: chump > 0 ? fmtMoney(chump) : '', onClick: () => App.openBonus() },
+    { icon: 'copy', label: 'Copy', onClick: () => App.copySummary() },
+  ]} />`;
+}
+
+// Bills view: each person's envelope as a grid — Name · one column per bill
+// size · Pay, chump and drawer totals (Payout's EnvelopeTable, Staff order).
+function BillsTable({ vm }) {
+  const ok = vm.dist && !vm.dist.error;
+  return html`<${EnvelopeTable} vm=${vm} order=${staffOrder(vm, vm.shares.perPerson)}
+    byPerson=${ok ? vm.dist.byPerson : {}} remBills=${ok ? vm.dist.remainderBills : {}} />`;
+}
+
+// Math view: the split as a grid — Name · Hrs × Rate = Exact · Round · Tips.
+// Rate = their exact share ÷ their hours (with several pools, the blend);
+// Round = take-home − exact (↑ good when rounded up — a closer bonus — else
+// faint). Total row: tipped hours, the pool rate, the pool, −chump, paid.
+function MathTable({ vm }) {
+  const s = vm.shares;
+  const people = staffOrder(vm, s.perPerson);
+  const dash = html`<span class="text-ink-3/50">—</span>`;
+  const round = p => {
+    const d = p.final - p.exact;
+    if (Math.abs(d) < 0.005) return dash;
+    return d > 0 ? html`<span class="font-medium text-good">+${r2(d)}</span>` : html`<span class="text-ink-3">−${r2(-d)}</span>`;
+  };
+  const paid = people.reduce((t, p) => t + p.final, 0);
+  return html`<${Section} footer=${'Hours × rate = exact share, rounded down to whole dollars; + is a closer bonus' + (s.perPool.length > 1 ? '. With several pools the rate is the blend.' : '.')}>
+    <${Table} lines scroll stickyFirst
+      cols=${[{ label: 'Name' }, { label: 'Hrs' }, { label: 'Rate' }, { label: 'Exact', align: 'right' }, { label: 'Round', align: 'right' }, { label: 'Tips', align: 'right' }]}
+      rows=${people.map(p => ({ key: p.id, onClick: () => App.personModal(p.id), tone: isSup(p) ? 'muted' : '',
+        cells: [html`<span class="inline-flex max-w-full items-center"><span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span>`,
+          fmtHrs(p.hours), p.hours > 0 ? r2(p.exact / p.hours) : dash, r2(p.exact), round(p),
+          html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', isSup(p) && SUP_TEXT)} /><${Delta} d=${payDelta(vm, p.id, p.final)} under /></span>`] }))}
+      foot=${['Total', fmtHrs(s.totalHours), r2(s.rate), r2(s.totalCash), s.leftover > 0 ? html`<span class="text-ink-2">−${s.leftover}</span>` : dash, html`<${Money} value=${paid} />`]} />
   <//>`;
 }
+
+const VIEWS = [
+  { value: 'list', label: 'List', icon: 'menu' },
+  { value: 'shift', label: 'Shift', icon: 'clock' },
+  { value: 'pools', label: 'Pools', icon: 'dollar' },
+  { value: 'bills', label: 'Bills', icon: 'cash' },
+  { value: 'math', label: 'Math', icon: 'calc' },
+];
 
 function Summary({ vm, name }) {
   const [pick, setView] = useState(null);             // list · shift · pools · bills · math (null = default)
@@ -574,17 +630,23 @@ function Summary({ vm, name }) {
   // Several pools open on the Pools table — hours and tips per pool per person.
   const view = (pick === 'pools' && !several) ? 'shift' : pick || (several ? 'pools' : 'shift');
   const billsOff = view === 'bills' && (!vm.dist || vm.dist.error);
-  return html`<div class="flex flex-col gap-6">
+  // Five views: icons over the labels' room would crowd a 375pt screen, so
+  // the icons drop out on narrow phones (max-[400px]).
+  const items = VIEWS.filter(v => v.value !== 'pools' || several)
+    .map(v => ({ ...v, label: html`<span class="max-[25rem]:hidden">${html`<${Icon} name=${v.icon} class="size-4" />`}</span>${v.label}`, icon: null }));
+  return html`<div class="flex flex-col gap-5">
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map(w => html`<${Alert}>${w}<//>`)}
     <${AdjustBanner} vm=${vm} />
+    <${Tools} vm=${vm} />
     <div class="flex flex-col gap-3">
-      <${Seg} value=${view} onChange=${setView}
-        items=${[{ value: 'list', label: 'List' }, { value: 'shift', label: 'Shift' }, several && { value: 'pools', label: 'Pools' }, { value: 'bills', label: 'Bills' }, { value: 'math', label: 'Math' }].filter(Boolean)} />
+      <${Seg} size="lg" value=${view} onChange=${setView} items=${items} />
       ${billsOff && html`<${Alert} tone="warn" action=${{ label: 'Payout', onClick: () => App.tab('payout') }}>The bills don’t work out yet — Payout has the swap.<//>`}
-      ${view === 'pools' ? html`<${PoolGrid} vm=${vm} />` : html`<${PayoutList} vm=${vm} name=${name} view=${view} />`}
+      ${view === 'pools' ? html`<${PoolGrid} vm=${vm} />`
+        : view === 'bills' ? html`<${BillsTable} vm=${vm} />`
+        : view === 'math' ? html`<${MathTable} vm=${vm} />`
+        : html`<${PayoutList} vm=${vm} name=${name} view=${view} />`}
     </div>
     ${view !== 'pools' && html`<${PoolsList} vm=${vm} />`}
-    <${Tools} />
   </div>`;
 }
 

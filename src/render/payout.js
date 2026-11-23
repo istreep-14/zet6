@@ -8,10 +8,13 @@
 
 import { DENOMS, fmtHrs, fmtMoney, payoutOrder, poolValue } from '../util.js';
 import { fmtTimeAbs } from '../time.js';
-import { planMakeChange, computeTradeUp, distribute } from '../engine.js';
+import { planMakeChange, computeTradeUp, distribute, drawerBills } from '../engine.js';
+import { envelopeFixes } from '../fixups.js';
+import { STACK_BILLS, STACK_DEFAULTS } from '../stacks.js';
 import { updatePool } from '../store.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra } from '../ui/pkit.js';
+import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra, Delta, ToolChips } from '../ui/pkit.js';
+import { payDelta } from '../ui/changes.js';
 
 const $ = id => document.getElementById(id);
 
@@ -84,22 +87,39 @@ export function applyPendingTradeDown() {
 // Chump row, then a Total row with the drawer's bill counts and the grand
 // total. table-fixed so it always fits the card; no sideways scroll.
 
-function Envelopes({ vm, byPerson, remBills, note }) {
+const BILL_HEAD = 'bill-col inline-block min-w-[1.75rem] rounded-md bg-[color-mix(in_srgb,var(--dc)_14%,transparent)] px-1 py-0.5 normal-case tracking-tight';
+// The envelope grid on its own (Payout's Envelopes, Summary's Bills view):
+// `order` = the people in row order (default payoutOrder). A person taking
+// bundled stacks (vm.stacks) says so under their name.
+export function EnvelopeTable({ vm, byPerson, remBills, order }) {
   const s = vm.shares;
-  const ordered = payoutOrder(s.perPerson);
+  const ordered = order || payoutOrder(s.perPerson);
   const rem = s.leftover > 0 ? (remBills || {}) : {};
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
   const cols = DENOMS.filter(d => colTotal(d) > 0);
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
   const n = v => v > 0 ? html`<span class="font-semibold">${v}</span>` : html`<span class="text-ink-3/40">–</span>`;
-  return html`<${Section} title="Envelopes" aside=${note}><${Table} fixed
-    cols=${[{ label: 'Name', w: 'w-[28%]' }, ...cols.map(d => ({ head: html`<span class="bill-col rounded-md px-1.5 py-0.5 normal-case tracking-tight" data-d=${d}>${d}</span>` })), { label: 'Pay', align: 'right', w: 'w-[20%]' }]}
+  // Bill heads / drawer totals: the bill's tint on a faint wash of it (BILL_HEAD).
+  const head = (d, v) => html`<span class=${BILL_HEAD} data-d=${d}>${v}</span>`;
+  const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', !(p.final > 0) && 'text-ink-3')} /><${Delta} d=${payDelta(vm, p.id, p.final)} under /></span>`;
+  const stackNote = id => {
+    const st = vm.stacks?.[id];
+    if (!st) return '';
+    const k = Object.values(st).reduce((t, x) => t + x, 0);
+    return html`<span class="t-small block font-normal leading-tight text-accent">${k} ${k === 1 ? 'stack' : 'stacks'}</span>`;
+  };
+  return html`<${Table} fixed lines
+    cols=${[{ label: 'Name', w: 'w-[28%]' }, ...cols.map(d => ({ head: head(d, d) })), { label: 'Pay', align: 'right', w: 'w-[22%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => App.personModal(p.id),
-        cells: [p.name, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), html`<${Money} value=${p.final} class=${cx('font-semibold', !(p.final > 0) && 'text-ink-3')} />`] })),
+        cells: [html`<span class="block truncate">${p.name}</span>${stackNote(p.id)}`, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), pay(p)] })),
       ...(s.leftover > 0 ? [{ key: 'chump', tone: 'muted', cells: ['Chump', ...cols.map(d => n(rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
     ]}
-    foot=${['Total', ...cols.map(d => html`<span class="bill-col rounded-md px-1.5 py-0.5" data-d=${d}>${colTotal(d)}</span>`), html`<${Money} value=${grand} />`]} /><//>`;
+    foot=${['Total', ...cols.map(d => head(d, colTotal(d))), html`<${Money} value=${grand} />`]} />`;
+}
+
+function Envelopes({ vm, byPerson, remBills, note }) {
+  return html`<${Section} title="Envelopes" aside=${note}><${EnvelopeTable} vm=${vm} byPerson=${byPerson} remBills=${remBills} /><//>`;
 }
 
 // ── Status: exact change, or the fix card ────────────────────────────────────
@@ -234,6 +254,104 @@ function PoolsList({ vm }) {
 
 // One page: bills status / fix → envelopes → tidy-up → how the split works
 // (or the pools list with several pools).
+// ── Envelopes already made, then the register over / short ─────────────────
+// The envelopes were stuffed from the split before the adjustment; rather
+// than start over, each one is fixed through the register: the fewest bills
+// out of an envelope (change back when its bills can't make it exactly) or
+// into it. Collapsed — most nights the adjustment comes before the envelopes.
+const fixCache = new WeakMap();
+function fixesFor(vm) {
+  if (!vm.sharesBefore) return null;
+  if (fixCache.has(vm)) return fixCache.get(vm);
+  const b = vm.sharesBefore;
+  const people = b.perPerson.filter(p => p.final > 0).map(p => ({ id: p.id, final: p.final }));
+  const drawer = drawerBills(vm.pools.map(p => ({ ...p, adjust: 0 })), people, b.leftover);
+  const dist = distribute(people, drawer.bills, b.leftover);
+  const out = dist.error ? null : envelopeFixes(
+    { byPerson: dist.byPerson, pay: Object.fromEntries(people.map(p => [p.id, p.final])) },
+    Object.fromEntries(vm.shares.perPerson.filter(p => p.final > 0).map(p => [p.id, p.final])));
+  fixCache.set(vm, out);
+  return out;
+}
+// "−$10" / "+$1×2" bill pills in the bill's tint.
+const BillPills = ({ bills, sign }) => DENOMS.filter(d => bills[d] > 0).map(d => html`<span key=${sign + d} class="billtag" data-d=${d}>${sign}$${d}${bills[d] > 1 && html`<i>×${bills[d]}</i>`}</span>`);
+
+// A collapsible card: icon tile · title over a line · chevron; body when open.
+function Fold({ icon, iconCls = 'bg-surface-2 text-ink-2', title, sub, children }) {
+  return html`<details class="group overflow-hidden rounded-card bg-surface">
+    <summary class="flex min-h-[var(--row-lg)] cursor-pointer list-none items-center gap-3 px-4 py-2.5 [&::-webkit-details-marker]:hidden">
+      <span class=${cx('grid size-8 shrink-0 place-items-center rounded-lg', iconCls)}><${Icon} name=${icon} class="size-[1.125rem]" /></span>
+      <span class="min-w-0 flex-1"><span class="t-body block font-medium">${title}</span><span class="t-small block text-ink-3">${sub}</span></span>
+      <${Icon} name="chevD" class="size-5 shrink-0 text-ink-3 transition group-open:rotate-180" />
+    </summary>
+    ${children}
+  </details>`;
+}
+
+function FixEnvelopes({ vm }) {
+  const fx = fixesFor(vm);
+  if (!fx || !fx.rows.length) return null;
+  const name = id => vm.shares.perPerson.find(p => p.id === id)?.name || '?';
+  const a = vm.adjust;
+  const step = 't-small w-16 shrink-0 text-ink-3';
+  return html`<${Fold} icon="envelope" iconCls="bg-warn/14 text-warn" title="Envelopes already made?"
+    sub=${'Register ' + (a < 0 ? 'short ' : 'over ') + fmtMoney(Math.abs(a)) + ' — fix ' + fx.rows.length + ' through the register'}>
+    <div class="flex flex-col divide-y divide-line border-t border-line">
+      ${fx.rows.map(r => html`<div key=${r.id} class="flex flex-col gap-1.5 px-4 py-2.5">
+        <span class="flex items-baseline justify-between gap-3">
+          <span class="t-body truncate font-medium">${name(r.id)}</span>
+          <span class="t-small shrink-0 tabular-nums text-ink-3">${fmtMoney(r.was)} → <b class="font-semibold text-ink">${fmtMoney(r.now)}</b>
+            <span class=${r.d < 0 ? 'text-bad' : 'text-good'}> ${r.d < 0 ? '−' : '+'}$${Math.abs(r.d)}</span></span>
+        </span>
+        ${Object.keys(r.out).length > 0 && html`<span class="flex flex-wrap items-center gap-1"><span class=${step}>Take out</span><${BillPills} bills=${r.out} sign="−" /></span>`}
+        ${Object.keys(r.back).length > 0 && html`<span class="flex flex-wrap items-center gap-1"><span class=${step}>Get back</span><${BillPills} bills=${r.back} sign="+" /></span>`}
+        ${Object.keys(r.add).length > 0 && html`<span class="flex flex-wrap items-center gap-1"><span class=${step}>Add</span><${BillPills} bills=${r.add} sign="+" /></span>`}
+      </div>`)}
+      <div class="t-small flex justify-between gap-3 bg-surface-2/60 px-4 py-2.5 font-medium">
+        <span>${fx.register >= 0 ? 'Into the register' : 'Out of the register'}</span>
+        <span class="tabular-nums">${fmtMoney(Math.abs(fx.register))}</span>
+      </div>
+    </div>
+  <//>`;
+}
+
+// ── Stacks for managers ──────────────────────────────────────────────────────
+// Whole stacks of small bills ($50 of $1s, $150 of $5s by default — sizes
+// are an app preference) go to the people picked here, who can trade them
+// up; everyone else's envelope still comes out exact (stacks.js).
+function Stacks({ vm }) {
+  const takers = vm.state.overrides.stackTo || [];
+  const sizes = vm.stackSizes || STACK_DEFAULTS;
+  const people = payoutOrder(vm.shares.perPerson).filter(p => p.final > 0);
+  const name = id => people.find(p => p.id === id)?.name || '?';
+  const given = Object.entries(vm.stacks || {});
+  const what = by => Object.entries(by).map(([d, k]) => k + ' × ' + fmtMoney(sizes[d]) + ' of $' + d + 's').join(' · ');
+  const sub = given.length ? given.map(([id, by]) => name(id) + ': ' + what(by)).join(' · ')
+    : takers.length ? 'No stacks fit — the others need these bills for exact change' : 'Give whole stacks of $1s / $5s to someone who can trade them up';
+  const chip = on => cx('t-small inline-flex h-[var(--tap)] items-center gap-1.5 rounded-full px-3.5 font-semibold transition active:scale-95', on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2');
+  return html`<${Fold} icon="cash" iconCls=${given.length ? 'bg-accent/12 text-accent' : undefined} title="Stacks for a manager" sub=${sub}>
+    <div class="flex flex-col gap-4 border-t border-line px-4 pb-4 pt-3">
+      <div class="flex flex-col gap-2">
+        <span class="t-small font-medium text-ink-2">Who takes the stacks</span>
+        <div class="flex flex-wrap gap-2">${people.map(p => html`<button key=${p.id} class=${chip(takers.includes(p.id))}
+          aria-pressed=${String(takers.includes(p.id))} onClick=${() => App.toggleStackTo(p.id)}>
+          ${takers.includes(p.id) && html`<${Icon} name="check" class="size-4" />`}${p.name}</button>`)}</div>
+      </div>
+      <div class="flex flex-col gap-2">
+        <span class="t-small font-medium text-ink-2">A stack is <span class="font-normal text-ink-3">· 0 = don’t bundle</span></span>
+        <div class="grid grid-cols-3 gap-2">${STACK_BILLS.map(d => html`<label key=${d} class="flex flex-col gap-1">
+          <span class="t-small text-ink-3">$${d}s</span>
+          <span class="relative"><span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3">$</span>
+            <input class="h-11 w-full rounded-xl bg-surface-2 pl-7 pr-2 text-[1.0625rem] font-semibold tabular-nums outline-none focus:ring-2 focus:ring-accent/40"
+              inputmode="numeric" placeholder=${String(STACK_DEFAULTS[d])} value=${vm.state.settings.stacks?.[d] ?? ''}
+              aria-label=${'Stack of $' + d + 's, in dollars'} onInput=${e => App.setStackSize(d, e.target.value)} /></span>
+          <span class="t-small text-ink-3">${sizes[d] > 0 ? sizes[d] / d + ' bills' : 'off'}</span>
+        </label>`)}</div>
+      </div>
+    </div>
+  <//>`;
+}
+
 function Payout({ vm, errMsg, tradeDown, tradeUp }) {
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   const warnings = vm.shares.perPool.map(p => p.warning).filter(Boolean).map(w => html`<${Alert}>${w}<//>`);
@@ -243,10 +361,17 @@ function Payout({ vm, errMsg, tradeDown, tradeUp }) {
     : tradeDown
       ? { ...tradeDown, note: 'shown after the swap' }
       : { byPerson: {}, remainderBills: {}, note: 'bills don’t work out yet' };
+  const chump = vm.shares.leftover || 0;
   return html`<div class="flex flex-col gap-4">
     ${warnings}
+    <${ToolChips} items=${[
+      { icon: 'gift', label: 'Bonus & chump', value: chump > 0 ? fmtMoney(chump) : '', onClick: () => App.openBonus() },
+      { icon: 'clock', label: 'Close-time what-if', onClick: () => App.openCloseTime() },
+    ]} />
     ${errMsg ? html`<${FixCard} vm=${vm} errMsg=${errMsg} plan=${tradeDown} />` : html`<${ExactChange} vm=${vm} />`}
     <${Envelopes} vm=${vm} byPerson=${bills.byPerson} remBills=${bills.remainderBills} note=${bills.note} />
+    <${FixEnvelopes} vm=${vm} />
+    <${Stacks} vm=${vm} />
     ${tradeUp && html`<${TidyDrawer} vm=${vm} plan=${tradeUp} />`}
     ${vm.state.pools.length > 1 ? html`<${PoolsList} vm=${vm} />` : html`<${Worksheet} vm=${vm} />`}
   </div>`;

@@ -15,13 +15,12 @@ import { EDGE_TOKENS } from '../resolve.js';
 import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
 import { KeyTime } from '../ui/keytime.js';
 import { html, render, useState } from '../ui/preact.js';
-import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, INPUT, ROLE_DOT } from '../ui/pkit.js';
+import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, Table, Money, INPUT, ROLE_DOT, zebra, holdRepeat } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
 
 const fmtAmt = v => String(parseFloat((v ?? 0).toFixed(2)));
-const SUB = 'flex flex-col gap-2.5';
 const EYEBROW = 't-small font-medium text-ink-2';
 
 function windowSub(pool, vmPool) {
@@ -57,7 +56,7 @@ function edgeCell(vm, pool, vmPool, which, cls, tone) {
 function WindowEdge({ vm, pool, vmPool, which }) {
   const raw = String(pool.window[which] || '').trim();
   const opts = [{ v: '', label: which === 'start' ? 'Open' : 'Close' }, { v: 'srv', label: 'Servers out' }, { v: 'bar', label: 'Bar out' }];
-  const chip = on => cx('t-small h-8 rounded-full px-3 font-semibold transition active:scale-95', on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2');
+  const chip = on => cx('t-small h-9 shrink-0 rounded-full px-3 font-semibold transition active:scale-95', on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2');
   return html`<div class="flex items-center gap-2">
     <span class="t-small w-10 shrink-0 font-medium text-ink-2">${which === 'start' ? 'From' : 'To'}</span>
     <div class="w-[4.75rem] shrink-0">${edgeCell(vm, pool, vmPool, which, 'h-10 w-full rounded-lg bg-surface-2 text-center text-[1rem] tabular-nums transition')}</div>
@@ -74,14 +73,13 @@ function edgeWords(pool, which) {
 }
 
 function SharedBy({ pool }) {
-  return html`<div class=${SUB}>
-    <span class=${EYEBROW}>Shared by</span>
+  return html`<${FormRow} label="Shared by">
     <div class="flex gap-2">
       <${Chip} on=${pool.roles.bartender} role="bartender" onClick=${() => App.poolRole(pool.id, 'bartender')}>Bar<//>
       <${Chip} on=${pool.roles.server} role="server" onClick=${() => App.poolRole(pool.id, 'server')}>Servers<//>
       <${Chip} on=${pool.includeSupport} role="support" onClick=${() => App.poolRole(pool.id, 'support')}>Support<//>
     </div>
-  </div>`;
+  <//>`;
 }
 
 // Support tip-out — shown when the Support chip is on. % and $/hr inherit as
@@ -94,9 +92,9 @@ function SupportBox({ pool, vm, vmPool }) {
   const pctPh = String(vm.state.defaults.supportPct || '').trim() || '10';
   const cut = sup && sup.cut > 0 ? `−$${fmtAmt(sup.cut)} support · $${fmtAmt(sPool.tippedTotal)} bar/srv` : '';
 
-  return html`<div class="flex flex-col gap-3 rounded-card bg-sup/8 p-4">
+  return html`<div class="flex flex-col gap-3 px-4 py-3">
     <div class="flex items-baseline justify-between gap-2">
-      <span class=${EYEBROW}>Support tip-out</span>
+      <span class=${cx(EYEBROW, 'inline-flex items-center gap-1.5')}><span class="size-2 rounded-full bg-sup"></span>Support tip-out</span>
       <span class="t-small text-right font-medium text-sup">${cut}</span>
     </div>
     <div class="flex gap-3">
@@ -125,16 +123,16 @@ function BillRow({ pool, d }) {
   const v = pool.cash.billCounts[d] ?? '';
   const parsed = parseWholeNumber(v);
   const sub = parsed.valid ? parsed.value * d : 0;
-  const step = 'grid size-10 shrink-0 place-items-center rounded-full text-[1.25rem] text-ink-2 active:bg-ink/10 active:text-ink';
-  return html`<div class="grid grid-cols-[3.5rem_minmax(0,1fr)_4.75rem] items-center gap-3 py-1.5 max-[25rem]:grid-cols-[3.125rem_minmax(0,1fr)_4rem] max-[25rem]:gap-2.5">
+  const step = 'grid size-11 shrink-0 select-none place-items-center rounded-full text-[1.375rem] text-ink-2 active:bg-ink/10 active:text-ink [-webkit-touch-callout:none]';
+  return html`<div class=${cx(BILL_GRID, 'min-h-[var(--row-lg)] px-4 py-1')}>
     <${Denom} d=${d} />
     <div class="flex items-center rounded-full bg-surface-2 focus-within:ring-2 focus-within:ring-accent/40">
-      <button class=${step} onClick=${() => App.billStep(pool.id, String(d), -1)} aria-label=${'One fewer $' + d} tabindex="-1">−</button>
-      <input class="h-10 w-full min-w-0 bg-transparent text-center text-[1.125rem] font-semibold text-ink outline-none placeholder:text-ink-3"
+      <button class=${step} ...${holdRepeat(() => App.billStep(pool.id, String(d), -1))} aria-label=${'One fewer $' + d} tabindex="-1">−</button>
+      <input class="h-11 w-full min-w-0 bg-transparent text-center text-[1.125rem] font-semibold text-ink outline-none placeholder:text-ink-3"
         type="number" min="0" step="1" placeholder="0" inputmode="numeric" enterkeyhint="next" data-bill=${d}
         aria-label=${'$' + d + ' bills'} value=${v} onInput=${e => App.poolBill(pool.id, String(d), e.target.value)}
         onKeyDown=${e => App.billKey(e, pool.id)} />
-      <button class=${step} onClick=${() => App.billStep(pool.id, String(d), 1)} aria-label=${'One more $' + d} tabindex="-1">+</button>
+      <button class=${step} ...${holdRepeat(() => App.billStep(pool.id, String(d), 1))} aria-label=${'One more $' + d} tabindex="-1">+</button>
     </div>
     <span class=${cx('t-body text-right font-semibold tabular-nums', !parsed.valid ? 'text-bad' : sub > 0 ? 'text-ink' : 'text-ink-3')}>
       ${!parsed.valid ? '!' : sub > 0 ? fmtMoney(sub) : '—'}</span>
@@ -157,12 +155,25 @@ function Amount({ pool, vmPool, counting }) {
   </div>`;
 }
 
-// An option that opens part of the form (Count bills, Over / short).
-function Toggle({ on, icon, onClick, children }) {
-  return html`<button class=${cx('t-small inline-flex h-9 items-center gap-1.5 rounded-full px-3.5 font-semibold transition active:scale-95',
-    on ? 'bg-accent/12 text-accent' : 'bg-surface-2 text-ink-2')} aria-pressed=${String(!!on)} onClick=${onClick}>
-    <${Icon} name=${on ? 'check' : icon} class="size-4" />${children}</button>`;
+// The bill rows' columns (Bill · Count · Amount), shared with their caption.
+const BILL_GRID = 'grid grid-cols-[3.5rem_minmax(0,1fr)_4.75rem] items-center gap-3 max-[25rem]:grid-cols-[3.125rem_minmax(0,1fr)_4rem] max-[25rem]:gap-2.5';
+
+// One row of the cash form's grid: a full-width switch (the settings switch)
+// with a title and a line under it; what it opens follows as more rows.
+function OptRow({ on, title, sub, onClick }) {
+  return html`<button role="switch" aria-checked=${String(!!on)} onClick=${onClick}
+    class="switch-row flex min-h-[var(--row-lg)] w-full items-center gap-3 px-4 py-2 text-left transition active:bg-surface-2">
+    <span class="flex min-w-0 flex-1 flex-col">
+      <span class="t-body font-medium">${title}</span>
+      ${sub && html`<span class="t-small text-ink-3">${sub}</span>`}
+    </span>
+    <span class="switch"></span>
+  </button>`;
 }
+// A labelled row: caption over its control, padded like the others.
+const FormRow = ({ label, aside, children, cls = '' }) => html`<div class=${cx('flex flex-col gap-2 px-4 py-3', cls)}>
+  ${(label || aside) && html`<span class="flex items-baseline justify-between gap-3"><span class=${EYEBROW}>${label}</span>${aside && html`<span class="t-small text-right text-ink-3">${aside}</span>`}</span>`}
+  ${children}</div>`;
 
 // Register over / short: a Short / Over switch and an amount, stored as one
 // signed string ("-50"). iOS number pads have no minus key, hence the switch.
@@ -173,12 +184,12 @@ function Adjust({ pool }) {
   const amount = raw.replace(/^[-+−]/, '');
   const write = (sg, amt) => App.poolAdjust(pool.id, amt ? (sg < 0 ? '-' : '') + amt : '');
   return html`<div class="flex gap-2">
-    <${Seg} class="w-40 shrink-0" value=${raw ? (neg ? -1 : 1) : sign}
+    <${Seg} class="w-40 shrink-0 [&>button]:h-10" value=${raw ? (neg ? -1 : 1) : sign}
       onChange=${v => { setSign(v); write(v, amount); }}
       items=${[{ value: -1, label: 'Short' }, { value: 1, label: 'Over' }]} />
     <div class="relative flex-1">
       <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3">$</span>
-      <input class=${cx(INPUT, 'h-9 pl-7 font-semibold')} type="number" min="0" step="1" placeholder="0" inputmode="numeric"
+      <input class=${cx(INPUT, 'h-11 pl-7 font-semibold')} type="number" min="0" step="1" placeholder="0" inputmode="numeric"
         aria-label="Register over or short" value=${amount}
         onInput=${e => write(raw ? (neg ? -1 : 1) : sign, e.target.value.replace(/[^0-9]/g, ''))} />
     </div>
@@ -217,47 +228,40 @@ function PoolCard({ pool, vm }) {
         ${adj !== 0 && html`<span class="t-small text-ink-3 line-through">${fmtMoney(vmPool.totalBefore)}</span>`}
       </span>
     </div>
-    <div class="flex flex-col gap-4 px-4 pb-4 pt-3">
-      <${Amount} pool=${pool} vmPool=${vmPool} counting=${counting} />
-      <div class="flex flex-wrap gap-2">
-        <${Toggle} on=${counting} icon="cash" onClick=${() => {
-          if (counting) { setCount(false); App.poolCounting(pool.id, false); } else { setCount(true); App.poolCounting(pool.id, true); }
-        }}>Count bills<//>
-        <${Toggle} on=${adjusting} icon="swap" onClick=${() => {
-          if (adjusting) { setOver(false); App.poolAdjust(pool.id, ''); } else setOver(true);
-        }}>Over / short<//>
-      </div>
-      ${counting && html`<div class=${SUB}>
-        <span class="flex items-center justify-between gap-3">
-          <span class=${EYEBROW}>Bills you counted</span>
-          <span class="flex shrink-0 items-center gap-2">
-            <span class="t-small text-ink-3">Amount is the</span>
-            <${Seg} size="sm" class="w-32" value=${pool.cash.restMode === 'total' ? 'total' : 'rest'} onChange=${m => App.poolRestMode(pool.id, m)}
-              items=${[{ value: 'total', label: 'Total' }, { value: 'rest', label: 'Rest' }]} />
-          </span>
-        </span>
-        <div class="flex flex-col divide-y divide-line">${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} d=${d} />`)}</div>
+    <div class="px-4 pb-4 pt-3"><${Amount} pool=${pool} vmPool=${vmPool} counting=${counting} /></div>
+    <div class="flex flex-col divide-y divide-line border-t border-line">
+      <${OptRow} on=${counting} title="Count bills" sub=${counting ? 'The bills you can see at a glance' : 'Count some bills, the rest is picked for you'}
+        onClick=${() => { if (counting) { setCount(false); App.poolCounting(pool.id, false); } else { setCount(true); App.poolCounting(pool.id, true); } }} />
+      ${counting && html`<div class="flex flex-col">
+        <div class=${cx(BILL_GRID, 't-cap px-4 pb-1 pt-2 text-ink-3')}><span>Bill</span><span class="text-center">Count</span><span class="text-right">Amount</span></div>
+        ${DENOMS.map((d, i) => html`<div key=${d} class=${zebra(i)}><${BillRow} pool=${pool} d=${d} /></div>`)}
+        <div class=${cx(BILL_GRID, 'min-h-[var(--row)] bg-surface-2 px-4 font-semibold')}>
+          <span class="t-body">Counted</span>
+          <span class="t-small flex items-center justify-center gap-2 font-normal text-ink-3">Amount is the
+            <${Seg} size="sm" class="w-28" value=${pool.cash.restMode === 'total' ? 'total' : 'rest'} onChange=${m => App.poolRestMode(pool.id, m)}
+              items=${[{ value: 'total', label: 'Total' }, { value: 'rest', label: 'Rest' }]} /></span>
+          <span class="t-body text-right tabular-nums">${fmtMoney(counted)}</span>
+        </div>
       </div>`}
-      ${adjusting && html`<div class=${SUB}>
-        <span class=${EYEBROW}>Register over / short <span class="font-normal text-ink-3">· re-splits the tips</span></span>
-        <${Adjust} key=${pool.id} pool=${pool} />
-      </div>`}
+      <${OptRow} on=${adjusting} title="Register over / short" sub="Re-splits the tips"
+        onClick=${() => { if (adjusting) { setOver(false); App.poolAdjust(pool.id, ''); } else setOver(true); }} />
+      ${adjusting && html`<${FormRow}><${Adjust} key=${pool.id} pool=${pool} /><//>`}
       ${showChips && html`<${SharedBy} pool=${pool} />`}
       ${pool.includeSupport && html`<${SupportBox} pool=${pool} vm=${vm} vmPool=${vmPool} />`}
-      ${!single && html`<div class=${SUB}>
-          <span class=${EYEBROW}>Window <span class="font-normal text-ink-3">· tap a time to type it, drag to nudge</span></span>
+      ${!single && html`<${FormRow} label="Window" aside="tap a time to type it, hold and drag to nudge">
           ${pool.kind === 'party' && !pool.window.start.trim() && !pool.window.end.trim()
             && html`<span class="t-small text-warn">Set when the party started and ended — only hours inside it share its tips.</span>`}
           <${WindowEdge} vm=${vm} pool=${pool} vmPool=${vmPool} which="start" />
           <${WindowEdge} vm=${vm} pool=${pool} vmPool=${vmPool} which="end" />
-        </div>
-        <${Field} label="Label" value=${pool.label} onInput=${e => App.poolLabel(pool.id, e.target.value)} />
-        <${Button} variant="danger" size="sm" class="self-start" onClick=${() => { closeSheet('sheet-pool'); App.removePool(pool.id); }}>Remove pool<//>`}
+        <//>
+        <${FormRow} label="Label"><input class=${cx(INPUT, 'h-11')} value=${pool.label} aria-label="Pool label" onInput=${e => App.poolLabel(pool.id, e.target.value)} /><//>
+        <div class="px-4 py-3"><${Button} variant="danger" size="sm" onClick=${() => { closeSheet('sheet-pool'); App.removePool(pool.id); }}>Remove pool<//></div>`}
     </div>
   <//>`;
 }
 
-// Which bills to pull for the uncounted rest (all pools together).
+// Which bills to pull for the uncounted rest (all pools together) — a Table
+// like Payout's: Bill · Count · Amount, total row.
 function Suggested({ vm }) {
   const add = vm.looseBills;
   if (!add || !vm.bills || vm.totalCash <= 0) return null;
@@ -265,11 +269,11 @@ function Suggested({ vm }) {
   if (!ds.length) return null;
   const sum = ds.reduce((t, d) => t + add[d] * d, 0);
   return html`<${Section} title=${'Best bills for the ' + fmtMoney(sum) + (vm.counted ? ' not counted' : '')}
-    footer="Enough $1 / $5 / $10s for every payout to come out exact, the rest in $20s."><${Card}>
-    <div class="divide-y divide-line">${ds.map(d => html`<div key=${d} class="grid grid-cols-[3.5rem_1fr_auto] items-center gap-3 py-2.5">
-      <${Denom} d=${d} /><span class="t-body text-ink-2">× ${add[d]}</span>
-      <span class="t-body font-semibold tabular-nums">${fmtMoney(add[d] * d)}</span></div>`)}</div>
-  <//><//>`;
+    footer="Enough $1 / $5 / $10s for every payout to come out exact, the rest in $20s.">
+    <${Table} cols=${[{ label: 'Bill' }, { label: 'Count' }, { label: 'Amount', align: 'right' }]}
+      rows=${ds.map(d => ({ key: d, cells: [html`<${Denom} d=${d} />`, html`<span class="font-semibold">× ${add[d]}</span>`, html`<${Money} value=${add[d] * d} class="font-semibold" />`] }))}
+      foot=${['Total', ds.reduce((t, d) => t + add[d], 0) + ' bills', html`<${Money} value=${sum} />`]} />
+  <//>`;
 }
 
 // Several pools: one compact card per pool → its sheet.

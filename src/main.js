@@ -16,6 +16,8 @@ import { loadRoster, rememberName, forgetName, getRoster } from './roster.js';
 import { renderTips, openPoolSheet } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
 import { refreshSticky } from './ui/sticky.js';
+import { trackChanges, resetChanges, snapOf, SHOW } from './ui/changes.js';
+import { dragFlags } from './ui/dragtime.js';
 import { toast, copyText } from './ui/toast.js';
 import { summaryText } from './textout.js';
 import { renderSummary, openPoolSummary } from './render/summary.js';
@@ -62,6 +64,13 @@ function render(s) {
   else delete root.dataset.theme;
   store.ensureBlankRows(s);
   lastVm = buildViewModel(s);
+  previewing = false;
+  // A reviewed edit (drag / keypad) lands in this render; any other edit
+  // after it accepts it (Undo only ever puts back the latest one). Moving
+  // between tabs isn't an edit: only `ui` changed, so the review stays.
+  if (pendingReview) { review = { ...pendingReview, stamp: ++reviewN, after: dataKey(s) }; pendingReview = null; }
+  else if (review && dataKey(s) !== review.after) review = null;
+  if (trackChanges(lastVm, sessions.currentId(), review)) clearChangesLater();
   renderStaff(lastVm);
   renderTips(lastVm);
   renderPayout(lastVm);
@@ -77,6 +86,82 @@ function render(s) {
   const list = sessions.list(), cur = sessions.currentId();
   renderDrawer(lastVm, list, cur);
   renderShiftPanel(lastVm, list, cur);
+}
+
+// ── What changed / what would change (ui/changes.js) ─────────────────────────
+// A landed edit marks the figures it moved (vm.changes) for SHOW ms, then
+// they're repainted plain. An edit in progress (a dragged or typed time)
+// re-runs the split on a copy of the state and paints Summary + the HUD with
+// the would-be numbers (vm.preview); nothing is written until it lands.
+let clearTimer = 0;
+function clearChangesLater() {
+  clearTimeout(clearTimer);
+  clearTimer = setTimeout(() => {
+    if (!lastVm.changes || lastVm.changes.review || previewing) return;
+    lastVm.changes = null;
+    renderSummary(lastVm, sessionName());
+    renderPayout(lastVm);
+    updateTabIndicators(lastVm);
+  }, SHOW + 50);
+}
+
+// Review: a drag or keypad edit is written at once, then waits for a word —
+// the HUD shows what it moved with Undo (put the whole state back as it was
+// just before) and Apply (keep it; the marks go). Its marks stay until then.
+let review = null, pendingReview = null, reviewN = 0;
+const dataKey = s => JSON.stringify({ ...s, ui: null });
+function withReview(label, write) {
+  pendingReview = { label, before: structuredClone(store.getState()), base: snapOf(lastVm) };
+  write();
+}
+function reviewUndo() {
+  const r = review;
+  if (!r) return;
+  review = null;
+  resetChanges();
+  store.replaceState(r.before);
+  render(store.getState());
+  toast('Undone');
+}
+function reviewApply() {
+  if (!review) return;
+  review = null;
+  lastVm.changes = null;
+  renderSummary(lastVm, sessionName());
+  renderPayout(lastVm);
+  updateTabIndicators(lastVm);
+}
+
+// Nudge the tips total (one pool) by `delta` dollars: the uncounted rest
+// moves, the counted bills stay; with "Amount is the Total" the typed total
+// moves with it. vmPool = that pool in the current view model.
+function nudgeCash(s, vmPool, delta) {
+  const pool = s.pools[0];
+  if (!pool || !vmPool) return;
+  const rest = Math.max(0, (vmPool.rest || 0) + delta);
+  const asTotal = pool.cash.restMode === 'total' && String(pool.cash.netTotal ?? '').trim() !== '';
+  pool.cash.netTotal = String(asTotal ? (vmPool.counted || 0) + rest : rest);
+}
+
+let previewing = false;
+function preview(apply, focus = null) {
+  if (!apply) {
+    if (!previewing) return;
+    previewing = false;
+    renderSummary(lastVm, sessionName());
+    updateTabIndicators(lastVm);
+    return;
+  }
+  const base = snapOf(lastVm);
+  if (!base) return;
+  const s = structuredClone(store.getState());
+  apply(s);
+  let pv;
+  try { pv = buildViewModel(s); } catch { return; }
+  pv.preview = { base, focus };
+  previewing = true;
+  renderSummary(pv, sessionName());
+  updateTabIndicators(pv);
 }
 
 // ── Sessions: switch / create / delete without reloading ─────────────────────
@@ -223,6 +308,28 @@ window.App = {
     else closeSheet('sheet-roster');
   },
   editTime: (id, field) => openTimeEditor(id, field),
+  // Preview an In / Out (or the default open / close) before it's written —
+  // raw = the string it would store, null = end the preview.
+  previewStaff: (id, field, raw) => preview(raw == null ? null : s => {
+    const p = s.staff.find(x => x.id === id);
+    if (p) p[field] = raw;
+  }, id),
+  previewDefault: (field, raw) => preview(raw == null ? null : s => { s.defaults.global[field] = String(raw).trim(); }),
+  // The tips total (Summary Total row, one pool): preview / write a nudge.
+  previewCash: delta => preview(delta == null || !delta ? null : s => nudgeCash(s, lastVm.pools[0], delta)),
+  nudgeCash(delta) {
+    const vmPool = lastVm.pools[0];
+    if (!vmPool || !delta) return;
+    withReview('Tips ' + (delta > 0 ? '+$' : '−$') + Math.abs(delta).toLocaleString('en-US'),
+      () => store.mutate(s => nudgeCash(s, vmPool, delta), { immediate: true }));
+  },
+  // Stacks of small bills for managers (Payout).
+  toggleStackTo: id => store.toggleStackTo(id),
+  setStackSize: (d, v) => store.setStackSize(d, v),
+  // A drag / keypad edit with Undo · Apply in the HUD (see withReview).
+  reviewed: withReview,
+  reviewUndo,
+  reviewApply,
   // immediate = picker / button edits (render now); typing debounces.
   staffField(id, field, value, immediate = false) {
     store.mutate(s => {
@@ -529,7 +636,8 @@ if (window.visualViewport) {
 // Staff · Tips · Payout). Only from the first tab does
 // a right swipe open the left panel, and only from the last does a left swipe
 // open the shift panel (the screen edges always drag the panels). Ignored
-// inside sideways-scrolling areas and drag times, at the screen edges, while
+// inside sideways-scrolling areas, on a touch that held a drag box long
+// enough to drag it (dragFlags), at the screen edges, while
 // typing, or on vertical drags.
 (() => {
   const area = $('mainContent');
@@ -539,7 +647,7 @@ if (window.visualViewport) {
     const t = e.target;
     const x = e.touches[0].clientX, box = document.body.getBoundingClientRect();
     tracking = x - box.left >= EDGE && box.right - x >= EDGE
-      && !t.closest('.overflow-x-auto') && !t.closest('[data-drag]')
+      && !t.closest('.overflow-x-auto')
       && !(t.matches('input') && t === document.activeElement)
       && !document.body.classList.contains('keyboard-open');
     x0 = x;
@@ -549,6 +657,7 @@ if (window.visualViewport) {
   area.addEventListener('touchend', e => {
     if (!tracking) return;
     tracking = false;
+    if (dragFlags.lastArmed >= t0) return;          // that touch was a drag (held on a drag box)
     const dx = e.changedTouches[0].clientX - x0;
     const dy = e.changedTouches[0].clientY - y0;
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - t0 > 700) return;
