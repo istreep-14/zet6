@@ -152,22 +152,26 @@ const dec2 = v => (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigi
 // Was · Now · ± — the split before and after the adjustment.
 // Tips' width (--pw) = the widest amount in the list (PayoutList).
 const PAY_GRID_BARE = 'grid grid-cols-[2rem_minmax(0,1fr)_var(--pw,4.5rem)] items-center gap-x-3';   // Bills / Math: no Hrs column
+// List view (the glance): name over "5p – 2a" · Hrs · Tips. Hrs is set small
+// (t-small medium ink-2) here and in the Shift view.
+const PAY_GRID_LIST = 'grid grid-cols-[2rem_minmax(0,1fr)_2.5rem_var(--pw,4.5rem)] items-center gap-x-3';
 // Shift view (no register adjustment): one flat grid — Name · In · Out ·
 // Hrs · Tips — sized from the data by fitShift (measured in PayoutList):
 //   In / Out    two equal columns: the widest time (or caption) + padding
 //               (--tmin), growing a little with spare width (0.4fr)
-//   Hrs / Tips  two equal columns: the widest hours / amount (or caption)
-//               + padding (--vmin), growing a bit more (0.5fr) — so In / Out
-//               can sit narrower than Hrs / Tips
+//   Hrs         2.5rem, the same as the List view's Hrs column
+//   Tips        the widest amount (or caption) + padding (--vmin), growing
+//               a bit more (0.5fr)
 //   Name        at least the longest name (--nmin), and the rest (1fr)
 // When the longest name doesn't fit, the number columns give way first —
 // their padding shrinks to nothing, then the gaps (--g) tighten — and only
 // then does the name truncate with "…" (the tile's track widens as the gap
 // tightens, so the name never moves). The times' LINE becomes `contents`
 // so its cells join this grid.
-const PAY_GRID_SHIFT = 'grid grid-cols-[calc(2.75rem-var(--g,0.75rem))_minmax(var(--nmin,0px),1fr)_repeat(2,minmax(var(--tmin,2.5rem),0.4fr))_repeat(2,minmax(var(--vmin,2.75rem),0.5fr))] items-center gap-x-[var(--g,0.75rem)]';
+const PAY_GRID_SHIFT = 'grid grid-cols-[calc(2.75rem-var(--g,0.75rem))_minmax(var(--nmin,0px),1fr)_repeat(2,minmax(var(--tmin,2.5rem),0.4fr))_2.5rem_minmax(var(--vmin,2.75rem),0.5fr)] items-center gap-x-[var(--g,0.75rem)]';
 const PAY_GRID_ADJ = 'grid grid-cols-[2rem_minmax(0,1fr)_3.25rem_3.75rem_2.75rem] items-center gap-x-2.5';
-const gridFor = (adj, view) => (adj ? PAY_GRID_ADJ : view === 'shift' ? PAY_GRID_SHIFT : PAY_GRID_BARE);
+const gridFor = (adj, view) => (adj ? PAY_GRID_ADJ : view === 'shift' ? PAY_GRID_SHIFT : view === 'list' ? PAY_GRID_LIST : PAY_GRID_BARE);
+const hasHrs = view => view === 'shift' || view === 'list';
 // The times' wrapper: its own grid inside the name cell when the register
 // was adjusted (Was · Now · ± take the right), else dissolved into the row.
 const lineCls = adj => (adj ? cx(LINE, 'self-stretch') : 'contents');
@@ -190,11 +194,12 @@ const LINE = 'grid min-w-0 grid-cols-[minmax(0,1fr)_repeat(2,minmax(var(--tmin,2
 const TIME_CELL = 'flex size-full items-center justify-center rounded-lg transition ' + TIME_TEXT;
 // The cell: fills the column and stretches over the row's py-1.5.
 const TimeCol = ({ children }) => html`<span data-tc class="-my-1.5 flex self-stretch">${children}</span>`;
-// Hrs' size and weight (medium), a step lower in contrast (ink-2; support dimmed).
-const TIME_TONE = p => cx('font-medium', isSup(p) ? 'text-ink-3' : 'text-ink-2');
+// Quiet (ink-3; support dimmer) so the times don't compete with the name,
+// hours and tips.
+const TIME_TONE = p => cx('font-medium', isSup(p) ? 'text-ink-3/70' : 'text-ink-3');
 
 // Was · Now · ± cells (register adjusted), or Hrs · Tips.
-function MoneyCells({ adj, before, now, hours, sup, bold, noHrs, hdp = 0 }) {
+function MoneyCells({ adj, before, now, hours, sup, bold, noHrs, hdp = 0, small = false }) {
   if (adj) {
     const d = now - before;
     return html`
@@ -203,12 +208,23 @@ function MoneyCells({ adj, before, now, hours, sup, bold, noHrs, hdp = 0 }) {
       <span class=${cx('t-small text-right font-medium tabular-nums', d < 0 ? 'text-bad' : d > 0 ? 'text-good' : 'text-ink-3')}>${signed(d)}</span>`;
   }
   return html`
-    ${!noHrs && html`<span class=${cx(HRS_CELL, bold ? 'font-semibold' : sup ? 'text-ink-3' : 'text-ink/80')}><span data-cw>${hrsText(hours, hdp)}</span></span>`}
+    ${!noHrs && html`<span class=${cx(small ? 't-small text-center font-medium tabular-nums' : HRS_CELL, bold ? 'font-semibold' : sup ? 'text-ink-3' : small ? 'text-ink-2' : 'text-ink/80')}><span data-cw>${hrsText(hours, hdp)}</span></span>`}
     <span data-pw class="t-body text-right"><${Money} value=${now} class=${cx('t-body font-semibold', sup && SUP_TEXT, !(now > 0) && 'text-ink-3')} /></span>`;
 }
 
+// The times as a subtext line under a name: "5 pm – 2 am" (still the Staff
+// tab's DragTime — tap → quick time sheet, drag → 15-min steps; the tap /
+// drag box pads out past the text). Used by the List view and the Pools
+// table.
+// a / p spelled out with a space: "11 am – 5 pm" (Clock's suffix span + "m").
+const TIME_SUB = 'relative z-[1] -mx-1 -my-1.5 rounded px-1 py-1.5 tabular-nums transition [&>span>span]:ml-[0.25em] [&>span>span]:after:content-[\'m\']';
+const TimesSub = ({ a, b }) => html`<span class="t-small whitespace-nowrap text-ink-3">${a}<span class="mx-0.5">–</span>${b}</span>`;
+const PersonTimes = ({ vm, id }) => html`<${TimesSub}
+  a=${html`<${StaffTime} vm=${vm} id=${id} field="in" cls=${TIME_SUB} tone="text-ink-3" />`}
+  b=${html`<${StaffTime} vm=${vm} id=${id} field="out" cls=${TIME_SUB} tone="text-ink-3" />`} />`;
+
 // What sits under a name, by the view picked above the list:
-//   shift  a thin timeline bar (the times trail the name)
+//   list   the times, "5p – 2a"
 //   bills  the person's envelope as bill tags ($100×1 $20×5 …, bill tints)
 //   math   hours × rate = exact share, then the rounding (↓ down, ↑ up)
 const DEN = [100, 50, 20, 10, 5, 1];
@@ -229,6 +245,7 @@ function MathLine({ p }) {
 function Sub({ vm, p, view }) {
   if (view === 'bills') return html`<${BillTags} bills=${vm.dist && !vm.dist.error ? vm.dist.byPerson[p.id] : null} />`;
   if (view === 'math') return html`<${MathLine} p=${p} />`;
+  if (view === 'list') return html`<${PersonTimes} vm=${vm} id=${p.id} />`;
   return null;
 }
 
@@ -250,7 +267,7 @@ function PayRow({ vm, p, n, tint, before, view, col = {} }) {
         <span class=${cx(NAME_TEXT, 'font-medium')}><span class="truncate">${p.name}</span></span>
         <${Sub} vm=${vm} p=${p} view=${view} />
       </span>`}
-    <${MoneyCells} adj=${adj} before=${before} now=${p.final} hours=${p.shiftHours ?? p.hours} sup=${isSup(p)} noHrs=${view !== 'shift'} hdp=${col.hdp} />
+    <${MoneyCells} adj=${adj} before=${before} now=${p.final} hours=${p.shiftHours ?? p.hours} sup=${isSup(p)} noHrs=${!hasHrs(view)} small=${hasHrs(view)} hdp=${col.hdp} />
   </div>`;
 }
 
@@ -261,15 +278,18 @@ function TotalRow({ vm, hours, paidOut, before, view, col = {} }) {
     <span class=${cx(TILE, 'bg-surface-2 text-ink-2')}><${Icon} name="users" class="size-[1.125rem]" /></span>
     ${view === 'shift' ? html`<span class=${lineCls(adj)}>
         <span class="flex min-w-0"><span data-nw class="t-body min-w-0 truncate font-semibold">Total</span></span>
-        <${TimeCol}><${DefaultTime} vm=${vm} field="in" cls=${TIME_CELL} tone="font-semibold text-ink" mins=${col.inMins} /><//>
-        <${TimeCol}><${DefaultTime} vm=${vm} field="out" cls=${TIME_CELL} tone="font-semibold text-ink" mins=${col.outMins} /><//>
+        <${TimeCol}><${DefaultTime} vm=${vm} field="in" cls=${TIME_CELL} tone="font-semibold text-ink-2" mins=${col.inMins} /><//>
+        <${TimeCol}><${DefaultTime} vm=${vm} field="out" cls=${TIME_CELL} tone="font-semibold text-ink-2" mins=${col.outMins} /><//>
       </span>`
       : html`<span class="flex min-w-0 flex-col">
         <span class=${cx(NAME_TEXT, 'font-semibold')}>Total</span>
         ${view === 'bills' ? html`<${BillTags} bills=${vm.bills} />`
+          : view === 'list' ? html`<${TimesSub}
+            a=${html`<${DefaultTime} vm=${vm} field="in" cls=${TIME_SUB} tone="text-ink-2" />`}
+            b=${html`<${DefaultTime} vm=${vm} field="out" cls=${TIME_SUB} tone="text-ink-2" />`} />`
           : html`<span class="t-small tabular-nums text-ink-3">${fmtMoney(s.totalCash)} ÷ ${fmtHrs(s.totalHours)}h = ${r2(s.rate)}/h${s.leftover > 0 ? ' · chump ' + fmtMoney(s.leftover) : ''}</span>`}
       </span>`}
-    <${MoneyCells} adj=${adj} before=${before} now=${paidOut} hours=${hours} bold noHrs=${view !== 'shift'} hdp=${col.hdp} />
+    <${MoneyCells} adj=${adj} before=${before} now=${paidOut} hours=${hours} bold noHrs=${!hasHrs(view)} small=${hasHrs(view)} hdp=${col.hdp} />
   </div>`;
 }
 
@@ -288,7 +308,7 @@ function fitShift(el, view) {
   // Content widths: times (In / Out), values (Hrs / Tips), the longest name
   // (scrollWidth: a truncated name's full width).
   const T = Math.ceil(Math.max(widest(el, '[data-tc] button > span'), widest(el, '[data-capt]')));
-  const V = Math.ceil(Math.max(widest(el, '[data-cw]'), widest(el, '[data-capv]'), pw));
+  const V = Math.ceil(pw);   // Tips (Hrs is a fixed 2.5rem)
   if (!(T > 0) || !(V > 0)) return;
   const N = Math.max(0, ...[...el.querySelectorAll('[data-nw]')].map(x => x.scrollWidth)) + 1;
   const row = el.querySelector('.li');
@@ -296,11 +316,11 @@ function fitShift(el, view) {
   if (row) {
     const cs = getComputedStyle(row);
     const avail = row.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-    const need = () => 2.75 * rem + N + 2 * T + 2 * V + 4 * pad + 4 * g;   // tile + its gap fixed
+    const need = () => 2.75 * rem + N + 2 * T + 2.5 * rem + V + 3 * pad + 4 * g;   // tile + its gap fixed
     // Too tight for the longest name: drop the columns' padding, then
     // tighten the gaps (to 0.375rem), then let the name truncate.
     let over = need() - avail;
-    if (over > 0) { pad = Math.max(0, pad - over / 4); over = need() - avail; }
+    if (over > 0) { pad = Math.max(0, pad - over / 3); over = need() - avail; }
     if (over > 0) { g = Math.max(0.375 * rem, g - over / 4); over = need() - avail; }
     if (over > 0) nmin = Math.max(0, N - over);
   }
@@ -342,10 +362,23 @@ function PayoutList({ vm, name, view }) {
   };
   const box = useRef(null);
   useLayoutEffect(() => fitShift(box.current, view));
+  // Re-fit whenever the measurements can change without a re-render: the
+  // list's size changes (rotation, resize, Tailwind compiling the grid
+  // classes on first load, the tab becoming visible), the webfont arriving,
+  // and the page being revealed (html.ready) — on a fresh load the first
+  // render measures before any of those, which left the defaults in place.
   useEffect(() => {
-    const on = () => fitShift(box.current, view);
+    const el = box.current;
+    let raf = 0;
+    const on = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => fitShift(box.current, view)); };
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(on) : null;
+    if (ro && el) ro.observe(el);
+    const mo = new MutationObserver(on);
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-size'] });
+    document.fonts?.ready?.then(on);
     window.addEventListener('resize', on);
-    return () => window.removeEventListener('resize', on);
+    on();
+    return () => { cancelAnimationFrame(raf); ro?.disconnect(); mo.disconnect(); window.removeEventListener('resize', on); };
   }, [view]);
   return html`<section ref=${box} class="flex flex-col gap-2">
     <div class=${cx(gridFor(adj, view), 'min-h-5 items-end px-4')}>
@@ -355,7 +388,7 @@ function PayoutList({ vm, name, view }) {
         : html`<span class=${cx(cap, 'truncate')}>${name || 'Payouts'}</span>`}
       ${adj
         ? html`<span class=${cx(cap, 'text-right')}>Was</span><span class=${cx(cap, 'text-right')}>Now</span><span class=${cx(cap, 'text-right')}>±</span>`
-        : html`${view === 'shift' && html`<span class=${cx(cap, 'text-center')}><span data-capv>Hrs</span></span>`}<span class=${cx(cap, 'text-right')}><span data-pwcap>Tips</span></span>`}
+        : html`${hasHrs(view) && html`<span class=${cx(cap, 'text-center')}><span data-capv>Hrs</span></span>`}<span class=${cx(cap, 'text-right')}><span data-pwcap>Tips</span></span>`}
     </div>
     <${List}>
       ${ordered.map((p, i) => html`<${PayRow} key=${p.id} vm=${vm} p=${p} n=${i + 1} tint=${tint} before=${was(p.id)} view=${view} col=${col} />`)}
@@ -366,73 +399,75 @@ function PayoutList({ vm, name, view }) {
 }
 
 // ── Pools table (several pools — Summary's default then) ────────────────────
-// One row per person, and for every pool its Hrs · Tips, then their Total
-// hours and take-home; a Total row with each pool's hours and cash. Scrolls
-// sideways with the name column pinned. A blank cell = their role doesn't
-// share that pool; "—" = it does, but they didn't work its window. Support:
-// hours dimmed (a tip-out, not in the hours totals), pay in the support tint.
-// Tips per pool are exact shares; Take-home is after rounding + closer bonus.
+// One row per person: the name with their times under it ("5p – 2a", tap /
+// drag to edit), then one column per pool — what that pool paid them, with
+// their hours in it as small subtext under — then Total: take-home over
+// their hours. A Total row with each pool's cash over its tipped hours.
+// Scrolls sideways with the name column pinned. A blank cell = their role
+// doesn't share that pool; "—" = it does, but they didn't work its window.
+// Support: hours dimmed (a tip-out, not in the hours totals), pay in the
+// support tint. Pool tips are exact shares; take-home is after rounding +
+// closer bonus.
 function PoolGrid({ vm }) {
   const s = vm.shares;
   const pools = s.perPool;
   const people = staffOrder(vm, s.perPerson.filter(p => p.final > 0 || Object.values(p.perPool || {}).some(x => x.hours > 0)));
   const { roles, tint } = rolesOf(vm, people);
   const shares = (pl, p) => { const r = poolRoles(vm, pl.id); return isSup(p) ? r.support : r[p.role]; };
-  const TH = 't-cap whitespace-nowrap px-2 pb-1.5 pt-1 text-ink-3';
-  const TD = 'whitespace-nowrap px-2 py-2 tabular-nums';
+  const TH = 'px-3 pb-2 pt-2.5 font-normal';
+  const TD = 'whitespace-nowrap px-3 py-2 text-right align-top tabular-nums';
   const SEP = 'border-l border-line';
   const NAME = 'sticky left-0 z-[1] bg-inherit pl-4 pr-2 text-left';
+  // A value over its hours, both right-aligned.
+  const Two = ({ top, sub, subCls = 'text-ink-3' }) => html`<span class="block leading-tight">${top}</span><span class=${cx('t-small block', subCls)}>${sub}</span>`;
   const tippedHours = pools.reduce((t, pl) => t + pl.tippedHours, 0);
   const paid = people.reduce((t, p) => t + p.final, 0);
   return html`<${Card} flush>
     <div class="overflow-x-auto [scrollbar-width:thin]">
       <table class="min-w-full border-separate border-spacing-0 text-[0.9375rem]">
         <thead class="bg-surface">
-          <tr class="bg-surface">
-            <th rowspan="2" class=${cx(NAME, TH, 'z-[2] align-bottom')}>Name</th>
-            ${pools.map((pl, i) => html`<th key=${pl.id} colspan="2" class=${cx('px-2 pt-2.5 text-center font-normal', SEP)}>
-              <button class="inline-flex flex-col items-center active:opacity-60" onClick=${() => App.openPoolSummary(pl.id)}>
+          <tr class="bg-surface shadow-[0_1px_0_var(--line)]">
+            <th class=${cx(NAME, TH, 't-cap z-[2] align-bottom text-ink-3')}>Name</th>
+            ${pools.map((pl, i) => html`<th key=${pl.id} class=${cx(TH, SEP, 'text-right')}>
+              <button class="inline-flex flex-col items-end active:opacity-60" onClick=${() => App.openPoolSummary(pl.id)}>
                 <span class="t-small inline-flex items-center gap-1.5 font-semibold text-ink"><${PoolDot} i=${i} />${pl.label}</span>
                 <span class="whitespace-nowrap text-[0.75rem] tabular-nums text-ink-3"><${Clock} abs=${pl.startAbs} />–<${Clock} abs=${pl.endAbs} /> · ${rate2(pl.rate)}/h</span>
               </button></th>`)}
-            <th colspan="2" class=${cx('t-small px-2 pt-2.5 text-center align-top font-semibold', SEP)}>Total</th>
-          </tr>
-          <tr class="bg-surface shadow-[0_1px_0_var(--line)]">
-            ${pools.map(pl => html`<th key=${pl.id + 'h'} class=${cx(TH, SEP, 'text-center')}>Hrs</th><th key=${pl.id + 't'} class=${cx(TH, 'text-right')}>Tips</th>`)}
-            <th class=${cx(TH, SEP, 'text-center')}>Hrs</th><th class=${cx(TH, 'pr-4 text-right')}>Take-home</th>
+            <th class=${cx(TH, SEP, 'pr-4 text-right align-bottom')}><span class="t-small font-semibold text-ink">Total</span></th>
           </tr>
         </thead>
         <tbody>
           ${people.map((p, i) => {
             const hrs = Object.values(p.perPool || {}).reduce((t, x) => t + x.hours, 0);
+            const subCls = isSup(p) ? 'text-ink-3/70' : 'text-ink-3';
             return html`<tr key=${p.id} class=${cx(zebra(i), 'cursor-pointer active:brightness-95')} onClick=${() => App.personModal(p.id)}>
-              <td class=${cx(NAME, 'py-2')}><span class="flex max-w-[8.5rem] items-center gap-1.5">
-                ${tint && html`<${RoleDot} role=${p.role} />`}
-                <span class=${cx('truncate font-medium', p.closer && 'underline decoration-bad/50 decoration-2 underline-offset-4')}>${p.name}</span></span></td>
+              <td class=${cx(NAME, 'py-2 align-top')}><span class="flex max-w-[9rem] flex-col">
+                <span class="flex min-w-0 items-center gap-1.5">
+                  ${tint && html`<${RoleDot} role=${p.role} />`}
+                  <span class=${cx('truncate font-medium leading-tight', p.closer && 'underline decoration-bad/50 decoration-2 underline-offset-4')}>${p.name}</span></span>
+                <${PersonTimes} vm=${vm} id=${p.id} /></span></td>
               ${pools.map(pl => {
                 const x = p.perPool?.[pl.id];
                 const on = shares(pl, p);
-                return html`<td key=${pl.id + 'h'} class=${cx(TD, SEP, 'text-center', isSup(p) ? 'text-ink-3' : 'text-ink-2')}>${!on ? '' : x ? fmtHrs(x.hours) : '—'}</td>
-                  <td key=${pl.id + 't'} class=${cx(TD, 'text-right', isSup(p) && SUP_TEXT)}>${x ? r2(x.raw) : on ? html`<span class="text-ink-3">—</span>` : ''}</td>`;
+                return html`<td key=${pl.id} class=${cx(TD, SEP, isSup(p) && SUP_TEXT)}>${
+                  x ? html`<${Two} top=${r2(x.raw)} sub=${fmtHrs(x.hours) + 'h'} subCls=${subCls} />`
+                    : on ? html`<span class="block leading-tight text-ink-3">—</span>` : ''}</td>`;
               })}
-              <td class=${cx(TD, SEP, 'text-center font-medium', isSup(p) ? 'text-ink-3' : 'text-ink/85')}>${fmtHrs(hrs)}</td>
-              <td class=${cx(TD, 'pr-4 text-right')}><${Money} value=${p.final} class=${cx('font-semibold', isSup(p) && SUP_TEXT)} /></td>
+              <td class=${cx(TD, SEP, 'pr-4')}><${Two} top=${html`<${Money} value=${p.final} class=${cx('font-semibold', isSup(p) && SUP_TEXT)} />`} sub=${fmtHrs(hrs) + 'h'} subCls=${subCls} /></td>
             </tr>`;
           })}
         </tbody>
         <tfoot>
           <tr class=${TOTAL_FILL}>
-            <td class=${cx(NAME, 'py-2.5 font-semibold')}>Total</td>
-            ${pools.map(pl => html`<td key=${pl.id + 'h'} class=${cx(TD, SEP, 'text-center font-semibold')}>${fmtHrs(pl.tippedHours)}</td>
-              <td key=${pl.id + 't'} class=${cx(TD, 'text-right')}><${Money} value=${pl.total} class="font-semibold" /></td>`)}
-            <td class=${cx(TD, SEP, 'text-center font-semibold')}>${fmtHrs(tippedHours)}</td>
-            <td class=${cx(TD, 'pr-4 text-right')}><${Money} value=${paid} class="font-semibold" /></td>
+            <td class=${cx(NAME, 'py-2.5 align-top font-semibold')}>Total</td>
+            ${pools.map(pl => html`<td key=${pl.id} class=${cx(TD, SEP, 'py-2.5')}><${Two} top=${html`<${Money} value=${pl.total} class="font-semibold" />`} sub=${fmtHrs(pl.tippedHours) + 'h'} subCls="font-medium text-ink-2" /></td>`)}
+            <td class=${cx(TD, SEP, 'py-2.5 pr-4')}><${Two} top=${html`<${Money} value=${paid} class="font-semibold" />`} sub=${fmtHrs(tippedHours) + 'h'} subCls="font-medium text-ink-2" /></td>
           </tr>
         </tfoot>
       </table>
     </div>
     <div class="t-small flex flex-wrap gap-x-3 gap-y-1 border-t border-line px-4 py-2 text-ink-3">
-      <span>Tips = each pool’s exact share; take-home is rounded${s.leftover > 0 ? ' · chump ' + fmtMoney(s.leftover) : ''}.</span>
+      <span>Each pool: what it paid · their hours in it. Pool shares are exact; take-home is rounded${s.leftover > 0 ? ' · chump ' + fmtMoney(s.leftover) : ''}.</span>
       <span>Blank = their role isn’t in that pool · — = didn’t work its window.</span>
       ${tint && roles.map(r => html`<span key=${r} class="inline-flex items-center gap-1.5"><span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_PLURAL[r]}</span>`)}
       <span class="inline-flex items-center gap-1.5"><span class="underline decoration-bad/50 decoration-2 underline-offset-4">Name</span> closer</span>
@@ -533,7 +568,7 @@ function Tools() {
 }
 
 function Summary({ vm, name }) {
-  const [pick, setView] = useState(null);             // shift · pools · bills · math (null = default)
+  const [pick, setView] = useState(null);             // list · shift · pools · bills · math (null = default)
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   const several = vm.shares.perPool.length > 1;
   // Several pools open on the Pools table — hours and tips per pool per person.
@@ -544,7 +579,7 @@ function Summary({ vm, name }) {
     <${AdjustBanner} vm=${vm} />
     <div class="flex flex-col gap-3">
       <${Seg} value=${view} onChange=${setView}
-        items=${[{ value: 'shift', label: 'Shift' }, several && { value: 'pools', label: 'Pools' }, { value: 'bills', label: 'Bills' }, { value: 'math', label: 'Math' }].filter(Boolean)} />
+        items=${[{ value: 'list', label: 'List' }, { value: 'shift', label: 'Shift' }, several && { value: 'pools', label: 'Pools' }, { value: 'bills', label: 'Bills' }, { value: 'math', label: 'Math' }].filter(Boolean)} />
       ${billsOff && html`<${Alert} tone="warn" action=${{ label: 'Payout', onClick: () => App.tab('payout') }}>The bills don’t work out yet — Payout has the swap.<//>`}
       ${view === 'pools' ? html`<${PoolGrid} vm=${vm} />` : html`<${PayoutList} vm=${vm} name=${name} view=${view} />`}
     </div>
