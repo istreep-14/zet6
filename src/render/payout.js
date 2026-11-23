@@ -12,7 +12,6 @@ import { planMakeChange, computeTradeUp, distribute } from '../engine.js';
 import { updatePool } from '../store.js';
 import { html, render } from '../ui/preact.js';
 import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra } from '../ui/pkit.js';
-import { invalidateTips } from './tips.js';
 
 const $ = id => document.getElementById(id);
 
@@ -71,7 +70,6 @@ function applyBillCountsToPool(vm, newPool) {
     pool.cash.adjust = '';
     DENOMS.forEach(d => { pool.cash.billCounts[d] = (newPool[d] || 0) > 0 ? String(newPool[d]) : ''; });
   });
-  invalidateTips();   // the Tips inputs must show the new counts
 }
 
 export function applyPendingTradeUp() {

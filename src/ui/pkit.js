@@ -60,12 +60,14 @@ export function Button({ variant = 'plain', size = 'md', block = false, icon, cl
 
 // A clock time: "5:45p" — a slightly smaller lowercase a / p, same weight
 // (24-hour: "17:45"). `full`: "5:00 pm" (minutes always, a smaller lowercase am / pm).
-export function Clock({ abs, full = false }) {
+// `mins`: always show the minutes ("5:00p") — a column where some time
+// has minutes shows them on every row.
+export function Clock({ abs, full = false, mins = false }) {
   const t = timeParts(abs);
   if (full) {
     return html`<span class="whitespace-nowrap">${t.h}:${t.m || '00'}${t.ap && html`<span class="ml-[0.2em] text-[0.85em]">${t.ap === 'a' ? 'am' : 'pm'}</span>`}</span>`;
   }
-  return html`<span class="whitespace-nowrap">${t.h}${t.m ? ':' + t.m : ''}${t.ap && html`<span class="ml-[0.06em] text-[0.8em]">${t.ap}</span>`}</span>`;
+  return html`<span class="whitespace-nowrap">${t.h}${t.m ? ':' + t.m : mins ? ':00' : ''}${t.ap && html`<span class="ml-[0.06em] text-[0.8em]">${t.ap}</span>`}</span>`;
 }
 
 export function Money({ value, class: cls = '' }) {
@@ -97,17 +99,43 @@ export function Empty({ icon = 'dollar', logo = false, title, body, action }) {
   </div>`;
 }
 
-// Blocked / pristine state shared by the result tabs (Summary, Payout).
+// Blocked / pristine state shared by the result tabs (Summary, Payout): the
+// close-out steps as a checklist — Staff → Tips → the payout — each tappable,
+// with what's missing (or the error to fix) under it.
 export function Blocked({ vm }) {
   const pristine = !vm.hasNamedStaff && vm.totalCash === 0;
-  if (pristine) {
-    return html`<${Empty} logo title="No shift yet" body="Add who worked, then enter the tips."
-      action=${{ label: 'Add staff', onClick: () => App.tab('staff') }} />`;
-  }
-  const goTips = /cash|total|count|window|short|holds|support (%|\$|hours)/i.test(vm.blocked);
-  return html`<div class="flex flex-col gap-3">
-    <${Alert} action=${{ label: 'Fix', onClick: () => App.tab(goTips ? 'tips' : 'staff') }}>${vm.blocked}<//>
+  const named = vm.state.staff.filter(p => p.name.trim()).length;
+  const staffOk = vm.hasNamedStaff && vm.blockedTab !== 'staff';
+  const tipsOk = vm.totalCash > 0 && vm.blockedTab !== 'tips';
+  const err = tab => vm.inputError && vm.blockedTab === tab ? vm.blocked : '';
+  const steps = [
+    { tab: 'staff', ok: staffOk, title: 'Who worked', sub: err('staff') || (named ? named + ' on shift' : 'Add names and times') },
+    { tab: 'tips', ok: tipsOk, title: 'The tips', sub: err('tips') || (vm.totalCash > 0 ? '$' + vm.totalCash.toLocaleString('en-US') + ' in' : 'Enter the cash') },
+    { tab: 'payout', ok: false, title: 'Who gets what', sub: 'Payouts and the bills for each envelope' },
+  ];
+  const next = steps.find(x => !x.ok);
+  return html`<div class="flex flex-col gap-4">
+    ${pristine && html`<${Empty} logo title="No shift yet" body="Three steps to close out — start with who worked." />`}
+    <${List}>${steps.map((x, i) => html`<${Item} key=${x.tab} onClick=${() => App.tab(x.tab === 'payout' ? (next?.tab || 'payout') : x.tab)}
+      tone=${x === next ? 'active' : ''}
+      lead=${html`<span class=${cx('grid size-8 shrink-0 place-items-center rounded-full text-[0.875rem] font-semibold',
+        x.ok ? 'bg-good/15 text-good' : err(x.tab) ? 'bg-bad/12 text-bad' : x === next ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-3')}>
+        ${x.ok ? html`<${Icon} name="check" class="size-4" />` : err(x.tab) ? '!' : i + 1}</span>`}
+      title=${x.title} sub=${html`<span class=${err(x.tab) ? 'text-bad' : ''}>${x.sub}</span>`} />`)}<//>
   </div>`;
+}
+
+// The input tabs end with the next step in the close-out order
+// (Staff → Tips → Summary). Shown only once this step is done.
+export function NextStep({ label, sub, tab }) {
+  return html`<button class="flex w-full items-center gap-3 rounded-card bg-accent px-4 py-3 text-left text-on-accent transition active:scale-[0.98]"
+    onClick=${() => App.tab(tab)}>
+    <span class="flex min-w-0 flex-1 flex-col">
+      <span class="t-body font-semibold">${label}</span>
+      ${sub && html`<span class="t-small truncate opacity-80">${sub}</span>`}
+    </span>
+    <${Icon} name="chevR" class="size-5 shrink-0" />
+  </button>`;
 }
 
 // Boxed input. INPUT sits inside a card (surface-2 fill); INPUT_PAGE stands

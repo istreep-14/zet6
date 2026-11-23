@@ -70,16 +70,17 @@
 </header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
-<!-- Each tab's content is rendered by its module in src/render/. -->
+<!-- Each tab's content is rendered by its module in src/render/.
+     Summary is home; the inputs follow in close-out order: Staff → Tips → (Summary) → Payout. -->
 <main class="content" id="mainContent">
-  <section class="panel" id="tab-summary"><h1 class="page-title t-title">Summary</h1><div class="subtabs" id="subtabs-summary"></div><div class="sub-root" id="summary-root"></div></section>
-  <section class="panel" id="tab-staff"><h1 class="page-title t-title">Staff</h1><div class="subtabs" id="subtabs-staff"></div><div class="sub-root" id="staff-root"></div></section>
-  <section class="panel" id="tab-tips"><h1 class="page-title t-title">Tips</h1><div class="subtabs" id="subtabs-tips"></div><div class="sub-root" id="tips-root"></div></section>
-  <section class="panel" id="tab-payout"><h1 class="page-title t-title">Payout</h1><div class="subtabs" id="subtabs-payout"></div><div class="sub-root" id="payout-root"></div></section>
+  <section class="panel" id="tab-summary"><h1 class="page-title t-title">Summary</h1><div id="summary-root"></div></section>
+  <section class="panel" id="tab-staff"><h1 class="page-title t-title">Staff</h1><div id="staff-root"></div></section>
+  <section class="panel" id="tab-tips"><h1 class="page-title t-title">Tips</h1><div id="tips-root"></div></section>
+  <section class="panel" id="tab-payout"><h1 class="page-title t-title">Payout</h1><div id="payout-root"></div></section>
 </main>
 
 <!-- Live HUD — rate / pool / chump while editing Staff & Tips -->
-<button class="hud is-empty" id="pipHud" onclick="App.hudTap()" aria-label="Open summary"></button>
+<button class="hud is-empty" id="pipHud" onclick="App.hudTap()" aria-label="Next: summary or payout"></button>
 
 <nav class="tabbar">
   <button class="tab" id="tb-summary" onclick="App.tab('summary')">
@@ -128,6 +129,9 @@
   </div>
   <div class="side-body" id="shift-body"></div>
 </aside>
+
+<!-- Time keypad (src/ui/keypad.js): docks over the tab bar while a time cell is active -->
+<div class="keypad" id="keypad" aria-label="Time keypad"></div>
 
 <!-- Bottom sheets are mounted here from src/ui/sheet.js -->
 <div id="sheets"></div>

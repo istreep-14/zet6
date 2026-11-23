@@ -35,6 +35,12 @@ export function poolValue(pool) {
   return DENOMS.reduce((s, d) => s + (pool?.[d] || 0) * d, 0);
 }
 
+// Dollar value of a pool's raw bill-count strings ({ 100: '2', 20: '' … });
+// unparseable counts count as 0 (resolve.js reports them).
+export function countedValue(billCounts) {
+  return DENOMS.reduce((s, d) => s + d * (parseInt(billCounts?.[d], 10) || 0), 0);
+}
+
 export function escapeHTML(v) {
   return String(v).replace(/[&<>"']/g, c => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
@@ -44,6 +50,14 @@ export function escapeHTML(v) {
 export function fmtHrs(h) {
   return parseFloat(h.toFixed(2)).toString();
 }
+
+// One look per table column (Summary payouts, Staff tables): a time column
+// shows minutes on every row if any of its times has them ("2:00" over
+// "11:30"), and an hours column pads every row to the most decimals any
+// row needs ("9.0" over "6.5").
+export const hasMinutes = xs => xs.some(x => Number.isFinite(x) && Math.abs(x - Math.round(x)) > 1e-6);
+export const hrsDecimals = h => (fmtHrs(h).split('.')[1] || '').length;
+export const hrsText = (h, dp) => (dp > 0 ? (Number(h) || 0).toFixed(dp) : fmtHrs(h));
 
 // Whole dollars with thousands separators: 1037 → "$1,037".
 export function fmtMoney(n) {

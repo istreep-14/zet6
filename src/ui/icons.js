@@ -13,6 +13,8 @@ export const PATHS = {
   chevR: '<path d="M9 6l6 6-6 6"/>',
   chevD: '<path d="M6 9l6 6 6-6"/>',
   chevU: '<path d="M6 15l6-6 6 6"/>',
+  back: '<path d="M21 5H9l-7 7 7 7h12a1 1 0 001-1V6a1 1 0 00-1-1z"/><path d="M17 9l-6 6M11 9l6 6"/>',
+  more: '<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>',
   x: '<path d="M18 6L6 18M6 6l12 12"/>',
   alert: '<path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
   check: '<path d="M20 6L9 17l-5-5"/>',

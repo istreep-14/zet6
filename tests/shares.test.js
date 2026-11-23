@@ -116,7 +116,7 @@ function run(state) {
   assert.strictEqual(srv.closer, false);
 }
 
-// ── Support inclusion: ordinary participant by overlap hours ──
+// ── Support: a tip-out off the top, then bar/server share the rest ──
 {
   const state = mkState({
     staff: [
@@ -126,10 +126,21 @@ function run(state) {
     pools: [mkPool({ includeSupport: true, cash: { entryMode: 'nettotal', billCounts: {}, netTotal: '180' } })],
   });
   const shares = run(state);
-  // both 9h → $90 each; support earns a full proportional share
+  // default 10% over the 9h window → $2/h × 9h = $18 to support; A gets the other $162
   const sup = shares.perPerson.find(p => p.id === 's2');
-  assert.strictEqual(sup.exact, 90);
+  const bar = shares.perPerson.find(p => p.id === 's1');
+  assert.strictEqual(sup.exact, 18);
+  assert.strictEqual(bar.exact, 162);
   assert.strictEqual(sup.closer, false);
+  assert.strictEqual(shares.perPool[0].support.cut, 18);
+  assert.strictEqual(shares.perPool[0].tippedHours, 9); // support hours don't count
+
+  // a typed $/hr replaces the % — $5/h × 9h = $45
+  const stateRate = mkState({
+    staff: state.staff,
+    pools: [mkPool({ includeSupport: true, support: { pct: '', rate: '5', hours: {} }, cash: { entryMode: 'nettotal', billCounts: {}, netTotal: '180' } })],
+  });
+  assert.strictEqual(run(stateRate).perPerson.find(p => p.id === 's2').exact, 45);
 
   // excluded when includeSupport off
   const state2 = mkState({

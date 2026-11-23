@@ -29,16 +29,21 @@ export function buildViewModel(state, opts = {}) {
     people: [],
     req: null,
     blocked: '',
+    blockedTab: '',             // where the blocker is fixed: 'staff' | 'tips'
     inputError: false,
   };
 
+  // Staff / shift-time errors are fixed on Staff; cash, pool window and
+  // support errors on Tips. Staff errors come first: they're the first step.
   if (errors.length) {
     vm.blocked = errors[0];
+    vm.blockedTab = resolved.errors.length ? 'staff' : 'tips';
     vm.inputError = true;
     return vm;
   }
   if (!vm.hasNamedStaff) {
     vm.blocked = 'Add staff with names.';
+    vm.blockedTab = 'staff';
     return vm;
   }
 
@@ -49,6 +54,7 @@ export function buildViewModel(state, opts = {}) {
 
   if (vm.totalCash === 0) {
     vm.blocked = 'Enter cash for at least one pool.';
+    vm.blockedTab = 'tips';
     return vm;
   }
 
