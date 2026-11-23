@@ -153,15 +153,19 @@ const dec2 = v => (Number(v) || 0).toLocaleString('en-US', { minimumFractionDigi
 // Tips' width (--pw) = the widest amount in the list (PayoutList).
 const PAY_GRID_BARE = 'grid grid-cols-[2rem_minmax(0,1fr)_var(--pw,4.5rem)] items-center gap-x-3';   // Bills / Math: no Hrs column
 // Shift view (no register adjustment): one flat grid — Name · In · Out ·
-// Hrs · Tips — sized from the data (fitShift, measured in PayoutList):
-//   In / Out / Hrs / Tips  four equal columns, equal gaps (gap-x-3): at
-//                   least the widest number in any of them + room (--cw),
-//                   growing with spare width (0.5fr)
-//   Name            at least the longest name on the list (--nmin) — as far
-//                   as the row allows; only then does a name truncate — and
-//                   everything left over (1fr)
-// The times' LINE becomes `contents` so its cells join this grid.
-const PAY_GRID_SHIFT = 'grid grid-cols-[2rem_minmax(var(--nmin,0px),1fr)_repeat(4,minmax(var(--cw,2.75rem),0.5fr))] items-center gap-x-3';
+// Hrs · Tips — sized from the data by fitShift (measured in PayoutList):
+//   In / Out    two equal columns: the widest time (or caption) + padding
+//               (--tmin), growing a little with spare width (0.4fr)
+//   Hrs / Tips  two equal columns: the widest hours / amount (or caption)
+//               + padding (--vmin), growing a bit more (0.5fr) — so In / Out
+//               can sit narrower than Hrs / Tips
+//   Name        at least the longest name (--nmin), and the rest (1fr)
+// When the longest name doesn't fit, the number columns give way first —
+// their padding shrinks to nothing, then the gaps (--g) tighten — and only
+// then does the name truncate with "…" (the tile's track widens as the gap
+// tightens, so the name never moves). The times' LINE becomes `contents`
+// so its cells join this grid.
+const PAY_GRID_SHIFT = 'grid grid-cols-[calc(2.75rem-var(--g,0.75rem))_minmax(var(--nmin,0px),1fr)_repeat(2,minmax(var(--tmin,2.5rem),0.4fr))_repeat(2,minmax(var(--vmin,2.75rem),0.5fr))] items-center gap-x-[var(--g,0.75rem)]';
 const PAY_GRID_ADJ = 'grid grid-cols-[2rem_minmax(0,1fr)_3.25rem_3.75rem_2.75rem] items-center gap-x-2.5';
 const gridFor = (adj, view) => (adj ? PAY_GRID_ADJ : view === 'shift' ? PAY_GRID_SHIFT : PAY_GRID_BARE);
 // The times' wrapper: its own grid inside the name cell when the register
@@ -180,7 +184,7 @@ const signed = v => (v > 0 ? '+' : v < 0 ? '−' : '') + (v ? Math.abs(v).toLoca
 // box fills accent while dragged, like the Staff table). With a register
 // adjustment the times sit in `LINE`, a grid inside the name cell, same
 // column sizing.
-const LINE = 'grid min-w-0 grid-cols-[minmax(0,1fr)_repeat(2,minmax(var(--cw,2.75rem),0.5fr))] items-center gap-x-3';
+const LINE = 'grid min-w-0 grid-cols-[minmax(0,1fr)_repeat(2,minmax(var(--tmin,2.5rem),0.4fr))] items-center gap-x-3';
 // Inside the box: the number with "am" / "pm" hanging under it (TIME_TEXT,
 // shared with the Staff table — see dragtime.js).
 const TIME_CELL = 'flex size-full items-center justify-center rounded-lg transition ' + TIME_TEXT;
@@ -271,11 +275,9 @@ function TotalRow({ vm, hours, paidOut, before, view, col = {} }) {
 
 // Size the payouts grid from what's in it (see PAY_GRID_SHIFT): --pw = the
 // widest amount (or the TIPS caption; Bills / Math's Tips width); in the
-// Shift view --cw = the widest number in In / Out / Hrs / Tips + room (the
-// time boxes still fill the column),
-// and --nmin = the longest name, but no more than the row can give after
-// the other columns' minimums — so a short list of short names leaves the
-// numbers more room, and a long name gets what it needs when it can.
+// Shift view --tmin / --vmin / --g / --nmin as described there (the time
+// boxes still fill their column) — so short names leave the numbers more
+// room, and a long name squeezes the numbers before it truncates.
 const widest = (el, sel) => Math.max(0, ...[...el.querySelectorAll(sel)].map(x => x.getBoundingClientRect().width));
 function fitShift(el, view) {
   if (!el) return;
@@ -283,19 +285,29 @@ function fitShift(el, view) {
   if (pw > 0) el.style.setProperty('--pw', pw + 1 + 'px');
   if (view !== 'shift') return;
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-  const num = Math.max(widest(el, '[data-tc] button > span'), widest(el, '[data-cw]'), pw);
-  if (!(num > 0)) return;
-  const cw = Math.max(2 * rem, Math.ceil(num + 0.75 * rem));
-  el.style.setProperty('--cw', cw + 'px');
+  // Content widths: times (In / Out), values (Hrs / Tips), the longest name
+  // (scrollWidth: a truncated name's full width).
+  const T = Math.ceil(Math.max(widest(el, '[data-tc] button > span'), widest(el, '[data-capt]')));
+  const V = Math.ceil(Math.max(widest(el, '[data-cw]'), widest(el, '[data-capv]'), pw));
+  if (!(T > 0) || !(V > 0)) return;
+  const N = Math.max(0, ...[...el.querySelectorAll('[data-nw]')].map(x => x.scrollWidth)) + 1;
   const row = el.querySelector('.li');
-  if (!row) return;
-  const cs = getComputedStyle(row);
-  const avail = row.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-  const gap = parseFloat(cs.columnGap) || 0;
-  const room = avail - 2 * rem - 5 * gap - 4 * cw;
-  // scrollWidth: a truncated name's full width.
-  const nw = Math.max(0, ...[...el.querySelectorAll('[data-nw]')].map(x => x.scrollWidth)) + 1;
-  el.style.setProperty('--nmin', Math.max(0, Math.min(nw, room)) + 'px');
+  let pad = 0.75 * rem, g = 0.75 * rem, nmin = N;
+  if (row) {
+    const cs = getComputedStyle(row);
+    const avail = row.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const need = () => 2.75 * rem + N + 2 * T + 2 * V + 4 * pad + 4 * g;   // tile + its gap fixed
+    // Too tight for the longest name: drop the columns' padding, then
+    // tighten the gaps (to 0.375rem), then let the name truncate.
+    let over = need() - avail;
+    if (over > 0) { pad = Math.max(0, pad - over / 4); over = need() - avail; }
+    if (over > 0) { g = Math.max(0.375 * rem, g - over / 4); over = need() - avail; }
+    if (over > 0) nmin = Math.max(0, N - over);
+  }
+  el.style.setProperty('--tmin', T + pad + 'px');
+  el.style.setProperty('--vmin', V + pad + 'px');
+  el.style.setProperty('--g', g + 'px');
+  el.style.setProperty('--nmin', nmin + 'px');
 }
 
 // Staff-tab order: state order, grouped by role when roles are on.
@@ -339,11 +351,11 @@ function PayoutList({ vm, name, view }) {
     <div class=${cx(gridFor(adj, view), 'min-h-5 items-end px-4')}>
       <span class=${cx(cap, 'text-center')}>#</span>
       ${view === 'shift'
-        ? html`<span class=${adj ? LINE : 'contents'}><span class=${cx(cap, 'truncate')}>${name || 'Payouts'}</span><span class=${cx(cap, 'text-center')}>In</span><span class=${cx(cap, 'text-center')}>Out</span></span>`
+        ? html`<span class=${adj ? LINE : 'contents'}><span class=${cx(cap, 'truncate')}>${name || 'Payouts'}</span><span class=${cx(cap, 'text-center')}><span data-capt>In</span></span><span class=${cx(cap, 'text-center')}><span data-capt>Out</span></span></span>`
         : html`<span class=${cx(cap, 'truncate')}>${name || 'Payouts'}</span>`}
       ${adj
         ? html`<span class=${cx(cap, 'text-right')}>Was</span><span class=${cx(cap, 'text-right')}>Now</span><span class=${cx(cap, 'text-right')}>±</span>`
-        : html`${view === 'shift' && html`<span class=${cx(cap, 'text-center')}>Hrs</span>`}<span class=${cx(cap, 'text-right')}><span data-pwcap>Tips</span></span>`}
+        : html`${view === 'shift' && html`<span class=${cx(cap, 'text-center')}><span data-capv>Hrs</span></span>`}<span class=${cx(cap, 'text-right')}><span data-pwcap>Tips</span></span>`}
     </div>
     <${List}>
       ${ordered.map((p, i) => html`<${PayRow} key=${p.id} vm=${vm} p=${p} n=${i + 1} tint=${tint} before=${was(p.id)} view=${view} col=${col} />`)}
