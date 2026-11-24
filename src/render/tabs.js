@@ -143,7 +143,7 @@ function Pills({ vm }) {
     ] : [];
   const pill = 't-small inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-surface-2 px-3 font-semibold text-ink transition active:scale-95';
   return html`<div class="flex min-w-0 items-center gap-1.5">
-    <div class="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <div class="flex min-w-0 flex-1 flex-wrap gap-1.5">
       ${items.map((it, i) => it.close
         ? html`<span key="close" class=${cx(pill, 'pr-0.5')}><span class="size-1.5 rounded-full bg-bad/70"></span>Close
             <${CloseTime} vm=${vm} cls="h-7 min-w-[2.75rem] rounded-full px-1.5 tabular-nums transition" tone="font-semibold text-ink" /></span>`

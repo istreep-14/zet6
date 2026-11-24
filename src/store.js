@@ -271,8 +271,8 @@ function rememberTimes(s) {
   s.settings.shiftTimes = { ...(s.settings.shiftTimes || {}), [t]: JSON.parse(JSON.stringify({ global: s.defaults.global, byRole: s.defaults.byRole })) };
 }
 
-// Display size: s / m / l → root font size 12 / 13.5 / 16px (css/app.css).
-export const SIZES = ['s', 'm', 'l'];
+// Display size: s / m / l / xl → root font size 13.5 / 15 / 17 / 18.5px (css/app.css).
+export const SIZES = ['s', 'm', 'l', 'xl'];
 export function setSize(size) {
   if (!SIZES.includes(size)) return;
   mutate(s => { s.settings.size = size; }, { immediate: true });
