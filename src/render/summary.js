@@ -186,7 +186,7 @@ const signed = v => (v > 0 ? '+' : v < 0 ? '−' : '') + (v ? Math.abs(v).toLoca
 // One line per person: Name · In · Out · Hrs · Tips (see PAY_GRID_SHIFT).
 // Each time is the Staff tab's DragTime as a box filling its cell — the
 // column's width and the row's full height (`TimeCol` stretches over the
-// row padding) — tap → quick time sheet, drag sideways → 15-min steps (the
+// row padding) — tap → quick time sheet, hold → the wheel picker (the
 // box fills accent while dragged, like the Staff table). With a register
 // adjustment the times sit in `LINE`, a grid inside the name cell, same
 // column sizing.
