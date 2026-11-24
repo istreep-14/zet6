@@ -94,9 +94,10 @@
   html { background: var(--bg); }
   /* Display size (App settings → Display size): every size in the app is in
      rem, so this one root font size scales the whole UI. */
-  html { font-size: 13.5px; }
-  html[data-size="s"] { font-size: 12px; }
-  html[data-size="l"] { font-size: 16px; }
+  html { font-size: 15px; }
+  html[data-size="s"] { font-size: 13.5px; }
+  html[data-size="l"] { font-size: 17px; }
+  html[data-size="xl"] { font-size: 18.5px; }
   /* No pinch / double-tap zoom: a zoomed page drags the fixed tab bar off its spot */
   html { touch-action: manipulation; -webkit-text-size-adjust: 100%; }
   html:not(.ready) body { opacity: 0; }      /* until Tailwind has compiled (main.js) */

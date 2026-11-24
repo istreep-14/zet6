@@ -102,7 +102,7 @@ function Drawer({ vm, sessions, currentId }) {
           items=${[{ value: 'system', label: 'Auto' }, { value: 'light', label: 'Light', icon: 'sun' }, { value: 'dark', label: 'Dark', icon: 'moon' }]} />`} />
         <${Item} title="Display size" chevron=${false}>
           <${Seg} value=${s.settings.size || 'm'} onChange=${v => App.setSize(v)}
-            items=${[{ value: 's', label: 'Small' }, { value: 'm', label: 'Medium' }, { value: 'l', label: 'Large' }]} />
+            items=${[{ value: 's', label: 'S' }, { value: 'm', label: 'M' }, { value: 'l', label: 'L' }, { value: 'xl', label: 'XL' }]} />
         <//>
       <//>
     <//>

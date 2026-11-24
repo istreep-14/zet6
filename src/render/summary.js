@@ -2,13 +2,13 @@
 // Tips; until it's done this shows the close-out checklist).
 //   pool warnings, the register banner (an over / short on Tips)
 //   → the figures: Tips · Hours · Rate · $10 · $5 · $1
-//   → the payouts in the Shift layout — one line per person: numbered tile ·
-//     name · In · Out (tap a time for its wheel) · Hrs · Tips, or Was · Now ·
-//     ± when the register was adjusted; the chump; a Total row with the
-//     shift's open / close, hours and paid out (hold it for its wheel)
+//   → the payouts as a list group (PayItems) — a tall row per person: their
+//     number in their colour · name over "5:00 pm → 2:30 am · 9.5 h" (tap a
+//     time to type it, hold for the wheel) · take-home, big · chevron (→ their
+//     payout drawer); the chump; Total (open → close · hours · paid out)
 //   → pools (several pools; tap → that pool's table in a sheet).
-// The other views (List, Pools, Bills, Math) are picked from the page drawer
-// (SummaryOptions), with a "Back to Shift" chip while one is up.
+// The other views (Table — the old Shift grid, Pools, Bills, Math) are picked from the page drawer
+// (SummaryOptions), with a "Back to the list" chip while one is up.
 // Support staff are paid a tip-out off the top, so their hours never count in
 // hours totals and their pay shows in the support colour.
 // Tap a person → Person sheet.
@@ -17,7 +17,7 @@ import { fmtHrs, fmtMoney, hasMinutes, hrsDecimals, hrsText } from '../util.js';
 import { TIME_TEXT, ARROW_BEFORE, DragAmount } from '../ui/dragtime.js';
 import { html, render, useRef, useEffect, useLayoutEffect } from '../ui/preact.js';
 import { payDelta, sumDelta, figDelta, timeMoved, defaultMoved } from '../ui/changes.js';
-import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Delta, Flash, Table, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL, hueTile, hueIndex } from '../ui/pkit.js';
+import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Delta, Flash, Table, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL, hueTile, hueIndex, hueVar } from '../ui/pkit.js';
 import { StaffTime, DefaultTime } from './staff.js';
 import { smallBillsNeeded } from './tabs.js';
 import { EnvelopeTable } from './payout.js';
@@ -614,9 +614,108 @@ function MathTable({ vm }) {
   <//>`;
 }
 
+// ── Payouts as a list (the page) ─────────────────────────────────────────────
+// A List group, one Item per person in Staff order — tall, easy to read:
+// their number in their own colour (no block) · the name (role dot with
+// several roles, a red dot for a closer) over "5:00 pm → 2:30 am · 9.5 h"
+// (each time a keypad cell — tap to type, hold for the wheel) · the
+// take-home, big, with its change under it · a chevron (tap → their payout
+// drawer). Then the chump and the Total (open → close · tipped hours · paid
+// out — hold the amount for its wheel).
+const SUB_TIME = 'relative z-[1] -mx-1 -my-1 rounded-md px-1 py-1 tabular-nums transition [&>span>span]:ml-[0.2em] [&>span>span]:after:content-[\'m\']';
+const ITEM = 'li relative flex min-h-[4.5rem] w-full items-center gap-3 px-4 py-3 text-left';
+const BIG_MONEY = 'text-[1.375rem] font-semibold leading-tight tracking-tight';
+
+function SubLine({ a, b, rest }) {
+  return html`<span class="t-body flex min-w-0 flex-wrap items-center gap-x-1.5 leading-snug">
+    <span class="inline-flex items-center whitespace-nowrap">${a}<span class="mx-1 text-ink-3" aria-hidden="true">→</span>${b}</span>
+    ${rest && html`<span class="text-ink-3" aria-hidden="true">·</span>${rest}`}
+  </span>`;
+}
+
+function PayItem({ vm, p, n, tint, before }) {
+  const adj = !!vm.sharesBefore;
+  const d = payDelta(vm, p.id, p.final);
+  const sup = isSup(p);
+  const hrs = p.shiftHours ?? p.hours;
+  const ch = p.final - before;
+  return html`<div role="button" tabindex="0" style=${{ '--inset': '2.75rem' }}
+    class=${cx(ITEM, 'cursor-pointer transition active:bg-surface-2')}
+    onClick=${() => App.personModal(p.id)} onKeyDown=${e => { if (e.key === 'Enter' && e.target === e.currentTarget) App.personModal(p.id); }}>
+    <span class="w-5 shrink-0 text-center text-[1rem] font-semibold tabular-nums" style=${{ color: hueVar(hueIndex(vm.state, p.id)) }}>${n}</span>
+    <span class="flex min-w-0 flex-1 flex-col gap-1">
+      <span class="flex min-w-0 items-center gap-1.5 text-[1.125rem] font-medium leading-tight">
+        ${tint && html`<${RoleDot} role=${p.role} />`}<span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}
+      </span>
+      <${SubLine}
+        a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" cls=${SUB_TIME} tone=${SUB_TONE(sup, timeMoved(vm, p.id, 'in'))} mins />`}
+        b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" cls=${SUB_TIME} tone=${SUB_TONE(sup, timeMoved(vm, p.id, 'out'))} mins />`}
+        rest=${html`<span class=${cx('whitespace-nowrap font-medium tabular-nums', sup ? 'text-ink-3' : 'text-ink-2')}>${fmtHrs(hrs)} h${p.brkLen > 0 ? html`<span class="font-normal text-ink-3"> (−${Math.round(p.brkLen * 60)}m)</span>` : ''}</span>`} />
+    </span>
+    <span class="flex shrink-0 flex-col items-end gap-0.5">
+      <${Money} value=${p.final} class=${cx(BIG_MONEY, sup ? SUP_TEXT : p.final > 0 ? 'text-money' : 'text-ink-3', d?.kind === 'preview' && '!text-accent')} />
+      ${d ? html`<${Delta} d=${d} />`
+        : adj && html`<span class=${cx('t-small font-medium tabular-nums', ch < 0 ? 'text-bad' : ch > 0 ? 'text-good' : 'text-ink-3')}>${ch ? signed(ch) : 'same'}</span>`}
+    </span>
+    <${Icon} name="chevR" class="-mr-1 size-5 shrink-0 text-ink-3" />
+    <${Flash} d=${d} />
+  </div>`;
+}
+
+function PayItems({ vm, name }) {
+  const s = vm.shares;
+  const adj = !!vm.sharesBefore;
+  const ordered = staffOrder(vm, s.perPerson);
+  const was = id => vm.sharesBefore?.perPerson.find(x => x.id === id)?.final ?? 0;
+  const { roles, tint } = rolesOf(vm, ordered);
+  const hours = ordered.filter(p => !isSup(p)).reduce((t, p) => t + (p.shiftHours ?? p.hours), 0);
+  const paidOut = ordered.reduce((t, p) => t + p.final, 0);
+  const paidBefore = adj ? vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0) : 0;
+  const vmPool = vm.state.pools.length === 1 ? vm.pools[0] : null;
+  const total = vmPool && !adj
+    ? html`<${DragAmount} value=${paidOut} min=${Math.max(0, paidOut - (vmPool.rest || 0))}
+        cls="-mx-1.5" moneyCls=${cx(BIG_MONEY, 'text-money')} label="Tips total"
+        onSet=${(v, v0) => App.nudgeCash(v - v0)} onPreview=${(v, v0) => App.previewCash(v == null ? null : v - v0)}
+        onTap=${() => App.tab('tips')} />`
+    : html`<${Money} value=${paidOut} class=${cx(BIG_MONEY, 'text-money')} />`;
+  const td = sumDelta(vm, paidOut);
+  const tIn = TOTAL_TONE(defaultMoved(vm, 'in')), tOut = TOTAL_TONE(defaultMoved(vm, 'out'));
+  const footer = html`<span class="flex flex-wrap items-center gap-x-3 gap-y-1">
+    ${tint && roles.map(r => html`<span key=${r} class="inline-flex items-center gap-1.5"><span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_PLURAL[r]}</span>`)}
+    ${ordered.some(p => p.closer) && html`<span class="inline-flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-bad/75"></span>Closer</span>`}
+    <span>Lighter times follow the shift default · tap a time to type it</span>
+    ${tint && roles.includes('support') && html`<span>· support is a tip-out, not counted in hours</span>`}</span>`;
+  return html`<${Section} title=${name || 'Payouts'} aside=${ordered.length + (ordered.length === 1 ? ' person' : ' people')} footer=${footer}>
+    <${List}>
+      ${ordered.map((p, i) => html`<${PayItem} key=${p.id} vm=${vm} p=${p} n=${i + 1} tint=${tint} before=${was(p.id)} />`)}
+      ${s.leftover > 0 && html`<button style=${{ '--inset': '2.75rem' }} class=${cx(ITEM, 'min-h-14 transition active:bg-surface-2')} onClick=${() => App.openBonus()}>
+        <span class="w-5 shrink-0"></span>
+        <span class="flex min-w-0 flex-1 flex-col"><span class="text-[1.0625rem] font-medium text-ink-2">Chump</span><span class="t-small text-ink-3">Stays in the drawer — or give it out</span></span>
+        <span class="text-[1.125rem] font-semibold tabular-nums text-ink-2">${fmtMoney(s.leftover)}</span>
+        <${Icon} name="chevR" class="-mr-1 size-5 shrink-0 text-ink-3" />
+      </button>`}
+      <div style=${{ '--inset': '2.75rem' }} class=${cx(ITEM, 'bg-surface-2/60')}>
+        <span class="grid w-5 shrink-0 place-items-center text-ink-2"><${Icon} name="users" class="size-[1.125rem]" /></span>
+        <span class="flex min-w-0 flex-1 flex-col gap-1">
+          <span class="text-[1.125rem] font-semibold leading-tight">Total</span>
+          <${SubLine}
+            a=${html`<${DefaultTime} vm=${vm} field="in" cls=${SUB_TIME} tone=${tIn} mins />`}
+            b=${html`<${DefaultTime} vm=${vm} field="out" cls=${SUB_TIME} tone=${tOut} mins />`}
+            rest=${html`<span class="whitespace-nowrap font-semibold tabular-nums">${fmtHrs(hours)} h</span>`} />
+        </span>
+        <span class="flex shrink-0 flex-col items-end gap-0.5">
+          ${total}
+          ${td ? html`<${Delta} d=${td} />` : adj && html`<span class="t-small tabular-nums text-ink-3">was ${fmtMoney(paidBefore)}</span>`}
+        </span>
+        <span class="w-4 shrink-0"></span>
+      </div>
+    <//>
+  <//>`;
+}
+
 const VIEWS = [
-  { value: 'shift', label: 'Shift', icon: 'clock', sub: 'Name · In · Out · Hrs · Tips — the page' },
-  { value: 'list', label: 'List', icon: 'menu', sub: 'Each name over their times' },
+  { value: 'list', label: 'List', icon: 'menu', sub: 'Each person a row: name over their times, take-home — the page' },
+  { value: 'shift', label: 'Table', icon: 'clock', sub: 'Name · In · Out · Hrs · Tips in columns' },
   { value: 'pools', label: 'Pools', icon: 'dollar', sub: 'What each pool paid each person' },
   { value: 'bills', label: 'Bills', icon: 'cash', sub: 'Each envelope, bill by bill' },
   { value: 'math', label: 'Math', icon: 'calc', sub: 'Hours × rate, and the rounding' },
@@ -625,9 +724,9 @@ const VIEWS = [
 // The view: Shift is the page (name · In · Out · Hrs · Tips, one line each).
 // The others — List, Pools, Bills, Math — are kept, picked from the page
 // drawer (SummaryOptions); module state, so the drawer can switch it.
-let pick = 'shift';
+let pick = 'list';
 const setView = v => { pick = v; if (lastVm) renderSummary(lastVm, lastName); };
-const viewOf = vm => (pick === 'pools' && !(!vm.blocked && vm.shares.perPool.length > 1) ? 'shift' : pick);
+const viewOf = vm => (pick === 'pools' && !(!vm.blocked && vm.shares.perPool.length > 1) ? 'list' : pick);
 
 // The figures: Tips · Hours · Rate · the small bills ($10 · $5 · $1 — the
 // fewest that make every payout exact), each with its change after an edit.
@@ -670,13 +769,14 @@ function Summary({ vm, name }) {
     <${AdjustBanner} vm=${vm} />
     <${Figures} vm=${vm} />
     <div class="flex flex-col gap-3">
-      ${view !== 'shift' && html`<button class="t-small flex h-9 items-center gap-1.5 self-start rounded-full bg-surface px-3 font-semibold text-ink-2 active:scale-95" onClick=${() => setView('shift')}>
-        ${label} view<span class="text-accent">· Back to Shift</span></button>`}
+      ${view !== 'list' && html`<button class="t-small flex h-9 items-center gap-1.5 self-start rounded-full bg-surface px-3 font-semibold text-ink-2 active:scale-95" onClick=${() => setView('list')}>
+        ${label} view<span class="text-accent">· Back to the list</span></button>`}
       ${billsOff && html`<${Alert} tone="warn" action=${{ label: 'Payout', onClick: () => App.tab('payout') }}>The bills don’t work out yet — Payout has the swap.<//>`}
       ${view === 'pools' ? html`<${PoolGrid} vm=${vm} />`
         : view === 'bills' ? html`<${BillsTable} vm=${vm} />`
         : view === 'math' ? html`<${MathTable} vm=${vm} />`
-        : html`<${PayoutList} vm=${vm} name=${name} view=${view} />`}
+        : view === 'shift' ? html`<${PayoutList} vm=${vm} name=${name} view="shift" />`
+        : html`<${PayItems} vm=${vm} name=${name} />`}
     </div>
     ${view !== 'pools' && html`<${PoolsList} vm=${vm} />`}
   </div>`;
