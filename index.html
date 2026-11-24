@@ -34,6 +34,7 @@
   --color-accent: var(--accent);
   --color-on-accent: var(--on-accent);
   --color-good: var(--good);
+  --color-money: var(--money);
   --color-warn: var(--warn);
   --color-bad: var(--bad);
   /* roles */
@@ -60,9 +61,8 @@
   <button type="button" class="icon-btn" onclick="App.panel('left')" aria-label="Sessions and settings" aria-controls="drawer">
     <svg class="size-[1.125rem]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
   </button>
-  <!-- Page dots: where you are among Summary · Staff · Tips · Payout (tap one
-       to go there; a sideways swipe on the page steps through them) -->
-  <nav class="hdr-dots" id="pageDots" aria-label="Pages"></nav>
+  <!-- Small title: fades in once the page's big title scrolls away (html.scrolled) -->
+  <span class="hdr-title t-head truncate" id="hdrTitle" aria-hidden="true">Summary</span>
   <!-- Date pill: opens this shift's panel (calendar, times, tools) -->
   <button type="button" class="hdr-pill" id="hdrDateBtn" onclick="App.panel('right')" aria-label="Shift date and settings" aria-controls="shiftPanel">
     <span class="truncate" id="hdrDateLabel">Today</span>
@@ -71,9 +71,9 @@
 </header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
-<!-- Four pages side by side — Summary (home) · Staff · Tips · Payout. Swipe
-     sideways to step between them (src/ui/pages.js); pull down at the top of
-     a page for the hub (every page and tool). -->
+<!-- Four pages — Summary (home) · Staff · Tips · Payout — one per tab in the
+     bottom tab bar; swipe sideways to step between them too (src/ui/pages.js);
+     swipe up from the bottom (the HUD, the tabs) for the page's drawer. -->
 <main class="content" id="mainContent">
   <section class="panel active" id="tab-summary"><h1 class="page-title t-title">Summary</h1><div id="summary-root"></div></section>
   <section class="panel" id="tab-staff"><h1 class="page-title t-title">Staff</h1><div id="staff-root"></div></section>
@@ -85,12 +85,29 @@
      small pills on top (close time, chump) open their tools (render/tabs.js) -->
 <div class="hud is-empty" id="pipHud" role="group" aria-label="Live totals"></div>
 
+<!-- Bottom tabs (render/tabs.js keeps the active one and the badges) -->
+<nav class="tabbar">
+  <button class="tab" id="tb-summary" onclick="App.tabTap('summary')">
+    <svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"/></svg>
+    <span class="tab-label">Summary</span><span class="tab-sub" id="tab-sub-summary"></span>
+  </button>
+  <button class="tab" id="tb-staff" onclick="App.tabTap('staff')">
+    <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+    <span class="tab-label">Staff</span><span class="tab-sub" id="tab-sub-staff"></span>
+  </button>
+  <button class="tab" id="tb-tips" onclick="App.tabTap('tips')">
+    <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>
+    <span class="tab-label">Tips</span><span class="tab-sub" id="tab-sub-tips"></span>
+  </button>
+  <button class="tab" id="tb-payout" onclick="App.tabTap('payout')">
+    <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7l10 7 10-7"/></svg>
+    <span class="tab-label">Payout</span><span class="tab-sub" id="tab-sub-payout"></span>
+  </button>
+</nav>
+
 <!-- Staff: the bulk bar (select people, set their times) docks here -->
 <div class="bulkbar" id="bulkBar" aria-label="Selected people"></div>
 
-<!-- Hub (src/ui/pages.js): pull down at the top of a page — every page and tool -->
-<div class="hub-scrim" id="hubScrim" onclick="App.hub(false)"></div>
-<section class="hub" id="hub" aria-hidden="true" aria-label="Go to"></section>
 
 <!-- Side panels (src/ui/panels.js): left = sessions + app settings
      (render/drawer.js), right = this shift (render/shiftpanel.js) -->

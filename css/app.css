@@ -11,7 +11,9 @@
    variables (@theme inline).
 
    Colour has one job each: accent = tappable / active · good = rate, fine ·
-   bad = closers, errors · warn = needs a look. Figures are plain ink.
+   money = take-home amounts · bad = closers, errors · warn = needs a look.
+   Dark mode (the likely one at close) lifts the inks, brightens the
+   accents and rings each card with a faint hairline (--card-ring).
 
    Layered so Tailwind utilities always win over these rules. */
 @layer theme, base, components, utilities;
@@ -33,6 +35,7 @@
   --accent: #2563eb;
   --on-accent: #ffffff;
   --good: #16a34a;
+  --money: #15803d;            /* take-home amounts */
   --warn: #d97706;
   --bad: #dc2626;
   --bar: #d97706;
@@ -47,30 +50,41 @@
   --pool-2: #0d9488;
   --pool-3: #db2777;
   --pool-4: #7c3aed;
+  /* a colour per person (their number tile, their timeline) — pops of colour
+     even when everyone's a bartender; cycles after eight */
+  --p1: #e8590c; --p2: #2563eb; --p3: #0d9488; --p4: #c026d3;
+  --p5: #16a34a; --p6: #7c3aed; --p7: #db2777; --p8: #ca8a04;
   --glass: rgb(242 243 246 / .86);
   --shadow: 0 10px 40px rgb(15 23 42 / .14);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0c0e12; --surface: #181b21; --surface-2: #242830; --raised: #3a3f4a; --line: rgb(255 255 255 / .08);
-    --ink: #f2f4f7; --ink-2: #b4bcc8; --ink-3: #7c8594;
-    --accent: #6f9fff; --on-accent: #08101f; --good: #4ade80; --warn: #fbbf24; --bad: #f87171;
-    --bar: #ffa94d; --srv: #6f9fff; --sup: #c77dff;
-    --d100: #5fd4a8; --d50: #ff8fa3; --d20: #8fd16a; --d10: #f0a35e; --d5: #a99bf7; --d1: #9aa7b3;
-    --pool-2: #2dd4bf; --pool-3: #ff6bb5; --pool-4: #a78bfa;
-    --glass: rgb(12 14 18 / .84); --shadow: 0 10px 40px rgb(0 0 0 / .6);
+    --bg: #090b0f; --surface: #171b23; --surface-2: #252b36; --raised: #3a4150; --line: rgb(255 255 255 / .1);
+    --ink: #f6f8fb; --ink-2: #ccd4df; --ink-3: #95a0b1;
+    --accent: #7eabff; --on-accent: #07101f; --good: #4fe38c; --warn: #fcc53f; --bad: #ff7b7b;
+    --money: #7ee8ad;
+    --bar: #ffb064; --srv: #7eabff; --sup: #d491ff;
+    --d100: #5fe0b0; --d50: #ff8fb0; --d20: #9ee07a; --d10: #ffad66; --d5: #b3a6ff; --d1: #a9b6c4;
+    --pool-2: #34e0c8; --pool-3: #ff74bd; --pool-4: #b39bff;
+    --card-ring: inset 0 0 0 1px rgb(255 255 255 / .06);
+  --p1: #ff9a52; --p2: #7eabff; --p3: #34e0c8; --p4: #ef84f7; --p5: #6ee7a0; --p6: #b89cff; --p7: #ff7ab8; --p8: #f5c84b;
+    --p1: #ff9a52; --p2: #7eabff; --p3: #34e0c8; --p4: #ef84f7; --p5: #6ee7a0; --p6: #b89cff; --p7: #ff7ab8; --p8: #f5c84b;
+    --glass: rgb(9 11 15 / .86); --shadow: 0 10px 40px rgb(0 0 0 / .65);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0c0e12; --surface: #181b21; --surface-2: #242830; --raised: #3a3f4a; --line: rgb(255 255 255 / .08);
-  --ink: #f2f4f7; --ink-2: #b4bcc8; --ink-3: #7c8594;
-  --accent: #6f9fff; --on-accent: #08101f; --good: #4ade80; --warn: #fbbf24; --bad: #f87171;
-  --bar: #ffa94d; --srv: #6f9fff; --sup: #c77dff;
-  --d100: #5fd4a8; --d50: #ff8fa3; --d20: #8fd16a; --d10: #f0a35e; --d5: #a99bf7; --d1: #9aa7b3;
-  --pool-2: #2dd4bf; --pool-3: #ff6bb5; --pool-4: #a78bfa;
-  --glass: rgb(12 14 18 / .84); --shadow: 0 10px 40px rgb(0 0 0 / .6);
+  --bg: #090b0f; --surface: #171b23; --surface-2: #252b36; --raised: #3a4150; --line: rgb(255 255 255 / .1);
+  --ink: #f6f8fb; --ink-2: #ccd4df; --ink-3: #95a0b1;
+  --accent: #7eabff; --on-accent: #07101f; --good: #4fe38c; --warn: #fcc53f; --bad: #ff7b7b;
+  --money: #7ee8ad;
+  --bar: #ffb064; --srv: #7eabff; --sup: #d491ff;
+  --d100: #5fe0b0; --d50: #ff8fb0; --d20: #9ee07a; --d10: #ffad66; --d5: #b3a6ff; --d1: #a9b6c4;
+  --pool-2: #34e0c8; --pool-3: #ff74bd; --pool-4: #b39bff;
+  --card-ring: inset 0 0 0 1px rgb(255 255 255 / .06);
+  --p1: #ff9a52; --p2: #7eabff; --p3: #34e0c8; --p4: #ef84f7; --p5: #6ee7a0; --p6: #b89cff; --p7: #ff7ab8; --p8: #f5c84b;
+  --glass: rgb(9 11 15 / .86); --shadow: 0 10px 40px rgb(0 0 0 / .65);
   color-scheme: dark;
 }
 
@@ -136,14 +150,15 @@
     --safe-b: env(safe-area-inset-bottom, 0px);
     --safe-l: env(safe-area-inset-left, 0px);
     --safe-r: env(safe-area-inset-right, 0px);
-    --dock: var(--safe-b);                        /* the bottom edge (no tab bar) */
+    --tab-h: 3.75rem;
+    --dock: calc(var(--tab-h) + var(--safe-b));   /* top of the tab bar */
     --blur: saturate(1.8) blur(20px);
   }
   @media (max-width: 374px) { :root { --gutter: 0.75rem; } }
 
   /* ── List group (.lgroup): one rounded block of rows (pkit List / Item), hairlines
      between rows, inset past the lead (--inset, set per Item). ─────────── */
-  .lgroup { background: var(--surface); border-radius: var(--radius-card, 1rem); overflow: hidden; }
+  .lgroup { background: var(--surface); border-radius: var(--radius-card, 1rem); overflow: hidden; box-shadow: var(--card-ring, none); }
   .lgroup > .li { position: relative; }
   .lgroup > .li + .li::before {
     content: ""; position: absolute; top: 0; right: 0; left: var(--inset, 1rem);
@@ -153,7 +168,7 @@
   button.li:active:not(:disabled) { background: var(--surface-2); }
 
   /* Figures: 2–4 equal cells split by hairlines (pkit Stats) */
-  .figures { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; background: var(--surface); border-radius: var(--radius-card, 1rem); padding: .75rem 0; }
+  .figures { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; background: var(--surface); border-radius: var(--radius-card, 1rem); padding: .75rem 0; box-shadow: var(--card-ring, none); }
   .figures > * + * { box-shadow: inset 1px 0 var(--line); }
 
   /* ── Header: menu · small title (appears on scroll) · date pill ──────── */
@@ -177,11 +192,12 @@
     padding-top: calc(var(--safe-t) + var(--hdr-gap));
     height: calc(var(--hdr-h) + var(--safe-t) + var(--hdr-gap));
   }
-  /* Page dots: centred in the header, the current page as a named pill. */
-  .hdr-dots {
-    position: absolute; left: 50%; bottom: calc(var(--hdr-h) / 2); transform: translate(-50%, 50%);
-    display: flex; align-items: center; gap: .125rem; max-width: 56%;
+  .hdr-title {
+    position: absolute; left: 50%; bottom: calc(var(--hdr-h) / 2); max-width: 45%;
+    transform: translate(-50%, calc(50% + .25rem));
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
   }
+  html.scrolled .hdr-title { opacity: 1; transform: translate(-50%, 50%); }
   .icon-btn {
     display: grid; place-items: center; flex-shrink: 0;
     width: 2.75rem; height: 2.75rem; border-radius: 999px;
@@ -224,29 +240,11 @@
   @keyframes inRight { from { opacity: .35; transform: translateX(35%); } to { opacity: 1; transform: none; } }
   @keyframes inLeft  { from { opacity: .35; transform: translateX(-35%); } to { opacity: 1; transform: none; } }
 
-  /* ── Hub (ui/pages.js): pull down at the top of a page ──────────────── */
-  .hub-scrim { position: fixed; inset: 0; z-index: 85; background: rgb(0 0 0 / .32); opacity: 0; pointer-events: none; transition: opacity .3s ease; }
-  html.hub-open .hub-scrim { opacity: 1; pointer-events: auto; }
-  html.hub-drag .hub-scrim { transition: none; pointer-events: auto; }
-  .hub {
-    position: fixed; left: 0; right: 0; top: 0; z-index: 86; max-width: 480px; margin: 0 auto;
-    padding: calc(var(--safe-t) + 1rem) var(--gutter) 0.75rem;
-    background: var(--bg); color: var(--ink);
-    border-radius: 0 0 1.5rem 1.5rem; box-shadow: var(--shadow);
-    transform: translateY(-100%); visibility: hidden; touch-action: none;
-    transition: transform .34s cubic-bezier(.2, .9, .25, 1), visibility 0s linear .34s;
-  }
-  html.standalone .hub { padding-top: calc(var(--safe-t) + var(--hdr-gap) + 0.5rem); }
-  html.hub-open .hub { transform: none; visibility: visible; transition: transform .34s cubic-bezier(.2, .9, .25, 1); }
-  html.hub-drag .hub { visibility: visible; transition: none; }
-  .hub::after { content: ''; display: block; width: 2.5rem; height: .3125rem; margin: .75rem auto 0; border-radius: 999px; background: color-mix(in srgb, var(--ink) 22%, transparent); }
-
   /* Home-screen app with a short viewport (main.js): the page box is the real
      screen height and the bottom-anchored layers sit inside it. */
   html.fill-screen, html.fill-screen body { height: var(--app-h); }
   html.fill-screen body { position: relative; }
-  html.fill-screen .hud, html.fill-screen .bulkbar, html.fill-screen .sheet-backdrop, html.fill-screen .hub, html.fill-screen .hub-scrim { position: absolute; }
-  html.fill-screen .hub-scrim { height: var(--app-h); bottom: auto; }
+  html.fill-screen .tabbar, html.fill-screen .hud, html.fill-screen .bulkbar, html.fill-screen .sheet-backdrop { position: absolute; }
   html.fill-screen .sheet-backdrop { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet { max-height: calc(var(--app-h) - var(--safe-t) - 1rem); }
   html.fill-screen .sheet--tall { height: calc(var(--app-h) - var(--safe-t) - 2.5rem); }
@@ -254,7 +252,65 @@
   html.fill-screen .side--left { left: 0; }
   html.fill-screen .side--right { right: 0; }
 
-  /* ── Live HUD (floats at the bottom over every page) ── */
+  /* ── Tab bar: docked at the bottom, frosted, a hairline on top ────────── */
+  .tabbar {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    max-width: 480px;
+    margin: 0 auto;
+    height: var(--dock);
+    padding: 0 calc(var(--gutter) + var(--safe-r)) var(--safe-b) calc(var(--gutter) + var(--safe-l));
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.25rem;
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
+    box-shadow: 0 -1px 0 var(--line);
+    z-index: 20;
+    transition: transform .25s ease, opacity .2s;
+  }
+  body.keyboard-open .tabbar { transform: translateY(100%); opacity: 0; }
+  .tab {
+    position: relative;
+    min-width: 0;
+    height: var(--tab-h);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    color: var(--ink-3);
+    transition: color .15s;
+  }
+  .tab svg { width: 1.5rem; height: 1.5rem; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .tab.active { color: var(--ink); }
+  .tab.active svg { color: var(--accent); }
+  .tab-label { font-size: 0.6875rem; font-weight: 500; line-height: 1.2; }
+  .tab.active .tab-label { font-weight: 600; }
+  /* count / total badge on the icon's shoulder */
+  .tab-sub {
+    position: absolute;
+    top: 0.375rem;
+    left: calc(50% + 0.375rem);
+    min-width: 1.0625rem;
+    height: 1.0625rem;
+    padding: 0 0.3125rem;
+    border-radius: 999px;
+    font-size: 0.625rem;
+    font-weight: 600;
+    line-height: 1.0625rem;
+    white-space: nowrap;
+    text-align: center;
+    color: var(--ink-2);
+    background: var(--surface-2);
+    box-shadow: 0 0 0 2px var(--bg);
+  }
+  .tab-sub:empty { display: none; }
+  .tab-sub.ok { color: var(--on-accent); background: var(--accent); }
+  .tab-sub.warn { color: #fff; background: var(--bad); }
+
+  /* ── Live HUD (floats above the tab bar) ── */
   .hud {
     position: fixed;
     left: 50%;
@@ -275,7 +331,10 @@
   }
   .hud.is-empty { display: none; }
   /* Two quiet pills on the HUD's top edge: the close time, the chump. */
-  .hud-pills { position: absolute; left: .25rem; right: .25rem; bottom: 100%; display: flex; justify-content: space-between; padding-bottom: .375rem; pointer-events: none; }
+  .hud-pills { position: absolute; left: 0; right: 0; bottom: 100%; display: flex; align-items: center; gap: .375rem; padding-bottom: .375rem; pointer-events: none; }
+  .hud-pills > * { pointer-events: auto; }
+  /* Swipe up on the HUD / tab bar raises the page drawer (sheet.js dragToOpen). */
+  .hud, .tabbar { touch-action: none; }
   .hud-pill {
     pointer-events: auto; color: var(--ink-2);
     background: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -420,7 +479,7 @@
   }
   .keypad > * { max-width: 30rem; margin: 0 auto; }
   .keypad.open { transform: none; }
-  html.keypad-open .hud { visibility: hidden; }
+  html.keypad-open .tabbar, html.keypad-open .hud { visibility: hidden; }
   html.keypad-open .content { padding-bottom: calc(var(--kp-h, 18rem) + 5rem); }   /* + room for the previewing HUD */
   html.fill-screen .keypad { position: absolute; }
   html.keypad-open .side-body, html.keypad-open .sheet-body { padding-bottom: calc(var(--kp-h, 18rem) + 1rem); }

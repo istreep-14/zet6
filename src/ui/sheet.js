@@ -7,6 +7,7 @@ import { SheetShell } from './pkit.js';
 const $ = id => document.getElementById(id);
 
 export const SHEETS = {
+  'sheet-page': { title: 'Page' },
   'sheet-staff': { title: 'Person' },
   'sheet-person': { title: 'Payout' },
   'sheet-bonus': { title: 'Closer bonus & chump' },
@@ -91,6 +92,63 @@ function swipeToClose(backdrop) {
   };
   sheet.addEventListener('touchend', end, { passive: true });
   sheet.addEventListener('touchcancel', end, { passive: true });
+}
+
+// Drag a sheet up from the bottom (the HUD, the tab bar): once the finger
+// moves clearly up, prepare() fills it, and it rises with the finger; let go
+// past a quarter of its height (or flick) and it stays open, otherwise it
+// drops back. can() — whether it may start.
+export function dragToOpen(els, id, prepare, can = () => true) {
+  const backdrop = $(id);
+  const sheet = backdrop?.querySelector('.sheet');
+  if (!sheet) return;
+  let g = null;
+  const swallow = () => {
+    const stop = ev => { ev.stopPropagation(); ev.preventDefault(); };
+    document.addEventListener('click', stop, { capture: true, once: true });
+    setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 350);
+  };
+  els.filter(Boolean).forEach(el => {
+    el.addEventListener('touchstart', e => {
+      g = null;
+      if (e.touches.length !== 1 || !can()) return;
+      const p = e.touches[0];
+      g = { x0: p.clientX, y0: p.clientY, t0: Date.now(), on: false, dy: 0, h: 0 };
+    }, { passive: true });
+    el.addEventListener('touchmove', e => {
+      if (!g) return;
+      const p = e.touches[0];
+      const dx = p.clientX - g.x0, dy = p.clientY - g.y0;
+      if (!g.on) {
+        if (dy < -10 && -dy > Math.abs(dx) * 1.2) {
+          g.on = true;
+          prepare();
+          sheet.classList.add('dragging');
+          backdrop.classList.add('dragging', 'open');
+          g.h = sheet.offsetHeight || 400;
+        } else if (Math.abs(dx) > 10 || dy > 10) { g = null; return; } else return;
+      }
+      if (e.cancelable) e.preventDefault();
+      g.dy = dy;
+      const shown = Math.max(0, Math.min(g.h, -dy));
+      sheet.style.transform = `translateY(${g.h - shown}px)`;
+      backdrop.style.backgroundColor = `rgb(0 0 0 / ${(0.4 * shown / g.h).toFixed(3)})`;
+    }, { passive: false });
+    const end = () => {
+      const s = g;
+      g = null;
+      if (!s?.on) return;
+      const open = -s.dy > s.h * 0.25 || (Date.now() - s.t0 < 300 && s.dy < -40);
+      sheet.classList.remove('dragging');
+      backdrop.classList.remove('dragging');
+      sheet.style.transform = '';
+      backdrop.style.backgroundColor = '';
+      if (!open) closeSheet(id);
+      swallow();
+    };
+    el.addEventListener('touchend', end, { passive: true });
+    el.addEventListener('touchcancel', end, { passive: true });
+  });
 }
 
 export const closeAllSheets = () => Object.keys(SHEETS).forEach(id => closeSheet(id));

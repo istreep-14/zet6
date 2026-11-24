@@ -13,10 +13,16 @@ import { PATHS } from './icons.js';
 export const cx = (...xs) => xs.flat(Infinity).filter(Boolean).join(' ');
 
 export const ROLE_TINT = {
-  bartender: 'bg-bar/14 text-bar',
-  server: 'bg-srv/14 text-srv',
-  support: 'bg-sup/14 text-sup',
+  bartender: 'bg-bar/18 text-bar',
+  server: 'bg-srv/18 text-srv',
+  support: 'bg-sup/18 text-sup',
 };
+// A colour per person, by their place among the named staff (css --p1…--p8):
+// their number tile and timeline. Stable across pages.
+export const hueVar = i => `var(--p${(((i % 8) + 8) % 8) + 1})`;
+export const hueIndex = (state, id) => state.staff.filter(p => (p.name || '').trim()).findIndex(p => p.id === id);
+export const hueTile = i => ({ background: `color-mix(in srgb, ${hueVar(i)} 20%, transparent)`, color: hueVar(i) });
+
 export const ROLE_DOT = { bartender: 'bg-bar', server: 'bg-srv', support: 'bg-sup' };
 export const ROLE_TEXT = { bartender: 'text-bar', server: 'text-srv', support: 'text-sup' };
 export const ROLE_PLURAL = { bartender: 'Bartenders', server: 'Servers', support: 'Support' };
@@ -28,7 +34,7 @@ export function Icon({ name, class: cls = 'size-5' }) {
 
 // A rounded block on the page (groups / cards are `surface`, no borders).
 export function Card({ class: cls = '', flush = false, tone = '', children, ...rest }) {
-  const toneCls = { error: 'bg-bad/10', gold: 'bg-accent/10', accent: 'bg-accent/10' }[tone] || 'bg-surface';
+  const toneCls = { error: 'bg-bad/10', gold: 'bg-accent/10', accent: 'bg-accent/10' }[tone] || 'bg-surface shadow-[var(--card-ring,none)]';
   return html`<div class=${cx('rounded-card', toneCls, flush ? 'overflow-clip' : 'p-4', cls)} ...${rest}>${children}</div>`;
 }
 

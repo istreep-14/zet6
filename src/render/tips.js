@@ -256,7 +256,7 @@ const countOn = new Set();          // pools whose Count bills is on with nothin
 let cashSheet = null;               // { which: 'count' | 'adjust', id }
 onSheetClose('sheet-count', () => { cashSheet = null; });
 onSheetClose('sheet-adjust', () => { cashSheet = null; });
-function openCashSheet(which, id) {
+export function openCashSheet(which, id) {
   cashSheet = { which, id };
   openSheet('sheet-' + which);
   if (lastVm) renderCashSheet(lastVm);
@@ -344,17 +344,47 @@ function Tips({ vm }) {
     ${state.meta.shiftType === 'day' && html`<p class="t-small px-1 text-ink-3">Day: bar + servers share the floor until the servers are out; then Mid is the bar’s alone. Parties are their own tips, shared by whoever worked inside the party’s window.</p>`}
     ${single ? html`<${PoolCard} pool=${state.pools[0]} vm=${vm} />` : html`<${Pools} vm=${vm} />`}
     ${state.settings.multiPool && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
-    <${Suggested} vm=${vm} />
+    ${state.settings.show?.bestBills !== false && html`<${Suggested} vm=${vm} />`}
     ${ready && html`<${NextStep} tab="summary" label="See who gets what"
       sub=${fmtMoney(vm.totalCash) + ' · $' + vm.shares.rate.toFixed(2) + ' an hour'} />`}
     ${vm.blockedTab === 'staff' && html`<${NextStep} tab="staff" label="Back to Staff" sub=${vm.blocked} />`}
-    <${Section} title="This page"><${List}>
+  </div>`;
+}
+
+// ── The page drawer's Tips part: actions and what it shows. ─────────────────
+
+export function TipsOptions({ vm }) {
+  const state = vm.state;
+  const pool = state.pools.find(p => p.id === state.ui.selectedPool) || state.pools[0];
+  const single = state.pools.length === 1;
+  const close = fn => () => { App.closeSheet('sheet-page'); fn(); };
+  return html`<${Section} title="Do"><${List}>
+      ${single && html`<${Item} icon="cash" title="Count bills" sub="The bills you can see at a glance" onClick=${close(() => openCashSheet('count', pool.id))} />
+        <${Item} icon="swap" title="Register over / short" sub="Re-split if the register is off" onClick=${close(() => openCashSheet('adjust', pool.id))} />`}
+      <${Item} icon="gift" title="Add a party" sub="A private party’s own tips over its own window" onClick=${close(() => App.addParty())} />
+      ${state.settings.multiPool && html`<${Item} icon="plus" title="Add a pool" onClick=${close(() => App.addPool())} />`}
+    <//><//>
+    <${Section} title="Show"><${List}>
+      <${SwitchRow} on=${state.settings.show?.bestBills !== false} onClick=${() => App.toggleShow('bestBills')}
+        icon="cash" label="Best bills" hint="Which bills make the uncounted cash" />
       <${SwitchRow} on=${state.settings.multiPool} disabled=${state.pools.length > 1} onClick=${() => App.toggleSetting('multiPool')}
         icon="dollar" label="Several pools" hint=${state.pools.length > 1 ? 'On while there’s more than one pool' : 'Split the night into pools (day · mid · parties)'} />
       <${SwitchRow} on=${state.settings.allRoles} onClick=${() => App.toggleSetting('allRoles')}
         icon="users" label="Roles" hint="Bar · servers · support share pools by role" />
-    <//><//>
-  </div>`;
+    <//><//>`;
+}
+
+// The HUD's actions on Tips (pills): count bills, over / short (one pool), party.
+export function tipsPills(vm) {
+  const state = vm.state;
+  const pool = state.pools[0];
+  return [
+    ...(state.pools.length === 1 ? [
+      { icon: 'cash', label: 'Count', onClick: () => openCashSheet('count', pool.id) },
+      { icon: 'swap', label: 'Over / short', onClick: () => openCashSheet('adjust', pool.id) },
+    ] : []),
+    { icon: 'gift', label: 'Party', onClick: () => App.addParty() },
+  ];
 }
 
 let lastVm = null;

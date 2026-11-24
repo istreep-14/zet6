@@ -41,7 +41,7 @@ function Person({ vm, p }) {
     </div>
     <div class="flex items-center justify-between rounded-card bg-surface px-4 py-4">
       <span class="t-small font-medium text-ink-3">Takes home</span>
-      <${Money} value=${p.final} class="t-display" />
+      <${Money} value=${p.final} class="t-display text-money" />
     </div>
     <div class="grid grid-cols-2 gap-2">
       <${Stat} label="Base" value=${'$' + p.base} sub=${'$' + p.exact.toFixed(2) + ' exact'} />
@@ -54,7 +54,7 @@ function Person({ vm, p }) {
       ? html`<div class="grid grid-cols-3 gap-1.5">${DENOMS.map(d => html`<div key=${d} class=${cx('flex items-center justify-between rounded-xl bg-surface px-3 py-2.5', !bills[d] && 'opacity-40')}>
           <${Denom} d=${d} /><span class="t-head tabular-nums">${bills[d] || '—'}</span></div>`)}</div>`
       : html`<div class="t-small px-4 text-ink-3">No bill split yet.</div>`}
-    <${Label} aside="tap to set · hold for the wheel">Shift<//>
+    <${Label} aside="tap a time for its wheel">Shift<//>
     <div class="grid grid-cols-2 gap-3">
       ${['in', 'out'].map(f => html`<div key=${f} class="flex flex-col gap-1.5">
         <span class="t-small px-1 font-medium text-ink-2">${f === 'in' ? 'In' : 'Out'}</span>
