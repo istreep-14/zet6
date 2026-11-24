@@ -15,7 +15,7 @@ import { StaffTime } from './staff.js';
 // ── Person ───────────────────────────────────────────────────────────────────
 
 // The shift's In / Out in the Person sheet: the same time box as Staff and
-// Summary (tap → quick time sheet, hold and drag → 15-min steps, Undo · Apply).
+// Summary (tap → quick time sheet, hold → the wheel picker, Undo · Apply).
 const SHEET_TIME = 'h-12 w-full rounded-xl bg-surface text-center text-[1.125rem] tabular-nums transition';
 
 let personId = null;
@@ -54,7 +54,7 @@ function Person({ vm, p }) {
       ? html`<div class="grid grid-cols-3 gap-1.5">${DENOMS.map(d => html`<div key=${d} class=${cx('flex items-center justify-between rounded-xl bg-surface px-3 py-2.5', !bills[d] && 'opacity-40')}>
           <${Denom} d=${d} /><span class="t-head tabular-nums">${bills[d] || '—'}</span></div>`)}</div>`
       : html`<div class="t-small px-4 text-ink-3">No bill split yet.</div>`}
-    <${Label} aside="tap to set · hold and drag to nudge">Shift<//>
+    <${Label} aside="tap to set · hold for the wheel">Shift<//>
     <div class="grid grid-cols-2 gap-3">
       ${['in', 'out'].map(f => html`<div key=${f} class="flex flex-col gap-1.5">
         <span class="t-small px-1 font-medium text-ink-2">${f === 'in' ? 'In' : 'Out'}</span>

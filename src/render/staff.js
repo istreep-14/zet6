@@ -4,7 +4,7 @@
 //   → Quick add card → saved-people picker sheet (multi-select, Select all,
 //     Edit forgets, "Add N people")
 //     Name · In · Out · Hrs · Close, every cell a control (name → person
-//     editor, time pill → tap for the quick time sheet or drag sideways in
+//     editor, time pill → tap for the quick time sheet or hold for the wheel picker in
 //     15-min steps, circle → forced closer), a "+ Add bartender" row (new
 //     person, editor opens with the name focused), then a "Defaults 5p – 2a ›"
 //     footer.
@@ -388,7 +388,7 @@ function TimeCell({ vm, p, field, mins }) {
   const key = p.id + ':' + field;
   const active = activeKey() === key;
   return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${field === 'in' ? t.inSet : t.outSet} bad=${t.bad}
-    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} onTap=${() => openTimeCell(p.id, field)}
+    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub} onTap=${() => openTimeCell(p.id, field)}
     kcell=${key} active=${active} preview=${active ? bufferAbs() : null}
     cls=${field === 'out' ? TABLE_TIME + ' ' + ARROW_BEFORE('0.75rem') : TABLE_TIME} tone=${(field === 'in' ? t.inSet : t.outSet) ? 'font-medium text-ink-2' : 'font-normal text-ink-3/80'} mins=${mins}
     label=${(p.name || 'New row') + ' ' + field + ' time'} />`;
@@ -399,7 +399,7 @@ function TimePill({ vm, p, field, cls, tone, full, mins }) {
   const t = times(vm.state, p, vm);
   const k = pickerFor(vm, p, field);
   return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${field === 'in' ? t.inSet : t.outSet} bad=${t.bad}
-    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} onTap=${() => App.editTime(p.id, field)} cls=${cls} tone=${tone} full=${full} mins=${mins}
+    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub} onTap=${() => App.editTime(p.id, field)} cls=${cls} tone=${tone} full=${full} mins=${mins}
     label=${p.name + ' ' + field + ' time'} />`;
 }
 
@@ -556,17 +556,21 @@ function pickerFor(vm, p, field) {
   const def = t.def;
   const set = raw => App.staffField(p.id, field, raw, true);
   // A drag / picker write waits for Undo · Apply in the HUD (App.reviewed).
+  // The wheel shows the hours each time would make beside it.
+  const hrsAt = h => (h > 0 ? fmtHrs(h) + 'h' : '');
   const said = abs => (p.name.trim() || 'New row') + ' · ' + (field === 'in' ? 'In ' : 'Out ') + fmtTimeAbs(abs);
   if (field === 'in') {
     const dp = parseTime(def.in);
     return { label: 'In', abs: t.inAbs, isSet: t.inSet, defAbs: dp.value != null ? inAbsOf(dp) : null,
       min: IN_MIN_ABS, max: IN_MAX_ABS, onSet: abs => App.reviewed(said(abs), () => set(inRaw(abs, def))), onReset: () => set(''),
-      onPreview: abs => App.previewStaff(p.id, field, abs == null ? null : inRaw(abs, def)) };
+      onPreview: abs => App.previewStaff(p.id, field, abs == null ? null : inRaw(abs, def)),
+      wheelSub: abs => (t.outAbs != null ? hrsAt(t.outAbs - abs) : '') };
   }
   const dp = parseTime(def.out);
   return { label: 'Out', abs: t.outAbs, isSet: t.outSet, defAbs: dp.value != null && t.inAbs != null ? afterAbsOf(dp, t.inAbs) : null,
     min: (t.inAbs ?? 17) + 0.25, max: (t.inAbs ?? 17) + 12, onSet: abs => App.reviewed(said(abs), () => set(outRaw(abs, def, t.inAbs))), onReset: () => set(''),
-    onPreview: abs => App.previewStaff(p.id, field, abs == null ? null : outRaw(abs, def, t.inAbs)) };
+    onPreview: abs => App.previewStaff(p.id, field, abs == null ? null : outRaw(abs, def, t.inAbs)),
+    wheelSub: abs => (t.inAbs != null ? hrsAt(abs - t.inAbs) : '') };
 }
 
 function Editor({ vm, p }) {

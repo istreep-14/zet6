@@ -124,3 +124,20 @@ export function movedCount(vm) {
   if (!r?.base || !vm.shares) return 0;
   return vm.shares.perPerson.filter(p => r.base.pay[p.id] != null && r.base.pay[p.id] !== p.final).length;
 }
+
+// The figures the wheel picker shows under the wheel for a previewed edit:
+// the person being edited (their pay and change) or the pool, the rate,
+// and how many payouts move. null when there's nothing to show.
+export function previewFigures(pv) {
+  if (!pv?.shares || pv.blocked) return null;
+  const sh = pv.shares;
+  const money = n => '$' + Math.round(n).toLocaleString('en-US');
+  const focus = pv.preview?.focus ? sh.perPerson.find(p => p.id === pv.preview.focus) : null;
+  const n = movedCount(pv);
+  return [
+    focus ? { k: focus.name, v: money(focus.final), d: payDelta(pv, focus.id, focus.final), tone: 'text-accent' }
+      : { k: 'Pool', v: money(sh.totalCash), d: figDelta(pv, 'total') },
+    { k: 'Rate', v: '$' + sh.rate.toFixed(2), d: figDelta(pv, 'rate'), tone: 'text-good' },
+    { k: 'changed', v: String(n) },
+  ];
+}

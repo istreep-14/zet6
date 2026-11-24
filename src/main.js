@@ -93,6 +93,7 @@ function render(s) {
 // they're repainted plain. An edit in progress (a dragged or typed time)
 // re-runs the split on a copy of the state and paints Summary + the HUD with
 // the would-be numbers (vm.preview); nothing is written until it lands.
+// Returns the preview view model (the wheel picker shows its figures).
 let clearTimer = 0;
 function clearChangesLater() {
   clearTimeout(clearTimer);
@@ -162,6 +163,7 @@ function preview(apply, focus = null) {
   previewing = true;
   renderSummary(pv, sessionName());
   updateTabIndicators(pv);
+  return pv;                                     // the wheel shows its figures
 }
 
 // ── Sessions: switch / create / delete without reloading ─────────────────────

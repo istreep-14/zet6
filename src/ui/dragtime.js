@@ -1,10 +1,11 @@
-// DragTime — a time shown as plain text that you can tap or drag.
+// DragTime — a time shown as plain text that you can tap, or hold to pick
+// from a wheel (ui/wheel.js).
 // Shared by the Staff table, Summary rows, pool windows and shift times.
 
 import { html, useState, useRef } from './preact.js';
 import { cx, Clock, Money } from './pkit.js';
 import { fmtTimeAbs } from '../time.js';
-import { showScrub, hideScrub } from './scrub.js';
+import { openWheel, isWheelOpen, wheelNudge, wheelRelease } from './wheel.js';
 
 export const CELL = 'h-10 w-full rounded-lg text-center text-[1rem] tabular-nums transition';
 // Table time text (Summary payouts, Staff tables): the number at 0.8125rem,
@@ -18,14 +19,14 @@ export const CELL = 'h-10 w-full rounded-lg text-center text-[1rem] tabular-nums
 // adds no margin between the boxes.
 export const ARROW_BEFORE = gap => `relative before:pointer-events-none before:absolute before:left-[calc(${gap}*-0.5)] before:top-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:text-[0.75rem] before:font-normal before:text-ink-3/70 before:content-['→']`;
 export const TIME_TEXT = 'text-[0.8125rem] tabular-nums [&>span]:relative [&>span]:block [&>span]:h-[1.3125rem] [&>span]:leading-[1.225rem] [&>span>span]:absolute [&>span>span]:left-1/2 [&>span>span]:top-[1.1rem] [&>span>span]:-translate-x-1/2 [&>span>span]:ml-0 [&>span>span]:text-[.62em] [&>span>span]:leading-none [&>span>span]:font-normal [&>span>span]:tracking-wide [&>span>span]:opacity-70 [&>span>span]:after:content-[\'m\']';
-const PX_PER_STEP = 18;        // horizontal drag distance per 15 minutes
-// Hold before a drag starts: a box only turns into a drag (accent fill, the
-// scrub bubble, a tick of haptics) after the finger has rested on it for
-// HOLD_MS. Moving more than SLOP px before then lets the gesture go — it was
-// a scroll or a tab swipe, not a drag — so a stray brush never moves a value.
+// Hold to open the wheel: a box only opens the wheel picker (ui/wheel.js;
+// the box fills accent, a tick of haptics) after the finger has rested on it
+// for HOLD_MS. Moving more than SLOP px before then lets the gesture go — it
+// was a scroll or a tab swipe — so a stray brush never changes a value. A
+// plain tap still does the box's tap (keypad, time sheet, Tips).
 const HOLD_MS = 280;
 const SLOP = 8;
-// main.js's page swipe skips a touch that armed a drag (lastArmed ≥ its start).
+// main.js's page swipe (and SwipeRow) skip a touch that opened a wheel.
 export const dragFlags = { lastArmed: 0 };
 // A press that slid off before the hold isn't a tap either: swallow the click
 // it may still fire (a mouse lands it on the row under the box).
@@ -36,79 +37,78 @@ function swallowNextClick() {
 }
 const buzz = ms => { try { navigator.vibrate?.(ms); } catch { /* optional */ } };
 
-// The gesture, shared by DragTime and DragAmount. value → value + n × step
-// per `px` dragged sideways (right = more), clamped to min…max. While armed
-// the scrub bubble (ui/scrub.js) floats above the finger with bubble(v, v0)
-// → { text, sub }; onPreview(v | null, v0) as it moves, onSet(v, v0) on
-// release (v0 = the value when the press began — the box's own value may
-// change under a preview).
-// Returns { drag, handlers, consumeClick }: drag = { v, armed } | null;
-// consumeClick() is true once after a drag (the click that follows it is
-// swallowed).
-function useHoldDrag({ value, min, max, step, px, enabled, onSet, onPreview, bubble }) {
-  const [drag, setDrag] = useState(null);
+// The gesture, shared by DragTime and DragAmount. Hold → openWheel() with
+// wheel(v0) → { values, index, title, text, sub, change }. The same touch
+// keeps going: sliding the thumb up / down turns the wheel (wheelNudge) and
+// lifting it lets the wheel run on with the thumb's speed (wheelRelease);
+// after that the wheel is flicked directly. Each value it settles on calls
+// onPreview(v | null, v0) — which returns the preview view model the wheel
+// shows under it — and Done / a tap outside calls onSet(v, v0) then
+// onPreview(null); Cancel just onPreview(null). (v0 = the value when the
+// press began — the box's own value may change under a preview.)
+// Returns { held, handlers, consumeClick }: held = 'press' | 'open' | null;
+// consumeClick() is true once after a hold (its click is swallowed).
+function useHoldWheel({ value, enabled, onSet, onPreview, wheel }) {
+  const [held, setHeld] = useState(null);
   const st = useRef(null);
   const timer = useRef(0);
   const swallow = useRef(false);
   const cfg = useRef(null);
-  cfg.current = { value, min, max, step, px, onSet, onPreview, bubble };
-  const put = d => { st.current = d; setDrag(d); };
-  const scrub = (d, x, y) => {
-    const b = cfg.current.bubble(d.v, d.v0);
-    showScrub({ x, y, text: b.text, sub: b.sub, dx: x - d.x0, tick: cfg.current.px });
-  };
-  const finish = commit => {
-    clearTimeout(timer.current);
-    const d = st.current;
-    put(null);
-    if (!d?.armed) return;
-    hideScrub();
-    swallow.current = true;
-    dragFlags.lastArmed = Date.now();
-    if (commit && d.v !== d.v0) cfg.current.onSet(d.v, d.v0);
-    if (d.previewed) cfg.current.onPreview?.(null);   // after the write, so the views don't flash the old numbers
-  };
+  cfg.current = { onSet, onPreview, wheel };
   const handlers = {
     onPointerDown: e => {
-      if (!enabled || value == null) return;
+      if (!enabled || value == null || isWheelOpen()) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
-      // min / max fixed at the press: a preview re-render may move them.
-      const d = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, v0: value, v: value, min, max, armed: false, id: e.pointerId, el: e.currentTarget };
-      put(d);
+      const d = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, v0: value, armed: false, id: e.pointerId, el: e.currentTarget, t: Date.now(), vy: 0, moved: false };
+      st.current = d;
+      setHeld('press');
       clearTimeout(timer.current);
       timer.current = setTimeout(() => {
         const c = st.current;
         if (!c || c !== d) return;
-        const armed = { ...c, armed: true };
+        c.armed = true;
         try { c.el.setPointerCapture?.(c.id); } catch { /* gone */ }
         dragFlags.lastArmed = Date.now();
         buzz(10);
-        put(armed);
-        scrub(armed, c.x, c.y);
+        setHeld('open');
+        const v0 = c.v0, k = cfg.current;
+        openWheel({
+          ...k.wheel(v0), x: c.x, y: c.y,
+          onChange: v => k.onPreview?.(v === v0 ? null : v, v0) || null,
+          onDone: v => { setHeld(null); if (v !== v0) cfg.current.onSet(v, v0); cfg.current.onPreview?.(null); },
+          onCancel: () => { setHeld(null); cfg.current.onPreview?.(null); },
+        });
       }, HOLD_MS);
     },
     onPointerMove: e => {
       const d = st.current;
       if (!d) return;
       if (!d.armed) {
-        if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > SLOP) { clearTimeout(timer.current); put(null); swallowNextClick(); }
-        else st.current = { ...d, x: e.clientX, y: e.clientY };
+        if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > SLOP) { clearTimeout(timer.current); st.current = null; setHeld(null); swallowNextClick(); }
+        else { d.x = e.clientX; d.y = e.clientY; }
         return;
       }
-      const c = cfg.current;
-      const next = Math.min(d.max, Math.max(d.min, d.v0 + Math.round((e.clientX - d.x0) / c.px) * c.step));
-      let nd = d;
-      if (next !== d.v) {
-        buzz(4);
-        c.onPreview?.(next === d.v0 ? null : next, d.v0);
-        nd = { ...d, v: next, previewed: true };
-        put(nd);
-      }
-      scrub(nd, e.clientX, e.clientY);
+      // The thumb turns the wheel: finger up → later / more.
+      const now = Date.now(), dy = e.clientY - d.y;
+      d.vy = 0.7 * (dy / Math.max(1, now - d.t)) + 0.3 * d.vy;
+      d.y = e.clientY;
+      d.t = now;
+      d.moved = true;
+      dragFlags.lastArmed = now;
+      wheelNudge(dy);
     },
-    onPointerUp: () => finish(true),
-    onPointerCancel: () => finish(false),
-    // Once armed, the finger owns the box: no page scroll, no long-press menu.
+    onPointerUp: () => {
+      clearTimeout(timer.current);
+      const d = st.current;
+      st.current = null;
+      if (!d) return;
+      if (!d.armed) { setHeld(null); return; }
+      swallow.current = true;
+      dragFlags.lastArmed = Date.now();
+      wheelRelease(d.moved && Date.now() - d.t < 100 ? d.vy : 0);   // the wheel stays open to flick / Done
+    },
+    onPointerCancel: () => { clearTimeout(timer.current); const d = st.current; st.current = null; if (!d?.armed) setHeld(null); },
+    // Once the wheel is open the thumb owns it: no page scroll, no long-press menu.
     onTouchMove: e => { if (st.current?.armed && e.cancelable) e.preventDefault(); },
     onContextMenu: e => { if (st.current) e.preventDefault(); },
   };
@@ -117,7 +117,7 @@ function useHoldDrag({ value, min, max, step, px, enabled, onSet, onPreview, bub
     swallow.current = false;
     return true;
   };
-  return { drag, handlers, consumeClick };
+  return { held, handlers, consumeClick };
 }
 
 const NO_CALLOUT = 'touch-pan-y select-none [-webkit-touch-callout:none]';
@@ -137,30 +137,35 @@ function moved(v, v0) {
 // inputmode=none) so it takes part in focus order: Tab / Shift-Tab and the
 // iPhone keyboard's ‹ › land on it, and focusing it calls onTap (opens the
 // keypad on it).
-// `onPreview(abs | null)`: called as a drag moves (and with null when it
-// ends), so the owner can show what the change would do before it's written.
-// Draggable time. Tap → onTap. Hold (HOLD_MS), then drag sideways → 15-min
-// steps (right = later, clamped to min…max): the box fills accent, the
-// scrub bubble shows the time above the finger, and it's written on release
-// via onSet(abs). No fill at rest — a faint fill while pressed; set vs
+// `onPreview(abs | null)`: called as the wheel turns (and with null when it
+// closes) — returns the preview view model the wheel shows under it.
+// A time box. Tap → onTap. Hold (HOLD_MS) → the wheel: 15-min steps from
+// min to max, each row with `wheelSub(abs)` beside it (e.g. the hours it
+// makes); the box fills accent while it's open; Done writes it via
+// onSet(abs). No fill at rest — a faint fill while pressed; set vs
 // default shows as bright vs dim text (`tone` overrides that, e.g. Summary's
 // quiet times; a function gets `set` and returns the classes). The tap opens on click (not pointerup), so the click can't
 // land on the sheet it just opened. `data-drag` marks it for the sheet
 // swipe; clicks don't bubble (so a box inside a tappable row doesn't also
 // open the row).
-export function DragTime({ abs, min, max, onSet, onTap, set, bad, label, cls = CELL, tone, full = false, mins = false, kcell, active = false, preview = null, onPreview }) {
+export function DragTime({ abs, min, max, onSet, onTap, set, bad, label, cls = CELL, tone, full = false, mins = false, kcell, active = false, preview = null, onPreview, wheelSub }) {
   const input = useRef(null);                     // keypad cells: the focusable input
-  const { drag, handlers, consumeClick } = useHoldDrag({
-    value: abs, min, max, step: 0.25, px: PX_PER_STEP, enabled: abs != null && !bad, onSet, onPreview,
-    bubble: (v, v0) => ({ text: fmtTimeAbs(v), sub: moved(v, v0) }),
+  const { held, handlers, consumeClick } = useHoldWheel({
+    value: abs, enabled: abs != null && !bad, onSet, onPreview,
+    wheel: v0 => {
+      const values = [];
+      for (let a = min; a <= max + 1e-9; a += 0.25) values.push(Math.round(a * 4) / 4);
+      const index = values.reduce((b, v, i) => (Math.abs(v - v0) < Math.abs(values[b] - v0) ? i : b), 0);
+      return { values, index, title: label, text: v => fmtTimeAbs(v).replace(/([ap])$/, ' $1m'), sub: wheelSub, change: moved };
+    },
   });
-  const shown = drag?.armed ? drag.v : preview ?? abs;
+  const shown = preview ?? abs;
   const look = cx(cls, NO_CALLOUT,
-    drag?.armed ? LOOK_ARMED
+    held === 'open' ? LOOK_ARMED
       : active ? cx('bg-accent/12 font-semibold ring-2 ring-inset ring-accent', preview != null ? 'text-accent' : 'text-ink')
-      : cx(drag && 'bg-ink/10', bad ? 'font-semibold text-bad' : (typeof tone === 'function' ? tone(set) : tone) || (set ? 'font-semibold text-ink' : 'text-ink-2')));
+      : cx(held && 'bg-ink/10', bad ? 'font-semibold text-bad' : (typeof tone === 'function' ? tone(set) : tone) || (set ? 'font-semibold text-ink' : 'text-ink-2')));
   const body = bad && !active ? '?' : shown != null ? html`<${Clock} abs=${shown} full=${full} mins=${mins} />` : '—';
-  const aria = label + ' — tap to edit, hold and drag sideways to adjust';
+  const aria = label + ' — tap to edit, hold to pick from a wheel';
   if (!kcell) {
     return html`<button data-drag class=${look} ...${handlers}
       onClick=${e => { e.stopPropagation(); if (consumeClick()) return; onTap?.(); }}
@@ -181,20 +186,22 @@ export function DragTime({ abs, min, max, onSet, onTap, set, bad, label, cls = C
   </div>`;
 }
 
-// A dollar amount you can tap or hold-and-drag, like DragTime: $1 per
-// `px` (6px) sideways, the bubble shows the new amount and the change.
-// Summary's Total row uses it for the tips total (one pool). `shownCls`
-// styles the Money inside.
-export function DragAmount({ value, min = 0, max = 1e7, step = 1, px = 6, onSet, onPreview, onTap, cls = '', moneyCls = '', label = 'Amount' }) {
-  const { drag, handlers, consumeClick } = useHoldDrag({
-    value, min, max, step, px, enabled: value != null, onSet, onPreview,
-    bubble: (v, v0) => {
-      const d = v - v0;
-      return { text: '$' + v.toLocaleString('en-US'), sub: d ? (d > 0 ? '+$' : '−$') + Math.abs(d).toLocaleString('en-US') : 'no change' };
+// A dollar amount you can tap or hold, like DragTime: the hold opens the
+// wheel in $1 steps ($300 either way, never under `min`), each row with its
+// change. Summary's Total row uses it for the tips total (one pool).
+const signedMoney = d => (d > 0 ? '+$' : '−$') + Math.abs(d).toLocaleString('en-US');
+export function DragAmount({ value, min = 0, max = 1e7, onSet, onPreview, onTap, cls = '', moneyCls = '', label = 'Amount' }) {
+  const { held, handlers, consumeClick } = useHoldWheel({
+    value, enabled: value != null, onSet, onPreview,
+    wheel: v0 => {
+      const lo = Math.max(min, v0 - 300), hi = Math.min(max, v0 + 300);
+      const values = [];
+      for (let v = lo; v <= hi; v++) values.push(v);
+      return { values, index: v0 - lo, title: label, text: v => '$' + v.toLocaleString('en-US'),
+        sub: v => (v === v0 ? '' : signedMoney(v - v0)), change: v => signedMoney(v - v0) };
     },
   });
-  const v = drag?.armed ? drag.v : value;
-  return html`<button data-drag class=${cx('rounded-lg px-1.5 py-1 transition', NO_CALLOUT, drag?.armed ? LOOK_ARMED : drag ? 'bg-ink/10' : '', cls)}
+  return html`<button data-drag class=${cx('rounded-lg px-1.5 py-1 transition', NO_CALLOUT, held === 'open' ? LOOK_ARMED : held ? 'bg-ink/10' : '', cls)}
     ...${handlers} onClick=${e => { e.stopPropagation(); if (consumeClick()) return; onTap?.(); }}
-    aria-label=${label + ' — tap to edit, hold and drag sideways to adjust'}><${Money} value=${v} class=${cx(moneyCls, drag?.armed && '!text-on-accent')} /></button>`;
+    aria-label=${label + ' — tap to edit, hold to pick from a wheel'}><${Money} value=${value} class=${cx(moneyCls, held === 'open' && '!text-on-accent')} /></button>`;
 }

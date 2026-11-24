@@ -1,5 +1,5 @@
 // KeyTime — a time cell outside the Staff table (pool windows, shift times):
-// tap → the time keypad, drag sideways → 15-min steps. The value is stored
+// tap → the time keypad, hold → the wheel picker (15-min steps). The value is stored
 // as the decimal reading typed ('5', '10.5'); `toAbs` places a reading on the
 // shift's axis for display, `fromAbs` turns a dragged time back into a raw.
 

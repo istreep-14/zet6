@@ -248,7 +248,7 @@ function PoolCard({ pool, vm }) {
       ${adjusting && html`<${FormRow}><${Adjust} key=${pool.id} pool=${pool} /><//>`}
       ${showChips && html`<${SharedBy} pool=${pool} />`}
       ${pool.includeSupport && html`<${SupportBox} pool=${pool} vm=${vm} vmPool=${vmPool} />`}
-      ${!single && html`<${FormRow} label="Window" aside="tap a time to type it, hold and drag to nudge">
+      ${!single && html`<${FormRow} label="Window" aside="tap a time to type it, hold for the wheel">
           ${pool.kind === 'party' && !pool.window.start.trim() && !pool.window.end.trim()
             && html`<span class="t-small text-warn">Set when the party started and ended — only hours inside it share its tips.</span>`}
           <${WindowEdge} vm=${vm} pool=${pool} vmPool=${vmPool} which="start" />
