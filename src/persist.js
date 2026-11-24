@@ -28,7 +28,7 @@ export function validateV4(state) {
   state.staff.forEach(p => {
     if (!isPlainObject(p)) throw new Error('staff entries must be objects');
     if (typeof p.id !== 'string') throw new Error('staff id must be a string');
-    ['name', 'in', 'out'].forEach(k => assertString(p[k], 'staff ' + k));
+    ['name', 'in', 'out', 'brk', 'brkAt'].forEach(k => assertString(p[k], 'staff ' + k));
     if (!ROLES.includes(p.role)) throw new Error('staff role is invalid');
     if (p.closerOverride != null && typeof p.closerOverride !== 'boolean') {
       throw new Error('closerOverride must be a boolean');

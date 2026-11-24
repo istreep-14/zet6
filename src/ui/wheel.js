@@ -115,8 +115,9 @@ function Wheel({ values, index, title, text, onChange, onDone, onCancel, anchor 
       },
     };
     const key = e => {
-      if (e.key === 'Escape') finish(false);
-      else if (e.key === 'Enter') finish(true);
+      // (preventDefault: Enter on the focused box would click it open again)
+      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); finish(true); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); settleTo(cur.current - 1); }
       else if (e.key === 'ArrowDown') { e.preventDefault(); settleTo(cur.current + 1); }
     };
@@ -151,6 +152,14 @@ function Wheel({ values, index, title, text, onChange, onDone, onCancel, anchor 
   };
   const btn = 'wheel-btn absolute grid size-8 place-items-center rounded-full transition active:scale-90';
   const btnTop = 2 * H + (H - 2 * rem()) / 2 + 'px';
+  // ✕ left of the band, ✓ right of it — both on one side when the box sits
+  // at a screen edge (no room for a button past it).
+  const r0 = anchor?.getBoundingClientRect?.();
+  const need = 2.75 * rem() + 8;
+  const left0 = r0 ? r0.left + r0.width / 2 - W / 2 : need;
+  const side = left0 + W + need > window.innerWidth ? 'left' : left0 < need ? 'right' : 'split';
+  const xPos = side === 'left' ? ['right-full mr-[2.875rem]', 'right-full mr-1.5']
+    : side === 'right' ? ['left-full ml-1.5', 'left-full ml-[2.875rem]'] : ['right-full mr-1.5', 'left-full ml-1.5'];
   return html`<div ref=${box} class="wheel" role="dialog" aria-label=${title} style=${{ width: W + 'px', height: ROWS * H + 'px' }}>
     <div class="wheel-band" style=${{ top: 2 * H + 'px', height: H + 'px' }}></div>
     <div ref=${list} class="wheel-list" onScroll=${onScroll} onWheel=${wheel} style=${{ height: ROWS * H + 'px' }}>
@@ -162,7 +171,7 @@ function Wheel({ values, index, title, text, onChange, onDone, onCancel, anchor 
       })}
       <div style=${{ height: 2 * H + 'px' }}></div>
     </div>
-    <button class=${cx(btn, 'right-full mr-1.5 text-ink-2')} style=${{ top: btnTop }} onClick=${() => finish(false)} aria-label="Cancel"><${Icon} name="x" class="size-4" /></button>
-    <button class=${cx(btn, 'left-full ml-1.5 text-accent')} style=${{ top: btnTop }} onClick=${() => finish(true)} aria-label="Done"><${Icon} name="check" class="size-4" /></button>
+    <button class=${cx(btn, xPos[0], 'text-ink-2')} style=${{ top: btnTop }} onClick=${() => finish(false)} aria-label="Cancel"><${Icon} name="x" class="size-4" /></button>
+    <button class=${cx(btn, xPos[1], 'text-accent')} style=${{ top: btnTop }} onClick=${() => finish(true)} aria-label="Done"><${Icon} name="check" class="size-4" /></button>
   </div>`;
 }

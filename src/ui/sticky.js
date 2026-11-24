@@ -1,6 +1,6 @@
 // Sticky table headers. A table's header row carries THEAD (pkit.js) and is
 // preceded by a zero-height <Sentinel />; it sticks at the top of its
-// scroller (--thead-top on .panel / .pg-scroll in app.css) and gets
+// scroller (--thead-top on .panel in app.css) and gets
 // `data-stuck` while stuck, which the header uses to shrink
 // (`data-[stuck]:h-7`, `group-data-[stuck]:hidden` on its extra lines).
 //
@@ -29,14 +29,14 @@ function update() {
 }
 
 // After every render: the stuck state. Binds the scroll listeners on first
-// call — Summary's scroller and each page in the pages drawer (.pg-scroll).
+// call — the pages' scroller.
 export function refreshSticky() {
   const sc = document.getElementById(SCROLLER);
   if (!sc) return;
   if (!bound) {
     bound = true;
     const on = () => { if (!raf) raf = requestAnimationFrame(update); };
-    [sc, ...document.querySelectorAll('.pg-scroll')].forEach(el => el.addEventListener('scroll', on, { passive: true }));
+    sc.addEventListener('scroll', on, { passive: true });
   }
   update();
 }

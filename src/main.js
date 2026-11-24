@@ -11,9 +11,9 @@ import { countedValue } from './util.js';
 import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL } from './shifts.js';
 import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
 import { switchTab, updateTabIndicators, normalizeTab } from './render/tabs.js';
-import { initPages, openHub, closeHub, pagesOpen } from './ui/pages.js';
-import { renderStaff, openStaffEditor, openTimeEditor, openRosterSheet, rosterSelected, rosterAdded } from './render/staff.js';
-import { loadRoster, rememberName, forgetName, getRoster } from './roster.js';
+import { initPages, openHub, closeHub, hubOpen } from './ui/pages.js';
+import { renderStaff, openStaffEditor } from './render/staff.js';
+import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderTips } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown, openPayoutSheet } from './render/payout.js';
 import { refreshSticky } from './ui/sticky.js';
@@ -109,7 +109,7 @@ function clearChangesLater() {
 // Review: a drag or keypad edit is written at once, then waits for a word —
 // the HUD shows what it moved with Undo (put the whole state back as it was
 // just before) and Apply (keep it; the marks go). Its marks stay until then.
-let review = null, pendingReview = null, reviewN = 0;
+let review = null, pendingReview = null, reviewN = 0, bulkUndo = null;
 const dataKey = s => JSON.stringify({ ...s, ui: null });
 function withReview(label, write) {
   pendingReview = { label, before: structuredClone(store.getState()), base: snapOf(lastVm) };
@@ -150,6 +150,7 @@ function preview(apply, focus = null) {
     if (!previewing) return;
     previewing = false;
     renderSummary(lastVm, sessionName());
+    renderStaff(lastVm);
     updateTabIndicators(lastVm);
     return;
   }
@@ -162,6 +163,7 @@ function preview(apply, focus = null) {
   pv.preview = { base, focus };
   previewing = true;
   renderSummary(pv, sessionName());
+  renderStaff(pv, { preview: true });
   updateTabIndicators(pv);
   return pv;                                     // the wheel shows its figures
 }
@@ -242,17 +244,15 @@ const rolesOn = () => store.getState().settings.allRoles;
 const fromPanel = fn => (...a) => { closePanels(); fn(...a); };
 
 window.App = {
-  // tabs
-  // Summary closes the pages drawer; Staff / Tips / Payout open it there.
+  // pages: Summary · Staff · Tips · Payout (opts.dir: the side a swiped-to
+  // page slides in from)
   tab(name, opts = {}) {
     closeHub();
     switchTab(name, opts);
     store.setActiveTab(name);
   },
 
-  // HUD: from Staff / Tips → Summary; from Summary → Payout (the bills).
-  hudTap() { App.tab(store.getState().ui.activeTab === 'summary' ? 'payout' : 'summary'); },
-  // The hub (pull down at the top of Summary): every page and tool.
+  // The hub (pull down at the top of a page): every page and tool.
   hub(on = true) { if (on) openHub(); else closeHub(); },
 
   // sheets
@@ -301,19 +301,53 @@ window.App = {
     }, { immediate: true });
     rememberName(n, r);
   },
-  editStaff: id => openStaffEditor(id),
-  openRoster: openRosterSheet,
-  // Each pick fills a blank row of their role, or gets a new row.
-  rosterAddSelected() {
-    const picks = rosterSelected();
-    if (!picks.length) return;
-    picks.forEach(p => App.addPerson(p.name, p.role, p.in));
-    // Keep the sheet open while saved names are left, for the next start time.
-    const onShift = new Set(store.getState().staff.map(p => p.name.trim().toLowerCase()));
-    if (getRoster().some(r => !onShift.has(r.name.toLowerCase()))) rosterAdded(picks);
-    else closeSheet('sheet-roster');
+  // Several at once, in order ([{ name, role }] — Staff's Add names). Anyone
+  // already on shift is skipped (and said so).
+  addPeople(list) {
+    const skipped = [];
+    store.mutate(st => {
+      const on = new Set(st.staff.map(p => p.name.trim().toLowerCase()).filter(Boolean));
+      list.forEach(({ name, role }) => {
+        const n = String(name || '').trim();
+        if (!n) return;
+        if (on.has(n.toLowerCase())) { skipped.push(n); return; }
+        on.add(n.toLowerCase());
+        const r = rolesOn() && store.ROLES.includes(role) ? role : 'bartender';
+        const blank = st.staff.find(p => !p.name.trim() && p.role === r);
+        if (blank) blank.name = n;
+        else st.staff.push({ ...store.newStaff(r), name: n });
+        rememberName(n, r);
+      });
+    }, { immediate: true });
+    if (skipped.length) toast('Already on shift: ' + skipped.join(', '));
   },
-  editTime: (id, field) => openTimeEditor(id, field),
+  editStaff: id => openStaffEditor(id),
+  // Staff's bulk bar: set fields on several people in one go
+  // ({ id: { field: value } }), and put the last bulk action back.
+  setStaffFields(map) {
+    store.mutate(s => {
+      Object.entries(map).forEach(([id, f]) => {
+        const p = s.staff.find(x => x.id === id);
+        if (p) Object.assign(p, f);
+      });
+    }, { immediate: true });
+  },
+  bulk(label, run) {
+    const before = structuredClone(store.getState());
+    run();
+    bulkUndo = { label, before, after: dataKey(store.getState()) };
+  },
+  // Only while nothing else has changed since (else it would undo that too).
+  bulkUndo() {
+    const u = bulkUndo;
+    bulkUndo = null;
+    if (!u || dataKey(store.getState()) !== u.after) return false;
+    resetChanges();
+    store.replaceState(u.before);
+    render(store.getState());
+    toast('Undone');
+    return true;
+  },
   // Preview an In / Out (or the default open / close) before it's written —
   // raw = the string it would store, null = end the preview.
   previewStaff: (id, field, raw) => preview(raw == null ? null : s => {
@@ -367,10 +401,13 @@ window.App = {
   supportDefault: value => store.setSupportDefault(value.trim()),
 
   // pools
-  // Several pools: the Tips page shows one pool at a time (swipe between them).
   selectPool: id => store.mutate(s => { s.ui.selectedPool = id; }, { immediate: true }),
   addPool() { const id = store.addPool(); App.selectPool(id); App.tab('tips'); },
-  openPool(id) { App.selectPool(id); App.tab('tips'); },
+  openPool(id) {
+    App.selectPool(id);
+    App.tab('tips');
+    requestAnimationFrame(() => document.querySelector(`[data-pid="${id}"]`)?.scrollIntoView({ block: 'start' }));
+  },
   openPoolSummary: id => openPoolSummary(id),
   removePool: store.removePool,
   poolRole: store.togglePoolRole,
@@ -386,7 +423,6 @@ window.App = {
     const lost = cashLostBySwitch(st.pools, type, cashOf);
     const ask = `Switch to a ${SHIFT_LABEL[type].toLowerCase()} shift? The $${lost} entered in the pools that go away will be cleared.`;
     if (lost > 0 && !window.confirm(ask)) return;
-    closeSheet('sheet-pool');
     store.mutate(s => {
       s.meta.shiftType = type;
       const t = timesFor(type, s.settings.shiftTimes);
@@ -407,7 +443,8 @@ window.App = {
       s.pools.push(p);
       s.settings.multiPool = true;
     }, { immediate: true });
-    openPoolSheet(id);
+    App.tab('tips');
+    requestAnimationFrame(() => document.querySelector(`[data-pid="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
   },
   poolBill: (id, denom, value) => store.updatePool(id, p => { p.cash.billCounts[denom] = value; }),
   poolNet: (id, value) => store.updatePool(id, p => { p.cash.netTotal = value; }),
@@ -653,15 +690,16 @@ render(state);
 // Side panels: drag in from either screen edge, drag back to close.
 initPanelGestures({
   canOpen: () => !document.body.classList.contains('keyboard-open')
-    && !document.querySelector('.sheet-backdrop.open') && !pagesOpen(),
+    && !document.querySelector('.sheet-backdrop.open'),
 });
 
-// The pages drawer and the hub (ui/pages.js): a swipe that moves the drawer
-// to another page, closes it, or raises it from the HUD keeps state in step.
+// Page swipes and the hub (ui/pages.js): a swipe to another page goes
+// through App.tab; past the first / last page it opens that side's panel.
 initPages({
-  onChange: name => App.tab(name),
-  canPull: () => !pagesOpen() && !document.querySelector('.sheet-backdrop.open')
-    && !document.documentElement.classList.contains('panel-open') && !document.body.classList.contains('keyboard-open'),
+  go: (name, dir) => App.tab(name, { dir }),
+  ends: side => openPanel(side),
+  can: () => !hubOpen() && !document.querySelector('.sheet-backdrop.open')
+    && !document.documentElement.classList.contains('panel-open') && !document.documentElement.classList.contains('wheel-open'),
 });
 
 // Reveal once Tailwind has styled the page (it compiles in the browser): a

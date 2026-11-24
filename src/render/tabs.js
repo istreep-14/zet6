@@ -1,23 +1,22 @@
-// Navigation chrome: which page shows (Summary, or a page in the drawer),
-// the drawer's head (page names with their badges), the hub's tiles, and
-// the floating live HUD.
+// Navigation chrome: which page shows, the header's page dots (with the
+// pages' badges), the hub's tiles, and the floating live HUD.
 //
-// Summary is home — the page under everything, where sessions open. Staff ·
-// Tips · Payout are the pages drawer (ui/pages.js). The HUD is how you get
-// around: Tips → the Tips page, Hours → Staff, Rate → back to Summary, Bills
-// → Payout; two small pills on it (the close time, the chump) open their
-// tools; swipe up on it for the drawer; pull down on Summary for the hub.
+// Four pages side by side — Summary (home) · Staff · Tips · Payout — a
+// sideways swipe steps between them (ui/pages.js). The HUD gets you around
+// too: Tips → the Tips page, Hours → Staff, Rate → Summary, Bills → Payout;
+// two small pills on it (the close time, the chump) open their tools; pull
+// down at the top of a page for the hub.
 
 import { poolValue, fmtHrs, fmtMoney, fmtMoneyShort } from '../util.js';
 import { html, render } from '../ui/preact.js';
 import { cx, Icon, Figure, Clock } from '../ui/pkit.js';
 import { figDelta, payDelta, isPreview, movedCount } from '../ui/changes.js';
-import { PAGES, openPages, closePages } from '../ui/pages.js';
+import { showPage } from '../ui/pages.js';
 
 const $ = id => document.getElementById(id);
 
 export const TAB_ORDER = ['summary', 'staff', 'tips', 'payout'];
-const TITLES = { staff: 'Staff', tips: 'Tips', payout: 'Payout' };
+const TITLES = { summary: 'Summary', staff: 'Staff', tips: 'Tips', payout: 'Payout' };
 
 // Older snapshots stored the five-tab names.
 export function normalizeTab(name) {
@@ -25,10 +24,10 @@ export function normalizeTab(name) {
   return legacy[name] || (TAB_ORDER.includes(name) ? name : 'summary');
 }
 
-// Summary closes the drawer; the others open it at that page.
-export function switchTab(name) {
-  if (name === 'summary' || !PAGES.includes(name)) closePages();
-  else openPages(name);
+// Show a page (opts.dir: the side it slides in from, after a swipe).
+export function switchTab(name, opts = {}) {
+  showPage(name, opts);
+  document.documentElement.dataset.page = name;
 }
 
 // True when the computed distribution can't actually pay everyone out.
@@ -52,31 +51,32 @@ export function updateTabIndicators(vm, sessionName = '') {
   };
   sessionName = sessionName || last?.sessionName || '';
   last = { vm, badges, sessionName };
-  renderHead(vm, badges);
+  renderDots(vm, badges);
   renderHub(vm, badges, sessionName);
   updateHud(vm, named, total, short);
 }
 export const refreshChrome = () => { if (last) updateTabIndicators(last.vm, last.sessionName); };
 
-// ── The drawer's head: a grab bar, then the three page names (tap one;
-//    swipe the pages and the indicator follows), a close chevron. ────────────
-const BADGE = { ok: 'bg-accent text-on-accent', warn: 'bg-bad text-white', '': 'bg-surface-2 text-ink-2' };
-function Head({ vm, badges }) {
-  const cur = vm.state.ui.activeTab;
-  return html`<div class="mx-auto mb-1 mt-2 h-[0.3125rem] w-10 rounded-full bg-ink/20"></div>
-    <div class="flex items-center gap-1 px-3 pb-1">
-      <div class="relative grid flex-1 grid-cols-3">
-        ${PAGES.map(p => html`<button key=${p} class=${cx('t-body relative flex h-11 items-center justify-center gap-1.5 font-semibold transition', p === cur ? 'text-ink' : 'text-ink-3')}
-          onClick=${() => App.tab(p)}>${TITLES[p]}
-          ${badges[p].text && html`<span class=${cx('rounded-full px-1.5 text-[0.6875rem] font-semibold leading-[1.0625rem]', BADGE[badges[p].tone])}>${badges[p].text}</span>`}</button>`)}
-        <span class="pages-ind pointer-events-none absolute bottom-0 left-0 flex h-0.5 w-1/3 justify-center"><span class="h-full w-10 rounded-full bg-accent"></span></span>
-      </div>
-      <button class="icon-btn !size-10 shrink-0 !bg-surface-2" onClick=${() => App.tab('summary')} aria-label="Close"><${Icon} name="chevD" class="size-5" /></button>
-    </div>`;
+// ── Page dots (header): the page you're on as a pill with its name, the
+//    others as dots (red when that page has a problem). Tap one to go. ──────
+function Dots({ vm, badges }) {
+  const at = TAB_ORDER.includes(vm.state.ui.activeTab) ? vm.state.ui.activeTab : 'summary';
+  return html`${TAB_ORDER.map(t => {
+    const on = t === at;
+    const warn = badges[t]?.tone === 'warn';
+    return html`<button key=${t} class="grid h-11 min-w-6 place-items-center px-0.5" onClick=${() => App.tab(t)}
+      aria-label=${TITLES[t]} aria-current=${on ? 'page' : undefined}>
+      ${on
+        ? html`<span class="t-small flex h-7 items-center gap-1.5 rounded-full bg-surface px-3 font-semibold text-ink">${TITLES[t]}
+            ${badges[t]?.text && html`<span class=${cx('rounded-full px-1.5 text-[0.6875rem] leading-4', BADGE[badges[t].tone])}>${badges[t].text}</span>`}</span>`
+        : html`<span class=${cx('size-2 rounded-full transition', warn ? 'bg-bad' : 'bg-ink/25')}></span>`}
+    </button>`;
+  })}`;
 }
-function renderHead(vm, badges) {
-  const el = $('pagesHead');
-  if (el) render(html`<${Head} vm=${vm} badges=${badges} />`, el);
+const BADGE = { ok: 'bg-accent text-on-accent', warn: 'bg-bad text-white', '': 'bg-surface-2 text-ink-2' };
+function renderDots(vm, badges) {
+  const el = $('pageDots');
+  if (el) render(html`<${Dots} vm=${vm} badges=${badges} />`, el);
 }
 
 // ── The hub: every page and tool as a tile, with its figure. ───────────────

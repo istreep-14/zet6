@@ -1,33 +1,42 @@
-// Staff tab (Preact):
-//   note line (count · close · closers, warnings)
-//   → one table card per role (roles on) or one "On shift" card:
-//   → Quick add card → saved-people picker sheet (multi-select, Select all,
-//     Edit forgets, "Add N people")
-//     Name · In · Out · Hrs · Close, every cell a control (name → person
-//     editor, time pill → tap for the quick time sheet or hold for the wheel picker in
-//     15-min steps, circle → forced closer), a "+ Add bartender" row (new
-//     person, editor opens with the name focused), then a "Defaults 5p – 2a ›"
-//     footer.
+// Staff page (Preact) — who worked, and when, as a card list:
+//   note line (count · closers, warnings)
+//   → toolbar: Edit times · Select, and the shift's Close time (closers, and
+//     anyone without an Out of their own, end then — tap it for the wheel)
+//   → one card per person (a group per role when roles are on): number tile ·
+//     name (with a Closer mark) over their break, In → Out and hours on the
+//     right, and under it a timeline of their shift against the whole night
+//     (hour ticks, the close as a red line, a placed break as a gap)
+//   → Add names: type a name and Return (or paste a list — one per line or
+//     comma-separated); they go in in that order. Saved names not on shift
+//     are chips — one tap adds.
+// Modes (the toolbar):
+//   view    tap a card → that person's drawer (name, role, In / Out, break,
+//           closer, remove)
+//   times   the times on each card become boxes — tap one for the wheel (hold
+//           works too), Undo · Apply in the HUD after
+//   select  tap cards to pick people; the bulk bar docks at the bottom (in
+//           place of the HUD): In / Out hour chips set the picked people's
+//           times — "Each in turn" gives the next picked person the chip you
+//           tap (4, 5, 6, 6 down the list), "Same for all" sets everyone —
+//           plus :30, Closer, Remove, Undo
 //
 // Times are written as the same raw strings typing would store, '' when they
 // equal the default (resolve.js does the rest).
 
 import { ROLES } from '../store.js';
-import { fmtHrs, fmtMoney, hasMinutes, hrsDecimals, hrsText } from '../util.js';
-import { parseTime, fmtTimeAbs, fmtClockShort, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
+import { fmtHrs, fmtMoney } from '../util.js';
+import { parseTime, fmtTimeAbs, fmtClockShort, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, absToEdgeRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { getRoster } from '../roster.js';
-import { html, render, useRef, useLayoutEffect } from '../ui/preact.js';
-import { cx, Clock, Icon, Card, Button, Alert, Seg, SwitchRow, List, Item, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_PLURAL, TABLE_HEAD, THEAD, Sentinel, zebra } from '../ui/pkit.js';
-import { openSheet, closeSheet, isOpen, sheetBody, sheetFoot, setSheetTitle, onSheetClose } from '../ui/sheet.js';
-import { DragTime, TIME_TEXT, ARROW_BEFORE } from '../ui/dragtime.js';
-import { SwipeRow } from '../ui/swipe.js';
-import { openKeypad, closeKeypad, activeKey, bufferAbs, focusCell } from '../ui/keypad.js';
+import { html, render } from '../ui/preact.js';
+import { cx, Clock, Icon, Button, Alert, Seg, SwitchRow, List, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_TINT, ROLE_PLURAL } from '../ui/pkit.js';
+import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
+import { DragTime } from '../ui/dragtime.js';
 
 export { DragTime };
 
 const $ = id => document.getElementById(id);
-const ROLE_ONE = { bartender: 'bartender', server: 'server', support: 'support' };
 const ROLE_SHORT = { bartender: 'Bar', server: 'Server', support: 'Support' };
+const named = p => !!p.name.trim();
 
 // ── Times ────────────────────────────────────────────────────────────────────
 
@@ -36,7 +45,8 @@ function roleDefaults(state, role) {
   return { in: r.in || state.defaults.global.in || '', out: r.out || state.defaults.global.out || '' };
 }
 
-// In / Out on the absolute axis for any row (named or not), plus flags.
+// In / Out on the absolute axis for a person, their worked hours (less the
+// break) and flags.
 function times(state, person, vm) {
   const def = roleDefaults(state, person.role);
   const res = vm?.resolved?.staff.find(p => p.id === person.id);
@@ -45,9 +55,11 @@ function times(state, person, vm) {
   const inAbs = res?.inAbs ?? (inP.value != null ? inAbsOf(inP) : null);
   const outAbs = res?.outAbs ?? (outP.value != null && inAbs != null ? afterAbsOf(outP, inAbs) : null);
   const bad = !inP.valid || !outP.valid;
-  const hrs = inAbs != null && outAbs != null && outAbs > inAbs && outAbs - inAbs <= 12 ? outAbs - inAbs : null;
+  const span = inAbs != null && outAbs != null && outAbs > inAbs && outAbs - inAbs <= 12 ? outAbs - inAbs : null;
+  const brk = res?.brkLen ?? 0;
   return {
-    def, inAbs, outAbs, hrs, bad,
+    def, inAbs, outAbs, bad, span, brk, brkStart: res?.brkStart ?? null,
+    hrs: span != null ? Math.max(0, span - brk) : null,
     inSet: !!person.in.trim(), outSet: !!person.out.trim(),
     closer: !!res?.closer, forced: !!person.closerOverride,
   };
@@ -66,25 +78,75 @@ function outRaw(abs, def, inAbs) {
   if (d.value != null && inAbs != null && afterAbsOf(d, inAbs) === abs) return '';
   return absToOutRaw(abs, inAbs);
 }
-
-function defaultsLabel(def) {
-  const i = parseTime(def.in), o = parseTime(def.out);
-  const inAbs = i.value != null ? inAbsOf(i) : null;
-  return (inAbs != null ? fmtClockShort(inAbs) : '—') + ' – ' + (o.value != null ? fmtClockShort(afterAbsOf(o, inAbs ?? 17)) : '—');
+function rawAt(vm, p, field, abs) {
+  const def = roleDefaults(vm.state, p.role);
+  return field === 'in' ? inRaw(abs, def) : outRaw(abs, def, times(vm.state, p, vm).inAbs);
 }
+
+// "30m" · "1h" · "1h 15m"
+export function fmtBreak(h) {
+  const m = Math.round(h * 60), hh = Math.floor(m / 60), mm = m % 60;
+  return (hh ? hh + 'h' : '') + (hh && mm ? ' ' : '') + (mm ? mm + 'm' : '');
+}
+
+// Everyone in page order: by role (bartenders → servers → support) with roles
+// on, else as entered. Only named people.
+function groups(state) {
+  const people = state.staff.filter(named);
+  if (!state.settings.allRoles) return [{ role: null, people }];
+  return ROLES.map(role => ({ role, people: people.filter(p => p.role === role) })).filter(g => g.people.length);
+}
+const ordered = state => groups(state).flatMap(g => g.people);
+
+// The night on one axis: from the earliest In (on the hour) to the later of
+// the close and the last Out.
+function nightSpan(vm) {
+  const rs = vm.resolved?.staff || [];
+  const ins = rs.map(p => p.inAbs).filter(v => v != null);
+  const outs = rs.map(p => p.outAbs).filter(v => v != null);
+  const close = vm.resolved?.closeAbs ?? null;
+  if (!ins.length) return null;
+  const a = Math.floor(Math.min(...ins));
+  const b = Math.ceil(Math.max(...outs, close ?? -Infinity, a + 1));
+  return b > a && b - a <= 16 ? { a, b, close } : null;
+}
+
+const person = id => lastVm?.state.staff.find(x => x.id === id);
+const rerender = () => { if (lastVm) renderStaff(lastVm); };
+
+// ── Modes ────────────────────────────────────────────────────────────────────
+
+let mode = 'view';                // 'view' | 'times' | 'select'
+let sel = new Set();              // picked ids (select mode)
+let how = 'turn';                 // bulk: 'turn' (each in turn) | 'all'
+let turn = 0;                     // each in turn: index into the picked people
+let half = false;                 // bulk chips at :30
+let undoLabel = '';               // the last bulk action, while Undo can put it back
+
+function setMode(m) {
+  mode = mode === m ? 'view' : m;
+  if (mode !== 'select') { sel = new Set(); turn = 0; undoLabel = ''; }
+  document.documentElement.classList.toggle('bulk-on', mode === 'select');
+  rerender();
+}
+export const staffMode = () => mode;
+export function exitStaffModes() { if (mode !== 'view') setMode(mode); }
+
+const picked = state => ordered(state).filter(p => sel.has(p.id));
 
 // ── Note line ────────────────────────────────────────────────────────────────
 
 function Note({ vm }) {
-  const named = vm.state.staff.filter(p => p.name.trim());
-  if (!named.length) return null;
-  const parts = [named.length + ' on shift'];
-  const closeAbs = vm.resolved.closeAbs;
-  if (closeAbs !== null) parts.push('close ' + fmtTimeAbs(closeAbs));
+  const people = vm.state.staff.filter(named);
+  if (!people.length) return null;
+  const parts = [people.length + ' on shift'];
   const closers = vm.resolved.staff.filter(p => p.closer).length;
   if (closers) parts.push(closers + (closers === 1 ? ' closer' : ' closers'));
+  const hrs = vm.resolved.staff.filter(p => p.role !== 'support').reduce((t, p) => t + p.hours, 0);
+  if (hrs > 0) parts.push(fmtHrs(hrs) + ' hours');
   const warnings = [];
   if (vm.inputError && vm.blockedTab === 'staff') warnings.push(vm.blocked);
+  const closeAbs = vm.resolved.closeAbs;
   if (closeAbs !== null) {
     vm.resolved.staff.forEach(p => {
       if (!p.usedDefaults.out && p.outAbs !== null && p.outAbs > closeAbs + 0.001) warnings.push(p.name + ' is out after the close time');
@@ -94,412 +156,342 @@ function Note({ vm }) {
     ${warnings.map(w => html`<${Alert} key=${w} tone="warn">${w}<//>`)}`;
 }
 
-// ── Quick add: entry card + saved-people picker sheet ──────────────────────
-// The card shows who's saved and not on shift; it opens a grid of person
-// cards to multi-select (Select all, Edit forgets), then "Add N people".
-// New names are added from each table's "+ Add …" row.
+// ── Toolbar: modes + the close time ─────────────────────────────────────────
 
-const onShiftSet = state => new Set(state.staff.map(p => p.name.trim().toLowerCase()).filter(Boolean));
-
-function QuickAdd({ vm }) {
-  const all = getRoster();
-  if (!all.length) return html`<p class="t-small px-4 text-ink-3">Names you add are saved for quick adding next shift.</p>`;
-  const onShift = onShiftSet(vm.state);
-  const avail = all.filter(r => !onShift.has(r.name.toLowerCase()));
-  const show = (avail.length ? avail : all).slice(0, 3);
-  return html`<${List}><${Item} onClick=${() => App.openRoster()} title="Quick add"
-    lead=${html`<span class="grid size-10 shrink-0 place-items-center rounded-[0.625rem] bg-accent/12 text-accent"><${Icon} name="plus" class="size-5" /></span>`}
-    sub=${avail.length ? show.map(r => r.name).join(', ') + (avail.length > show.length ? ` +${avail.length - show.length}` : '') : 'Everyone saved is on this shift'} /><//>`;
+function ToolBtn({ on, icon, label, onClick }) {
+  return html`<button class=${cx('t-small inline-flex h-[var(--tap)] items-center gap-1.5 rounded-full px-3.5 font-semibold transition active:scale-95',
+      on ? 'bg-accent text-on-accent' : 'bg-surface text-ink')} aria-pressed=${String(!!on)} onClick=${onClick}>
+    <${Icon} name=${on ? 'check' : icon} class="size-4" />${label}</button>`;
 }
 
-let rosterSel = new Set();      // lowercased names picked in the sheet
-let rosterEditing = false;
-let rosterStart = null;         // abs In for the next add; null = the default
-let rosterNote = '';            // "Added Maya, Leo · 4:00p"
-onSheetClose('sheet-roster', () => { rosterSel = new Set(); rosterEditing = false; rosterStart = null; rosterNote = ''; });
-
-export function openRosterSheet() {
-  rosterSel = new Set();
-  rosterEditing = false;
-  rosterStart = null;
-  rosterNote = '';
-  openSheet('sheet-roster');
-  if (lastVm) renderRoster(lastVm);
-}
-const rerenderRoster = () => { if (lastVm) renderRoster(lastVm); };
-
-function RosterCard({ r, onShift, startOf }) {
-  const key = r.name.toLowerCase();
-  const on = onShift.has(key);
-  const sel = rosterSel.has(key);
-  const tap = () => {
-    if (rosterEditing) { App.forgetName(r.name); return; }
-    if (sel) rosterSel.delete(key); else rosterSel.add(key);
-    rerenderRoster();
-  };
-  const mark = rosterEditing ? 'bg-bad text-white' : sel ? 'bg-accent text-on-accent' : on ? 'bg-ink-3 text-surface' : 'bg-surface-2';
-  return html`<button class=${cx('relative flex min-h-[4.75rem] flex-col items-center justify-center gap-1 rounded-card px-2 py-2.5 transition active:scale-95',
-      sel ? 'bg-accent/12 ring-2 ring-inset ring-accent' : 'bg-surface', on && !rosterEditing && 'opacity-45')}
-    onClick=${tap} disabled=${on && !rosterEditing} aria-pressed=${String(sel)}>
-    <span class=${cx('absolute right-2 top-2 grid size-[1.375rem] place-items-center rounded-full text-[0.75rem] font-bold', mark)} aria-hidden="true">${rosterEditing ? '✕' : sel || on ? '✓' : ''}</span>
-    <span class="line-clamp-2 max-w-full px-4 t-body text-center font-medium leading-tight [overflow-wrap:anywhere]">${r.name}</span>
-    <span class=${cx('min-h-3.5 text-[0.75rem] leading-3.5', rosterEditing ? 'text-bad' : sel ? 'text-accent' : 'text-ink-3')}>${rosterEditing ? 'Remove' : on ? (startOf(key) != null ? 'On · ' + fmtClockShort(startOf(key)) : 'On shift') : sel ? 'Selected' : ''}</span>
-  </button>`;
-}
-
-function Roster({ vm }) {
-  const state = vm.state;
-  const all = getRoster();
-  if (!all.length) return html`<div class="px-4 py-6 text-center leading-relaxed text-ink-2">No saved names yet.<br />Names you add on the Staff tab show up here.</div>`;
-  const rolesOn = state.settings.allRoles;
-  const onShift = onShiftSet(state);
-  const avail = all.filter(r => !onShift.has(r.name.toLowerCase()));
-  const allPicked = avail.length > 0 && avail.every(r => rosterSel.has(r.name.toLowerCase()));
-  const groups = !rolesOn ? [{ role: null, people: all }]
-    : ROLES.map(role => ({ role, people: all.filter(r => r.role === role) })).filter(g => g.people.length);
-  const link = 't-body h-9 px-1 font-semibold text-accent disabled:text-ink-3';
-  const starts = new Map(vm.state.staff.filter(p => p.name.trim()).map(p => [p.name.trim().toLowerCase(), times(state, p, vm).inAbs]));
-  const startOf = k => starts.get(k) ?? null;
-  return html`<div class="flex min-h-9 items-center justify-between">
-      ${rosterEditing
-        ? html`<span class="t-small text-ink-3">Tap a name to forget it on this device</span>`
-        : html`<button class=${link} disabled=${!avail.length} onClick=${() => {
-            rosterSel = allPicked ? new Set() : new Set(avail.map(r => r.name.toLowerCase())); rerenderRoster();
-          }}>${allPicked ? 'Clear' : 'Select all'}</button>`}
-      <button class=${link} onClick=${() => { rosterEditing = !rosterEditing; rerenderRoster(); }}>${rosterEditing ? 'Done' : 'Edit'}</button>
-    </div>
-    ${groups.map(g => html`<div key=${g.role || 'all'} class="flex flex-col gap-2">
-      ${g.role && html`<div class="t-cap mt-1 flex items-center gap-2 px-1 text-ink-3"><span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}</div>`}
-      <div class="grid auto-rows-fr grid-cols-3 gap-2.5">${g.people.map(r => html`<${RosterCard} key=${r.name} r=${r} onShift=${onShift} startOf=${startOf} />`)}</div>
-    </div>`)}`;
-}
-
-// Footer: who starts when. Pick a start (Default or a half-hour around it),
-// then Add — repeat for the next group (2 at 4p, 2 at 5p, 1 at 6p …); the
-// sheet stays open while saved names are left.
-function RosterFoot({ vm }) {
-  const n = rosterSel.size;
-  if (rosterEditing) return html`<${Button} block onClick=${() => { rosterEditing = false; rerenderRoster(); }}>Done<//>`;
-  const gp = parseTime(vm.state.defaults.global.in);
-  const def = gp.value != null ? inAbsOf(gp) : 17;
-  const chips = [];
-  for (let v = def - 2; v <= def + 2.01; v += 0.5) if (v >= IN_MIN_ABS && v <= IN_MAX_ABS && Math.abs(v - def) > 0.01) chips.push(v);
-  const chip = (on, label, pick) => html`<button class=${cx('t-small h-8 shrink-0 rounded-full px-3 font-semibold tabular-nums transition active:scale-95',
-    on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2')} aria-pressed=${String(on)} onClick=${pick}>${label}</button>`;
-  const at = rosterStart == null ? '' : ' · ' + fmtClockShort(rosterStart);
-  return html`<div class="flex flex-col gap-2.5">
-    ${rosterNote && html`<div class="t-small text-center text-ink-3">${rosterNote}</div>`}
-    <div class="flex items-center gap-2">
-      <span class="t-cap shrink-0 text-ink-3">Start</span>
-      <div class="flex min-w-0 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        ${chip(rosterStart == null, 'Default ' + fmtClockShort(def), () => { rosterStart = null; rerenderRoster(); })}
-        ${chips.map(v => html`<span key=${v}>${chip(rosterStart != null && Math.abs(rosterStart - v) < 0.01, fmtClockShort(v), () => { rosterStart = v; rerenderRoster(); })}</span>`)}
-      </div>
-    </div>
-    <${Button} variant="primary" block disabled=${!n} onClick=${() => App.rosterAddSelected()}>
-      ${n ? `Add ${n} ${n === 1 ? 'person' : 'people'}${at}` : 'Select people to add'}<//>
-  </div>`;
-}
-
-// Picks as [{ name, role, in }] (roster role; `in` = the raw start typed for
-// the chosen Start, '' for the default), dropping anyone now on shift.
-export function rosterSelected() {
-  const inRaw = rosterStart == null ? '' : absToInRaw(rosterStart);
-  return getRoster().filter(r => rosterSel.has(r.name.toLowerCase())).map(r => ({ name: r.name, role: r.role, in: inRaw }));
-}
-
-// After adding: clear the picks, note who went in at what time.
-export function rosterAdded(picks) {
-  rosterNote = 'Added ' + picks.map(p => p.name).join(', ') + (rosterStart == null ? '' : ' · ' + fmtClockShort(rosterStart));
-  rosterSel = new Set();
-  rerenderRoster();
-}
-
-function renderRoster(vm) {
-  if (!isOpen('sheet-roster')) return;
-  const onShift = onShiftSet(vm.state);
-  const names = new Set(getRoster().map(r => r.name.toLowerCase()));
-  rosterSel = new Set([...rosterSel].filter(k => names.has(k) && !onShift.has(k)));
-  render(html`<${Roster} vm=${vm} />`, sheetBody('sheet-roster'));
-  render(html`<${RosterFoot} vm=${vm} />`, sheetFoot('sheet-roster'));
-}
-
-// ── People table (spreadsheet entry) ─────────────────────────────────────────
-// Name · In · Out · Hrs · Close (STAFF_ROW), every cell a control:
-//   Name   a real text field. While it's focused, saved names that aren't on
-//          shift (matching what's typed) show under the row — tap one to
-//          fill it. Return / a pick → this row's In.
-//   In/Out tap → the time keypad (ui/keypad.js): type 5, 530, 1045, 5:3 …
-//          Next → the next cell (In → Out → next row's name), ↓ / ↑ → the
-//          same column a row down / up. Drag sideways → 15-min steps.
-//          Set times bright, inherited defaults dim.
-//   Hrs    → person editor (role, closer, remove).
-//   Close  toggles a forced closer (solid red); auto closer = red tint.
-// Each section ends with one blank row ("Add name") — typing in it adds the
-// person and a new blank row appears (store.ensureBlankRows).
-// In · Out · Hrs: three equal columns with equal gaps (like Summary's),
-// each at least 2.75rem and growing with spare width; the name takes the rest.
-const STAFF_ROW = 'grid grid-cols-[minmax(0,1fr)_repeat(3,minmax(2.75rem,0.5fr))_2.75rem] items-center gap-x-3 px-3';
-
-// Sections in table order: one per role (roles on), else one "On shift".
-// rows = named people, then that section's blank row.
-function sections(state) {
-  const roles = state.settings.allRoles ? ROLES : [null];
-  return roles.map(r => {
-    const mine = r ? state.staff.filter(p => p.role === r) : state.staff;
-    const people = mine.filter(p => p.name.trim());
-    // A row being typed in stays where it is, even while its name is empty.
-    const shown = mine.filter(p => p.name.trim() || p.id === nameFocus);
-    const blank = mine.find(p => !p.name.trim() && p.id !== nameFocus && p.role === (r || 'bartender'));
-    return { role: r, title: r ? ROLE_PLURAL[r] : 'On shift', people, rows: blank ? [...shown, blank] : shown };
-  });
-}
-const flatRows = state => sections(state).flatMap(g => g.rows);
-
-// A typed reading (+ an explicit 'a' / 'p') → absolute time for this person
-// (In: that time, or the am/pm rule; Out: the next such time after their In)
-// and → the raw string to store.
-function absFor(vm, p, field, v, mer = null) {
-  const parsed = { value: v, mer };
-  if (field === 'in') return inAbsOf(parsed);
-  const t = times(vm.state, p, vm);
-  return afterAbsOf(parsed, t.inAbs ?? 17);
-}
-function rawAt(vm, p, field, abs) {
-  const def = roleDefaults(vm.state, p.role);
-  return field === 'in' ? inRaw(abs, def) : outRaw(abs, def, times(vm.state, p, vm).inAbs);
-}
-
-const person = id => lastVm?.state.staff.find(x => x.id === id);
-const rerender = () => { if (lastVm) renderStaff(lastVm); };
-
-// Open the keypad on a person's In / Out cell.
-export function openTimeCell(id, field) {
-  const p0 = person(id);
-  if (!p0) return false;
-  openKeypad({
-    key: id + ':' + field,
-    title: (p0.name.trim() || 'New row') + ' · ' + (field === 'in' ? 'In' : 'Out'),
-    current: () => {
-      const p = person(id), t = p && times(lastVm.state, p, lastVm);
-      return t ? (field === 'in' ? t.inAbs : t.outAbs) : null;
-    },
-    toAbs: (v, mer) => absFor(lastVm, person(id), field, v, mer),
-    commit: (v, mer) => {
-      const p = person(id);
-      const abs = absFor(lastVm, p, field, v, mer);
-      App.reviewed((p.name.trim() || 'New row') + ' · ' + (field === 'in' ? 'In ' : 'Out ') + fmtTimeAbs(abs),
-        () => App.staffField(id, field, rawAt(lastVm, p, field, abs), true));
-    },
-    onClear: () => App.staffField(id, field, '', true),
-    onMore: p0.name.trim() ? () => App.editStaff(id) : null,
-    nav: dir => moveFrom(id, field, dir),
-    // Each keystroke previews what the typed time would do (HUD, Summary);
-    // closing the keypad (buffer gone) ends the preview.
-    onChange: () => {
-      rerender();
-      const a = bufferAbs(), p = person(id);
-      App.previewStaff(id, field, a == null || !p ? null : rawAt(lastVm, p, field, a));
-    },
-  });
-  return true;
-}
-
-// Spreadsheet moves, by focusing the target cell (a time cell's focus opens
-// the keypad on it; a name takes the system keyboard). Next / Tab: Name → In
-// → Out → the next row's Name. Back / Shift-Tab: the reverse. ↓ / ↑: the
-// same column a row down / up.
-const COLS = ['name', 'in', 'out'];
-function moveFrom(id, field, dir) {
-  const rows = flatRows(lastVm.state);
-  const i = rows.findIndex(p => p.id === id);
-  const c = COLS.indexOf(field);
-  let r = i, col = c;
-  if (dir === 'next') { col = c + 1; if (col === COLS.length) { col = 0; r = i + 1; } }
-  else if (dir === 'prev') { col = c - 1; if (col < 0) { col = COLS.length - 1; r = i - 1; } }
-  else r = i + (dir === 'down' ? 1 : -1);
-  const n = rows[r];
-  if (!n) return false;
-  return focusCell(COLS[col] === 'name' ? 'name:' + n.id : n.id + ':' + COLS[col]);
-}
-
-// ── Name cell + saved-name suggestions ──
-let nameFocus = null;          // id of the row whose name field has focus
-
-function NameCell({ p }) {
-  return html`<input data-kcell=${'name:' + p.id} class=${cx('h-10 w-full min-w-0 rounded-lg bg-transparent px-1.5 text-[0.9375rem] font-medium text-ink outline-none transition placeholder:font-normal placeholder:text-ink-3 focus:bg-accent/12 focus:ring-2 focus:ring-inset focus:ring-accent')}
-    value=${p.name} placeholder="Add name" aria-label="Name"
-    autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="next"
-    onFocus=${() => { closeKeypad(); nameFocus = p.id; rerender(); }}
-    onBlur=${() => { if (nameFocus === p.id) { nameFocus = null; App.rememberStaff(p.id); rerender(); } }}
-    onInput=${e => App.staffField(p.id, 'name', e.target.value)}
-    onKeyDown=${e => {
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        App.staffField(p.id, 'name', e.target.value, true);
-        if (e.key === 'Tab' && e.shiftKey) moveFrom(p.id, 'name', 'prev');
-        else if (e.target.value.trim() || e.key === 'Tab') moveFrom(p.id, 'name', 'next');
-        else e.target.blur();
-      } else if (e.key === 'ArrowDown') { e.preventDefault(); moveFrom(p.id, 'name', 'down'); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); moveFrom(p.id, 'name', 'up'); }
-    }} />`;
-}
-
-// Saved names not on shift, best matches first (starts-with, then contains).
-function Suggestions({ vm, p }) {
-  const q = p.name.trim().toLowerCase();
-  const onShift = onShiftSet(vm.state);
-  const rolesOn = vm.state.settings.allRoles;
-  const pool = getRoster().filter(r => !onShift.has(r.name.toLowerCase()) || r.name.toLowerCase() === q);
-  const hits = pool
-    .filter(r => r.name.toLowerCase() !== q)
-    .map(r => ({ r, k: !q ? (rolesOn && r.role === p.role ? 0 : 1) : r.name.toLowerCase().startsWith(q) ? 0 : r.name.toLowerCase().includes(q) ? 1 : 9 }))
-    .filter(x => x.k < 9)
-    .sort((a, b) => a.k - b.k)
-    .slice(0, 16);
-  if (!hits.length) return null;
-  // A pick keeps the role it was saved with (roles on), like Quick add.
-  const pick = name => {
-    const saved = getRoster().find(r => r.name === name);
-    if (rolesOn && saved && saved.role !== p.role) App.staffField(p.id, 'role', saved.role, true);
-    App.staffField(p.id, 'name', name, true);
-    App.rememberStaff(p.id);
-    nameFocus = null;
-    focusCell(p.id + ':in');
-  };
-  return html`<div class="overflow-x-auto bg-accent/6 px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-kcell="suggest">
-    <div class="flex w-max gap-1.5">
-      ${hits.map(({ r }) => html`<button key=${r.name} type="button"
-        class="t-small inline-flex h-8 items-center gap-1.5 rounded-full bg-surface px-3 font-semibold text-ink shadow-[0_1px_0_rgb(0_0_0/.08)] active:scale-95"
-        onPointerDown=${e => e.preventDefault()} onClick=${() => pick(r.name)}>
-        ${rolesOn && html`<span class=${cx('size-1.5 rounded-full', ROLE_DOT[r.role])}></span>`}${r.name}</button>`)}
-    </div>
-  </div>`;
-}
-
-// A person's In / Out in the table: keypad cell + drag. Set like Summary's
-// times (TIME_TEXT: smaller number, "am" / "pm" under it, medium weight);
-// a typed time reads ink-2 medium, one that follows the default regular ink-3 (fainter) — the same "pinned to default" look as Summary. `mins`: the column
-// shows minutes on every row (one has them).
-const TABLE_TIME = 'h-10 w-full rounded-lg transition ' + TIME_TEXT;
-function TimeCell({ vm, p, field, mins }) {
-  const t = times(vm.state, p, vm);
-  const k = pickerFor(vm, p, field);
-  const key = p.id + ':' + field;
-  const active = activeKey() === key;
-  return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${field === 'in' ? t.inSet : t.outSet} bad=${t.bad}
-    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub} onTap=${() => openTimeCell(p.id, field)}
-    kcell=${key} active=${active} preview=${active ? bufferAbs() : null}
-    cls=${field === 'out' ? TABLE_TIME + ' ' + ARROW_BEFORE('0.75rem') : TABLE_TIME} tone=${(field === 'in' ? t.inSet : t.outSet) ? 'font-medium text-ink-2' : 'font-normal text-ink-3/80'} mins=${mins}
-    label=${(p.name || 'New row') + ' ' + field + ' time'} />`;
-}
-
-// A person's In / Out elsewhere (Summary rows): tap → quick time sheet.
-function TimePill({ vm, p, field, cls, tone, full, mins }) {
-  const t = times(vm.state, p, vm);
-  const k = pickerFor(vm, p, field);
-  return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${field === 'in' ? t.inSet : t.outSet} bad=${t.bad}
-    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub} onTap=${() => App.editTime(p.id, field)} cls=${cls} tone=${tone} full=${full} mins=${mins}
-    label=${p.name + ' ' + field + ' time'} />`;
-}
-
-// By staff id (Summary's payout rows).
-export function StaffTime({ vm, id, field, cls, tone, full, mins }) {
-  const p = vm.state.staff.find(x => x.id === id);
-  return p ? html`<${TimePill} vm=${vm} p=${p} field=${field} cls=${cls} tone=${tone} full=${full} mins=${mins} />` : null;
-}
-
-// The shift's default open / close (defaults.global). Tap → shift panel at
-// its times; drag writes the new default.
-export function DefaultTime({ vm, field, cls, tone, full, mins }) {
+// The shift's close (defaults.global.out): closers and anyone without an Out
+// of their own end then. Tap → the wheel; Undo · Apply after.
+export function CloseTime({ vm, cls, tone }) {
   const g = vm.state.defaults.global;
   const gi = parseTime(g.in), go = parseTime(g.out);
-  const inAbs = gi.value != null ? inAbsOf(gi) : null;
-  const outAbs = go.value != null && inAbs != null ? afterAbsOf(go, inAbs) : null;
-  const isIn = field === 'in';
-  return html`<${DragTime} abs=${isIn ? inAbs : outAbs} set=${true}
-    min=${isIn ? IN_MIN_ABS : (inAbs ?? 17) + 0.25} max=${isIn ? IN_MAX_ABS : (inAbs ?? 17) + 12}
-    onSet=${abs => App.reviewed('Default ' + (isIn ? 'open ' : 'close ') + fmtTimeAbs(abs),
-      () => App.globalDefault(field, isIn ? absToInRaw(abs) : absToOutRaw(abs, inAbs), true))}
-    onPreview=${abs => App.previewDefault(field, abs == null ? null : isIn ? absToInRaw(abs) : absToOutRaw(abs, inAbs))}
-    onTap=${() => App.openDefaults()} cls=${cls} tone=${tone} full=${full} mins=${mins} label=${'Default ' + (isIn ? 'open' : 'close') + ' time'} />`;
+  const open = gi.value != null ? inAbsOf(gi) : vm.resolved?.anchorAbs ?? 17;
+  const abs = go.value != null ? afterAbsOf(go, open) : null;
+  return html`<${DragTime} abs=${abs} set=${true} tapWheel
+    min=${open + 0.25} max=${open + 12}
+    onSet=${a => App.reviewed('Close ' + fmtTimeAbs(a), () => App.globalDefault('out', absToOutRaw(a, open), true))}
+    onPreview=${a => App.previewDefault('out', a == null ? null : absToOutRaw(a, open))}
+    cls=${cls} tone=${tone} label="Close time" />`;
 }
 
-function PersonRow({ vm, p, i = 0, col = {} }) {
-  const named = !!p.name.trim();
-  const t = times(vm.state, p, vm);
-  const closer = t.forced ? 'bg-bad text-white'
-    : t.closer ? 'bg-bad/25 text-bad' : 'bg-surface-2 text-transparent';
-  // Swipe a named row left → Remove (Undo · Apply in the HUD).
-  return html`<${SwipeRow} enabled=${named} onAction=${() => App.reviewed('Removed ' + p.name.trim(), () => App.removePerson(p.id))}>
-  <div class=${cx(STAFF_ROW, 'min-h-[3.375rem] py-1.5', zebra(i), !named && 'opacity-80')}>
-    <${NameCell} p=${p} />
-    <${TimeCell} vm=${vm} p=${p} field="in" mins=${col.inMins} />
-    <${TimeCell} vm=${vm} p=${p} field="out" mins=${col.outMins} />
-    ${named
-      ? html`<button class=${cx('t-body h-11 rounded-lg text-center font-medium tabular-nums active:bg-ink/10', t.hrs == null ? 'text-bad' : 'text-ink/80')}
-          onClick=${() => App.editStaff(p.id)} aria-label=${p.name + ' — more'}>${t.hrs != null ? hrsText(t.hrs, col.hdp) : '?'}</button>
-        <button class="grid h-11 place-items-center" onClick=${() => App.toggleCloser(p.id)}
-          aria-pressed=${String(t.forced)} aria-label=${p.name + ' closer'}>
-          <span class=${cx('grid size-8 place-items-center rounded-full transition', closer)}><${Icon} name="check" class="size-4" /></span>
-        </button>`
-      : html`<span></span><span></span>`}
-  </div><//>
-  ${nameFocus === p.id && html`<${Suggestions} vm=${vm} p=${p} />`}`;
+function Toolbar({ vm }) {
+  return html`<div class="flex items-center gap-2">
+    <${ToolBtn} on=${mode === 'times'} icon="clock" label="Edit times" onClick=${() => setMode('times')} />
+    <${ToolBtn} on=${mode === 'select'} icon="users" label="Select" onClick=${() => setMode('select')} />
+    <span class="flex-1"></span>
+    <span class="flex h-[var(--tap)] items-center gap-1 rounded-full bg-surface pl-3.5 pr-1">
+      <span class="size-1.5 rounded-full bg-bad/70"></span><span class="t-small font-semibold text-ink-3">Close</span>
+      <${CloseTime} vm=${vm} cls="h-9 min-w-[3.75rem] rounded-full px-2 text-[0.9375rem] tabular-nums transition" tone="font-semibold text-ink" />
+    </span>
+  </div>`;
 }
 
-// One card per section: header row, the people, the blank row, then the
-// section's default times (tap → shift panel at its times).
-function Group({ vm, role, title, people, rows }) {
-  const def = roleDefaults(vm.state, role || 'bartender');
-  // One look per column, like Summary: minutes on every row of a time column
-  // if any time in it has them; Hrs padded to the most decimals any row has.
-  const ts = rows.filter(p => p.name.trim()).map(p => times(vm.state, p, vm));
-  const col = {
-    inMins: hasMinutes(ts.map(t => t.inAbs)),
-    outMins: hasMinutes(ts.map(t => t.outAbs)),
-    hdp: Math.max(0, ...ts.filter(t => t.hrs != null).map(t => hrsDecimals(t.hrs))),
-  };
-  const heading = html`${role && html`<span class=${cx('size-2 shrink-0 rounded-full', ROLE_DOT[role])}></span>`}${title}${people.length > 0 && html`<span class="text-ink-3">${people.length}</span>`}`;
-  return html`<${Section} title=${heading}><${Card} flush>
-    <${Sentinel} /><div class=${cx(STAFF_ROW, THEAD, 'h-9 data-[stuck]:h-7')}>
-      <span class=${cx(TABLE_HEAD, 'pl-1.5 text-left')}>Name</span>
-      <span class=${TABLE_HEAD}>In</span><span class=${TABLE_HEAD}>Out</span><span class=${TABLE_HEAD}>Hrs</span>
-      <span class=${cx(TABLE_HEAD, 'tracking-normal')}>Close</span>
+// ── Person cards ─────────────────────────────────────────────────────────────
+
+// Their shift against the night: a track with hour ticks, their stretch in
+// the role colour, a placed break as a gap, the close as a red line.
+function Timeline({ span, t, role }) {
+  if (!span || t.span == null) return html`<div class="h-1.5"></div>`;
+  const W = span.b - span.a;
+  const at = v => ((v - span.a) / W) * 100 + '%';
+  const len = (x, y) => ((y - x) / W) * 100 + '%';
+  const ticks = [];
+  for (let h = span.a + 1; h < span.b; h++) ticks.push(h);
+  return html`<div class="relative h-1.5 rounded-full bg-ink/[.07]" aria-hidden="true">
+    ${ticks.map(h => html`<span key=${h} class="absolute inset-y-0 w-px bg-ink/10" style=${{ left: at(h) }}></span>`)}
+    <span class=${cx('absolute inset-y-0 rounded-full', ROLE_DOT[role])} style=${{ left: at(t.inAbs), width: len(t.inAbs, t.outAbs) }}></span>
+    ${t.brk > 0 && t.brkStart != null && html`<span class="absolute -inset-y-px rounded-sm" style=${{
+      left: at(t.brkStart), width: len(t.brkStart, t.brkStart + t.brk),
+      backgroundImage: 'repeating-linear-gradient(135deg, var(--surface) 0 2px, transparent 2px 4px)', backgroundColor: 'color-mix(in srgb, var(--surface) 55%, transparent)',
+    }}></span>`}
+    ${span.close != null && html`<span class="absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-full bg-bad/55" style=${{ left: at(span.close) }}></span>`}
+  </div>`;
+}
+
+// The axis over the cards: an hour label every hour (every two on a long
+// night), lined up with the timelines.
+function Axis({ span }) {
+  if (!span) return null;
+  const W = span.b - span.a, step = W > 6 ? 2 : 1;
+  const marks = [];
+  for (let h = span.a; h <= span.b; h += step) marks.push(h);
+  if (span.b - marks[marks.length - 1] >= step) marks.push(span.b);
+  return html`<div class="grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 px-4 pb-1 pt-2" aria-hidden="true">
+    <span></span>
+    <div class="relative h-4">
+      ${marks.map((h, i) => html`<span key=${h} class=${cx('t-small absolute top-0 text-[0.6875rem] tabular-nums text-ink-3',
+          i === 0 ? '' : h === span.b ? '-translate-x-full' : '-translate-x-1/2')}
+        style=${{ left: ((h - span.a) / W) * 100 + '%' }}>${fmtClockShort(h)}</span>`)}
     </div>
-    ${rows.map((p, i) => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} i=${i} col=${col} />`)}
-    <button class="t-small flex h-11 w-full items-center gap-2 border-t border-line px-4 text-ink-3 transition active:bg-surface-2"
-      onClick=${() => App.openDefaults()} aria-label="Default times">
-      <${Icon} name="clock" class="size-4 text-ink-3" />Defaults<span class="ml-auto font-semibold tabular-nums text-ink">${defaultsLabel(def)}</span><${Icon} name="chevR" class="size-4 text-ink-3" />
-    </button>
-  <//><//>`;
+  </div>`;
 }
+
+const CARD = 'li grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-2.5 text-left';
+const BOX = 'h-10 w-[3.5rem] rounded-lg bg-surface-2 text-[0.875rem] tabular-nums transition';
+
+function TimeBox({ vm, p, field }) {
+  const t = times(vm.state, p, vm);
+  const k = pickerFor(vm, p, field);
+  const set = field === 'in' ? t.inSet : t.outSet;
+  return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${set} bad=${t.bad} tapWheel
+    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub}
+    cls=${BOX} tone=${set ? 'font-semibold text-ink' : 'font-normal text-ink-3'} label=${p.name + ' ' + field + ' time'} />`;
+}
+
+function PersonCard({ vm, p, n, tint, span, allClose }) {
+  const t = times(vm.state, p, vm);
+  const picking = mode === 'select';
+  const on = sel.has(p.id);
+  const next = picking && how === 'turn' && sel.size > 1 && picked(vm.state)[turn % sel.size]?.id === p.id;
+  const tap = () => {
+    if (picking) {
+      if (on) sel.delete(p.id); else sel.add(p.id);
+      turn = 0;
+      rerender();
+    } else if (mode === 'view') App.editStaff(p.id);
+  };
+  const lead = picking
+    ? html`<span class=${cx('grid size-7 place-items-center justify-self-center rounded-full transition', on ? 'bg-accent text-on-accent' : 'ring-2 ring-inset ring-ink/20')}>
+        ${on && html`<${Icon} name="check" class="size-4" />`}</span>`
+    : html`<span class=${cx('grid size-8 place-items-center rounded-lg t-small font-semibold tabular-nums', tint ? ROLE_TINT[p.role] : 'bg-surface-2 text-ink-2')}>${n}</span>`;
+  const sub = t.brk > 0 ? fmtBreak(t.brk) + ' break' + (t.brkStart != null ? ' at ' + fmtClockShort(t.brkStart) : '') : '';
+  // An auto closer is only worth a mark while not everyone is one (early in
+  // the night everyone still ends at the close).
+  const closer = t.forced ? 'bg-bad text-white' : t.closer && !allClose ? 'bg-bad/12 text-bad' : '';
+  const right = mode === 'times'
+    ? html`<span class="flex items-center gap-1.5">
+        <${TimeBox} vm=${vm} p=${p} field="in" /><span class="text-[0.75rem] text-ink-3/70">→</span><${TimeBox} vm=${vm} p=${p} field="out" />
+      </span>`
+    : html`<span class="flex items-center gap-3">
+        <span class="t-small whitespace-nowrap tabular-nums">
+          ${t.bad ? html`<span class="font-semibold text-bad">Check times</span>` : html`
+            <span class=${t.inSet ? 'font-medium text-ink-2' : 'text-ink-3'}>${t.inAbs != null ? html`<${Clock} abs=${t.inAbs} />` : '—'}</span>
+            <span class="mx-1 text-ink-3/70">→</span>
+            <span class=${t.outSet ? 'font-medium text-ink-2' : 'text-ink-3'}>${t.outAbs != null ? html`<${Clock} abs=${t.outAbs} />` : '—'}</span>`}
+        </span>
+        <span class=${cx('t-body w-10 text-right font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) + 'h' : '?'}</span>
+      </span>`;
+  const Tag = mode === 'times' ? 'div' : 'button';
+  return html`<${Tag} class=${cx(CARD, Tag === 'button' && 'transition active:bg-surface-2', on && 'bg-accent/8', next && 'ring-2 ring-inset ring-accent')}
+      style=${{ '--inset': '3.75rem' }} onClick=${Tag === 'button' ? tap : undefined} aria-pressed=${picking ? String(on) : undefined}>
+    ${lead}
+    <span class="flex min-w-0 flex-col">
+      <span class="flex min-w-0 items-center gap-1.5">
+        <span class="t-body truncate font-medium">${p.name}</span>
+        ${closer && html`<span class=${cx('shrink-0 rounded-full px-1.5 text-[0.6875rem] font-semibold leading-4', closer)}>Closer</span>`}
+        ${next && html`<span class="shrink-0 rounded-full bg-accent px-1.5 text-[0.6875rem] font-semibold leading-4 text-on-accent">Next</span>`}
+      </span>
+      ${sub && html`<span class="t-small truncate text-ink-3">${sub}</span>`}
+    </span>
+    ${right}
+    <span></span>
+    <div class="col-span-2"><${Timeline} span=${span} t=${t} role=${p.role} /></div>
+  <//>`;
+}
+
+// ── Add names ────────────────────────────────────────────────────────────────
+// Type a name and Return — it's added and the field clears for the next; a
+// pasted list (lines / commas) adds them all, in order. With roles on, the
+// chips say which role they come in as. Saved names not on shift are chips
+// under it: tap to add; Edit → tap to forget one.
+
+let addRole = 'bartender';
+let forgetting = false;
+const onShiftSet = state => new Set(state.staff.map(p => p.name.trim().toLowerCase()).filter(Boolean));
+const splitNames = text => String(text).split(/[\n,;\t]+/).map(s => s.trim()).filter(Boolean);
+
+function addAll(names) {
+  if (!names.length) return;
+  App.addPeople(names.map(n => ({ name: n, role: addRole })));
+}
+
+function AddNames({ vm }) {
+  const state = vm.state;
+  const rolesOn = state.settings.allRoles;
+  if (!rolesOn) addRole = 'bartender';
+  const onShift = onShiftSet(state);
+  const saved = getRoster().filter(r => !onShift.has(r.name.toLowerCase()));
+  const chip = 't-small inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 font-semibold transition active:scale-95';
+  return html`<${Section} title="Add names" aside=${saved.length > 0 && html`<button class="t-small font-semibold text-accent" onClick=${() => { forgetting = !forgetting; rerender(); }}>${forgetting ? 'Done' : 'Edit saved'}</button>`}>
+    <${List}>
+      <div class="li flex items-center gap-3 px-4 py-1.5" style=${{ '--inset': '3.5rem' }}>
+        <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/12 text-accent"><${Icon} name="plus" class="size-[1.125rem]" /></span>
+        <input data-addnames class="h-11 min-w-0 flex-1 bg-transparent text-[1rem] font-medium text-ink outline-none placeholder:font-normal placeholder:text-ink-3"
+          placeholder="Name, then Return — or paste a list" aria-label="Add names"
+          autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="next"
+          onKeyDown=${e => {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            addAll(splitNames(e.target.value));
+            e.target.value = '';
+          }}
+          onInput=${e => {
+            // A comma ends a name too (so does a pasted list).
+            const v = e.target.value;
+            if (!/[,;\n]/.test(v)) return;
+            const parts = v.split(/[\n,;]+/);
+            const rest = parts.pop();
+            addAll(parts.map(s => s.trim()).filter(Boolean));
+            e.target.value = rest.trimStart();
+          }}
+          onPaste=${e => {
+            const text = e.clipboardData?.getData('text') || '';
+            if (!/[\n,;\t]/.test(text.trim())) return;
+            e.preventDefault();
+            addAll(splitNames(e.target.value + text));
+            e.target.value = '';
+          }} />
+      </div>
+      ${rolesOn && html`<div class="li flex items-center gap-2 px-4 py-2" style=${{ '--inset': '3.5rem' }}>
+        <span class="t-cap w-8 shrink-0 text-ink-3">As</span>
+        ${ROLES.map(r => html`<button key=${r} class=${cx(chip, addRole === r ? ROLE_TINT[r] + ' ring-1 ring-inset ring-current' : 'bg-surface-2 text-ink-2')}
+          aria-pressed=${String(addRole === r)} onClick=${() => { addRole = r; rerender(); }}>
+          <span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_SHORT[r]}</button>`)}
+      </div>`}
+      ${saved.length > 0 && html`<div class="li overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style=${{ '--inset': '1rem' }}>
+        <div class="flex w-max gap-1.5">
+          ${saved.map(r => html`<button key=${r.name} class=${cx(chip, forgetting ? 'bg-bad/12 text-bad' : 'bg-surface-2 text-ink')}
+            onClick=${() => (forgetting ? App.forgetName(r.name) : App.addPeople([{ name: r.name, role: rolesOn ? r.role : 'bartender' }]))}>
+            ${forgetting ? html`<${Icon} name="x" class="size-3.5" />` : rolesOn && html`<span class=${cx('size-1.5 rounded-full', ROLE_DOT[r.role])}></span>`}${r.name}</button>`)}
+        </div>
+      </div>`}
+    <//>
+  <//>`;
+}
+
+// ── Bulk bar (select mode) ───────────────────────────────────────────────────
+// Docked at the bottom in place of the HUD while Select is on.
+
+function hourChips(from, to) {
+  const out = [];
+  for (let h = Math.ceil(from); h <= to; h++) out.push(h);
+  return out;
+}
+
+function bulkSet(vm, field, abs) {
+  const people = picked(vm.state);
+  if (!people.length) return;
+  const targets = how === 'turn' && people.length > 1 ? [people[turn % people.length]] : people;
+  const changes = {};
+  targets.forEach(p => {
+    if (abs == null) { changes[p.id] = { [field]: '' }; return; }
+    if (field === 'out') { const t = times(vm.state, p, vm); if (t.inAbs == null || abs <= t.inAbs || abs - t.inAbs > 12) return; }
+    changes[p.id] = { [field]: rawAt(vm, p, field, abs) };
+  });
+  const what = (field === 'in' ? 'In ' : 'Out ') + (abs == null ? (field === 'in' ? 'default' : 'at close') : fmtClockShort(abs));
+  undoLabel = (targets.length === 1 ? targets[0].name.trim() : targets.length + ' people') + ' · ' + what;
+  if (how === 'turn' && people.length > 1) turn = (turn + 1) % people.length;
+  App.bulk(undoLabel, () => App.setStaffFields(changes));
+}
+
+function BulkBar({ vm }) {
+  const state = vm.state;
+  const people = picked(state);
+  const all = ordered(state);
+  const n = people.length;
+  const open = vm.resolved?.anchorAbs ?? 17;
+  const close = vm.resolved?.closeAbs ?? open + 9;
+  const off = half ? 0.5 : 0;
+  const ins = hourChips(open - 3, open + 4).map(h => h + off).filter(v => v >= IN_MIN_ABS && v <= IN_MAX_ABS);
+  const outs = hourChips(close - 6, close + 1).map(h => h + off).filter(v => v > open);
+  const chip = (label, onClick, cls = 'bg-surface-2 text-ink') => html`<button class=${cx('t-small h-9 shrink-0 rounded-full px-3 font-semibold tabular-nums transition active:scale-95 disabled:opacity-40', cls)}
+    disabled=${!n} onClick=${onClick}>${label}</button>`;
+  const row = (label, chips) => html`<div class="flex items-center gap-2">
+    <span class="t-cap w-8 shrink-0 text-ink-3">${label}</span>
+    <div class="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">${chips}</div>
+  </div>`;
+  const nextP = how === 'turn' && n > 1 ? people[turn % n] : null;
+  const forced = n > 0 && people.every(p => p.closerOverride);
+  return html`<div class="flex flex-col gap-2.5">
+    <div class="flex items-center gap-2">
+      <span class="flex min-w-0 flex-1 flex-col leading-tight">
+        <span class="t-body font-semibold">${n ? n + ' picked' : 'Tap people to pick them'}</span>
+        <span class="t-small truncate text-ink-3">${nextP ? 'Next: ' + nextP.name.trim() : n > 1 ? 'Every chip sets all of them' : n ? 'Tap a time to set it' : 'Then tap a time'}</span>
+      </span>
+      <button class="t-small h-9 px-2 font-semibold text-accent" onClick=${() => { sel = n === all.length ? new Set() : new Set(all.map(p => p.id)); turn = 0; rerender(); }}>${n === all.length && n ? 'None' : 'All'}</button>
+      <${Button} size="sm" variant="primary" onClick=${() => setMode('select')}>Done<//>
+    </div>
+    ${n > 1 && html`<${Seg} size="sm" value=${how} onChange=${v => { how = v; turn = 0; rerender(); }}
+      items=${[{ value: 'turn', label: 'Each in turn' }, { value: 'all', label: 'Same for all' }]} />`}
+    ${row('In', html`
+      ${chip(':30', () => { half = !half; rerender(); }, half ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2')}
+      ${ins.map(v => html`<span key=${v} class="contents">${chip(fmtClockShort(v), () => bulkSet(vm, 'in', v))}</span>`)}
+      ${chip('Default', () => bulkSet(vm, 'in', null), 'bg-surface-2 text-ink-2')}`)}
+    ${row('Out', html`
+      ${chip('Close', () => bulkSet(vm, 'out', null), 'bg-bad/12 text-bad')}
+      ${outs.map(v => html`<span key=${v} class="contents">${chip(fmtClockShort(v), () => bulkSet(vm, 'out', v))}</span>`)}`)}
+    <div class="flex items-center gap-2">
+      ${chip(forced ? 'Not closers' : 'Closers', () => {
+        undoLabel = (forced ? 'Not closers · ' : 'Closers · ') + n;
+        App.bulk(undoLabel, () => App.setStaffFields(Object.fromEntries(people.map(p => [p.id, { closerOverride: !forced }]))));
+      })}
+      ${chip('Remove', () => {
+        undoLabel = 'Removed ' + (n === 1 ? people[0].name.trim() : n + ' people');
+        const ids = people.map(p => p.id);
+        sel = new Set();
+        App.bulk(undoLabel, () => ids.forEach(id => App.removePerson(id)));
+      }, 'bg-bad/12 text-bad')}
+      <span class="flex-1"></span>
+      ${undoLabel && html`<button class="t-small inline-flex h-9 min-w-0 items-center gap-1 rounded-full bg-surface-2 px-3 font-semibold text-ink active:scale-95"
+        onClick=${() => { if (App.bulkUndo()) { undoLabel = ''; turn = Math.max(0, turn - 1); } else { undoLabel = ''; } rerender(); }}>
+        <${Icon} name="undo" class="size-4 shrink-0" /><span class="truncate">Undo</span></button>`}
+    </div>
+  </div>`;
+}
+
+function renderBulk(vm) {
+  const el = $('bulkBar');
+  if (el) render(mode === 'select' ? html`<${BulkBar} vm=${vm} />` : null, el);
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 function Staff({ vm }) {
   const state = vm.state;
-  const named = state.staff.filter(p => p.name.trim());
-  const groups = sections(state);
+  const people = state.staff.filter(named);
+  const gs = groups(state);
+  const span = nightSpan(vm);
+  const tint = state.settings.allRoles && new Set(people.map(p => p.role)).size > 1;
+  const tipped = vm.resolved.staff.filter(p => p.role !== 'support');
+  const allClose = tipped.length > 1 && tipped.every(p => p.closer && !p.closerOverride);
   // Staff is done once everyone named has valid times (no staff-side error).
-  const done = named.length > 0 && vm.blockedTab !== 'staff';
+  const done = people.length > 0 && vm.blockedTab !== 'staff';
   const hours = done && vm.resolved.staff.filter(p => p.role !== 'support').reduce((t, p) => t + p.hours, 0);
+  let n = 0;
+  const help = mode === 'times' ? 'Tap a time to turn its wheel (hold works too). Faint times follow the defaults; the red line is the close.'
+    : mode === 'select' ? 'Pick people, then set their times below — Each in turn gives the next one each time you tap (4, 5, 6, 6 …).'
+    : 'Tap a person for their drawer (times, break, closer). Edit times turns the times into wheels; Select sets several at once.';
   return html`<div class="flex flex-col gap-4">
     <${Note} vm=${vm} />
-    <${QuickAdd} vm=${vm} />
-    ${groups.map(g => html`<${Group} key=${g.role || 'all'} vm=${vm} ...${g} />`)}
-    <p class="t-small px-6 text-center text-ink-3">Type a name, then times on the keypad (530 = 5:30) — Next moves along the row, ↓ down the column. Hold a time for the wheel; swipe a row left to remove it; tap Hrs for more. Faint times are the defaults.</p>
-    ${done && (vm.totalCash > 0 && !vm.blocked
+    ${people.length > 0 && html`<${Toolbar} vm=${vm} />`}
+    ${gs.filter(g => g.people.length).map(g => html`<${Section} key=${g.role || 'all'}
+        title=${g.role ? html`<span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}<span class="text-ink-3">${g.people.length}</span>` : 'On shift'}>
+      <${List}>
+        <${Axis} span=${span} />
+        ${g.people.map(p => html`<${PersonCard} key=${p.id} vm=${vm} p=${p} n=${++n} tint=${tint} span=${span} allClose=${allClose} />`)}
+      <//>
+    <//>`)}
+    <${AddNames} vm=${vm} />
+    ${people.length > 0 && html`<p class="t-small px-6 text-center text-ink-3">${help}</p>`}
+    ${done && mode === 'view' && (vm.totalCash > 0 && !vm.blocked
       ? html`<${NextStep} tab="summary" label="See who gets what" sub=${fmtMoney(vm.totalCash) + ' over ' + fmtHrs(hours) + ' hours'} />`
-      : html`<${NextStep} tab="tips" label="Next: enter the tips" sub=${named.length + ' on shift · ' + fmtHrs(hours) + ' hours'} />`)}
+      : html`<${NextStep} tab="tips" label="Next: enter the tips" sub=${people.length + ' on shift · ' + fmtHrs(hours) + ' hours'} />`)}
     <${Section} title="This page"><${List}>
       <${SwitchRow} on=${state.settings.allRoles} onClick=${() => App.toggleSetting('allRoles')}
-        icon="users" label="Roles" hint="A table per role: bartenders · servers · support" />
+        icon="users" label="Roles" hint="Bartenders · servers · support, each their own group" />
       <${SwitchRow} on=${state.settings.clock24} onClick=${() => App.toggleSetting('clock24')}
         icon="clock" label="24-hour times" hint="17:30 instead of 5:30p" />
     <//><//>
   </div>`;
 }
 
-// ── Person editor sheet ──────────────────────────────────────────────────────
+// ── A person's drawer ────────────────────────────────────────────────────────
+// Name, role, In → Out (tap a time for the wheel; "Default" puts it back),
+// the break (how long; when it began, or not placed), closer, remove.
 
 let editId = null;
 let lastVm = null;
@@ -512,71 +504,82 @@ export function openStaffEditor(id, { focusName = false } = {}) {
   if (focusName) sheetBody('sheet-staff')?.querySelector('input[aria-label="Name"]')?.focus();
 }
 
-// A row of half-hour chips around the default, scrolled to the current value.
-function ChipRow({ values, current, onPick, fmt }) {
-  const row = useRef(null);
-  useLayoutEffect(() => {
-    const el = row.current;
-    let sel = el?.querySelector('[aria-pressed="true"]');
-    if (el && !sel && current != null) {
-      sel = [...el.querySelectorAll('[data-v]')].reduce((best, b) =>
-        !best || Math.abs(+b.dataset.v - current) < Math.abs(+best.dataset.v - current) ? b : best, null);
-    }
-    if (el && sel) el.scrollLeft = sel.offsetLeft - el.clientWidth / 2 + sel.offsetWidth / 2;
-  }, [current]);
-  return html`<div ref=${row} class="overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-    <div class="flex w-max gap-1.5 px-0.5 py-0.5">
-      ${values.map(v => {
-        const on = current != null && Math.abs(v - current) < 0.01;
-        return html`<button key=${v} data-v=${v} aria-pressed=${String(on)} onClick=${() => onPick(v)}
-          class=${cx('t-small h-9 rounded-full px-3.5 font-semibold tabular-nums transition active:scale-95', on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2')}>${fmt(v)}</button>`;
-      })}
-    </div>
-  </div>`;
-}
-
-function TimePicker({ label, abs, isSet, defAbs, min, max, onSet, onReset }) {
-  const step = d => { if (abs != null) onSet(Math.min(max, Math.max(min, abs + d))); };
-  const chips = [];
-  const center = defAbs ?? abs ?? min;
-  for (let v = Math.ceil((center - 3) * 2) / 2; v <= center + 3; v += 0.5) if (v >= min && v <= max) chips.push(v);
-  const sb = 'grid size-11 shrink-0 place-items-center rounded-full bg-surface-2 text-[1.5rem] text-ink transition active:scale-95 disabled:opacity-30';
-  return html`<div class="flex flex-col gap-3 rounded-card bg-surface p-3.5">
-    <div class="flex items-center gap-3">
-      <span class="t-cap w-10 text-ink-3">${label}</span>
-      <button class=${sb} onClick=${() => step(-0.25)} disabled=${abs == null || abs <= min} aria-label=${label + ' 15 minutes earlier'}>−</button>
-      <span class=${cx('flex-1 text-center text-[2rem] font-semibold tabular-nums tracking-tight', !isSet && 'text-ink-2')}>${abs != null ? fmtTimeAbs(abs) : '—'}</span>
-      <button class=${sb} onClick=${() => step(0.25)} disabled=${abs == null || abs >= max} aria-label=${label + ' 15 minutes later'}>+</button>
-    </div>
-    <${ChipRow} values=${chips} current=${abs} onPick=${onSet} fmt=${fmtTimeAbs} />
-    <div class="t-small flex items-center justify-between px-0.5">
-      <span class="text-ink-3">${isSet ? 'Set for this person' : 'Using the default'}</span>
-      ${isSet && html`<button class="font-semibold text-accent" onClick=${onReset}>Use default${defAbs != null ? ' · ' + fmtTimeAbs(defAbs) : ''}</button>`}
-    </div>
-  </div>`;
-}
-
-// Props for one time's <TimePicker> (In or Out) of a person.
+// Props for a person's In or Out time box (and the wheel's hours beside each
+// value). A wheel write waits for Undo · Apply in the HUD (App.reviewed).
 function pickerFor(vm, p, field) {
   const t = times(vm.state, p, vm);
   const def = t.def;
   const set = raw => App.staffField(p.id, field, raw, true);
-  // A drag / picker write waits for Undo · Apply in the HUD (App.reviewed).
-  // The wheel shows the hours each time would make beside it.
-  const hrsAt = h => (h > 0 ? fmtHrs(h) + 'h' : '');
-  const said = abs => (p.name.trim() || 'New row') + ' · ' + (field === 'in' ? 'In ' : 'Out ') + fmtTimeAbs(abs);
+  const hrsAt = h => (h > 0 ? fmtHrs(Math.max(0, h - t.brk)) + 'h' : '');
+  const said = abs => (p.name.trim() || 'New person') + ' · ' + (field === 'in' ? 'In ' : 'Out ') + fmtTimeAbs(abs);
   if (field === 'in') {
     const dp = parseTime(def.in);
-    return { label: 'In', abs: t.inAbs, isSet: t.inSet, defAbs: dp.value != null ? inAbsOf(dp) : null,
+    return { abs: t.inAbs, isSet: t.inSet, defAbs: dp.value != null ? inAbsOf(dp) : null,
       min: IN_MIN_ABS, max: IN_MAX_ABS, onSet: abs => App.reviewed(said(abs), () => set(inRaw(abs, def))), onReset: () => set(''),
       onPreview: abs => App.previewStaff(p.id, field, abs == null ? null : inRaw(abs, def)),
       wheelSub: abs => (t.outAbs != null ? hrsAt(t.outAbs - abs) : '') };
   }
   const dp = parseTime(def.out);
-  return { label: 'Out', abs: t.outAbs, isSet: t.outSet, defAbs: dp.value != null && t.inAbs != null ? afterAbsOf(dp, t.inAbs) : null,
+  return { abs: t.outAbs, isSet: t.outSet, defAbs: dp.value != null && t.inAbs != null ? afterAbsOf(dp, t.inAbs) : null,
     min: (t.inAbs ?? 17) + 0.25, max: (t.inAbs ?? 17) + 12, onSet: abs => App.reviewed(said(abs), () => set(outRaw(abs, def, t.inAbs))), onReset: () => set(''),
     onPreview: abs => App.previewStaff(p.id, field, abs == null ? null : outRaw(abs, def, t.inAbs)),
     wheelSub: abs => (t.inAbs != null ? hrsAt(abs - t.inAbs) : '') };
+}
+
+const BIG = 'h-12 w-full rounded-xl bg-surface-2 text-[1.25rem] tabular-nums transition';
+
+function TimeField({ vm, p, field }) {
+  const k = pickerFor(vm, p, field);
+  const t = times(vm.state, p, vm);
+  return html`<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+    <span class="t-cap px-1 text-ink-3">${field === 'in' ? 'In' : 'Out'}</span>
+    <${DragTime} abs=${k.abs} set=${k.isSet} bad=${t.bad} tapWheel min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub}
+      cls=${BIG} tone=${k.isSet ? 'font-semibold text-ink' : 'font-medium text-ink-3'} full label=${p.name + ' ' + field + ' time'} />
+    <span class="t-small min-h-5 px-1">${k.isSet
+      ? html`<button class="font-semibold text-accent" onClick=${k.onReset}>${field === 'out' ? 'Out at close' : 'Use default'}${k.defAbs != null ? ' · ' + fmtClockShort(k.defAbs) : ''}</button>`
+      : html`<span class="text-ink-3">${field === 'out' ? 'At the close' : 'The default'}</span>`}</span>
+  </div>`;
+}
+
+const BREAKS = [0.25, 0.5, 0.75, 1, 1.5];
+
+function BreakField({ vm, p }) {
+  const t = times(vm.state, p, vm);
+  const len = t.brk || (parseFloat(p.brk) || 0);
+  const several = vm.state.pools.length > 1;
+  const setLen = v => App.reviewed((p.name.trim() || 'Person') + ' · ' + (v ? fmtBreak(v) + ' break' : 'no break'), () => {
+    App.staffField(p.id, 'brk', v ? String(v) : '', true);
+    if (!v) App.staffField(p.id, 'brkAt', '', true);
+  });
+  const placed = t.brkStart != null;
+  const canPlace = len > 0 && t.inAbs != null && t.span != null && t.span > len;
+  const placeAt = abs => App.staffField(p.id, 'brkAt', absToEdgeRaw(abs, t.inAbs), true);
+  const chip = (on, label, onClick) => html`<button class=${cx('t-small h-9 shrink-0 rounded-full px-3 font-semibold tabular-nums transition active:scale-95',
+    on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2')} aria-pressed=${String(on)} onClick=${onClick}>${label}</button>`;
+  return html`<div class="flex flex-col gap-3 rounded-card bg-surface p-3.5">
+    <div class="flex items-center justify-between">
+      <span class="t-body font-medium">Break</span>
+      <span class="t-small text-ink-3">${len > 0 ? 'Off their hours' : 'None'}</span>
+    </div>
+    <div class="flex flex-wrap gap-1.5">
+      ${chip(!len, 'None', () => setLen(0))}
+      ${BREAKS.map(v => html`<span key=${v} class="contents">${chip(Math.abs(len - v) < 0.01, fmtBreak(v), () => setLen(v))}</span>`)}
+    </div>
+    ${len > 0 && html`<div class="flex items-center gap-3 border-t border-line pt-3">
+      <span class="flex min-w-0 flex-1 flex-col">
+        <span class="t-small font-semibold text-ink-2">When</span>
+        <span class="t-small text-ink-3">${placed
+          ? (several ? 'Comes off the pool it falls in' : 'From ' + fmtClockShort(t.brkStart) + ' to ' + fmtClockShort(t.brkStart + len))
+          : (several ? 'Not set — comes off each pool in proportion' : 'Not set — only the length counts')}</span>
+      </span>
+      ${placed
+        ? html`<${DragTime} abs=${t.brkStart} set=${true} tapWheel min=${t.inAbs} max=${t.outAbs - len}
+            onSet=${placeAt} cls="h-10 min-w-[4.5rem] rounded-lg bg-surface-2 px-2 text-[0.9375rem] tabular-nums transition" tone="font-semibold text-ink" label="Break start" />
+          <button class="t-small h-10 px-1 font-semibold text-accent" onClick=${() => App.staffField(p.id, 'brkAt', '', true)}>Clear</button>`
+        : canPlace && html`<${Button} size="sm" variant="tonal" icon="clock"
+            onClick=${() => placeAt(Math.round((t.inAbs + (t.span - len) / 2) * 4) / 4)}>Set time<//>`}
+    </div>`}
+  </div>`;
 }
 
 function Editor({ vm, p }) {
@@ -584,7 +587,6 @@ function Editor({ vm, p }) {
   const t = times(state, p, vm);
   const share = vm.shares?.perPerson.find(x => x.id === p.id);
   const set = (field, raw) => App.staffField(p.id, field, raw, true);
-
   return html`
     <input class=${cx(INPUT_PAGE, 'h-12 text-[1.25rem] font-semibold')} value=${p.name} placeholder="Name"
       autocomplete="off" autocorrect="off" autocapitalize="words" enterkeyhint="done" aria-label="Name"
@@ -592,52 +594,26 @@ function Editor({ vm, p }) {
       onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} />
     ${state.settings.allRoles && html`<${Seg} value=${p.role} onChange=${r => App.staffField(p.id, 'role', r, true)}
       items=${ROLES.map(r => ({ value: r, label: ROLE_SHORT[r] }))} />`}
-    <${TimePicker} ...${pickerFor(vm, p, 'in')} />
-    <${TimePicker} ...${pickerFor(vm, p, 'out')} />
-    <div class="t-body flex items-center justify-between rounded-card bg-surface px-4 py-3">
-      <span class="text-ink-2">${t.hrs != null ? fmtHrs(t.hrs) + ' hours' : 'Check the times'}</span>
-      ${share && html`<span class="text-ink-2">takes home <b class="t-head text-ink">$${share.final}</b></span>`}
+    <div class="flex flex-col gap-3 rounded-card bg-surface p-3.5">
+      <div class="flex items-start gap-3">
+        <${TimeField} vm=${vm} p=${p} field="in" />
+        <span class="mt-9 text-ink-3/70">→</span>
+        <${TimeField} vm=${vm} p=${p} field="out" />
+      </div>
+      <div class="t-body flex items-center justify-between border-t border-line pt-3">
+        <span class="text-ink-2">${t.hrs != null ? fmtHrs(t.hrs) + ' hours' + (t.brk > 0 ? ' (' + fmtHrs(t.span) + ' − ' + fmtBreak(t.brk) + ')' : '') : 'Check the times'}</span>
+        ${share && html`<span class="text-ink-2">takes home <b class="t-head text-ink">$${share.final}</b></span>`}
+      </div>
     </div>
+    <${BreakField} vm=${vm} p=${p} />
     <${List}>
       <${SwitchRow} on=${t.forced} onClick=${() => App.toggleCloser(p.id)} label="Closer"
         hint=${t.forced ? 'Forced — shares the closer bonus' : t.closer ? 'Auto: out at the close time' : 'Shares the dollars left after rounding'} />
     <//>
     <div class="flex gap-2">
       <${Button} class="flex-1" disabled=${!t.inSet && !t.outSet} onClick=${() => { set('in', ''); set('out', ''); }}>Reset times<//>
-      <${Button} variant="danger" class="flex-1" icon="trash" onClick=${() => { App.removePerson(p.id); }}>Remove<//>
+      <${Button} variant="danger" class="flex-1" icon="trash" onClick=${() => App.reviewed('Removed ' + (p.name.trim() || 'person'), () => App.removePerson(p.id))}>Remove<//>
     </div>`;
-}
-
-// Quick time sheet: one person's In or Out, opened from its table cell.
-let timeEdit = null;          // { id, field }
-onSheetClose('sheet-time', () => { timeEdit = null; });
-
-export function openTimeEditor(id, field) {
-  timeEdit = { id, field };
-  openSheet('sheet-time');
-  if (lastVm) renderTimeEditor(lastVm);
-}
-
-function TimeEditor({ vm, p, field }) {
-  const t = times(vm.state, p, vm);
-  const other = field === 'in' ? 'out' : 'in';
-  return html`
-    <${Seg} value=${field} onChange=${f => openTimeEditor(p.id, f)}
-      items=${[{ value: 'in', label: 'In · ' + (t.inAbs != null ? fmtClockShort(t.inAbs) : '—') }, { value: 'out', label: 'Out · ' + (t.outAbs != null ? fmtClockShort(t.outAbs) : '—') }]} />
-    <${TimePicker} key=${field} ...${pickerFor(vm, p, field)} />
-    <div class="t-body flex items-center justify-between px-1 text-ink-2">
-      <span>${t.hrs != null ? fmtHrs(t.hrs) + ' hours' : 'Check the times'}</span>
-      <button class="font-semibold text-accent" onClick=${() => openTimeEditor(p.id, other)}>${field === 'in' ? 'Set out time →' : '← Set in time'}</button>
-    </div>
-    <${Button} variant="primary" block onClick=${() => App.closeSheet('sheet-time')}>Done<//>`;
-}
-
-function renderTimeEditor(vm) {
-  if (!timeEdit || !isOpen('sheet-time')) return;
-  const p = vm.state.staff.find(x => x.id === timeEdit.id);
-  if (!p) { closeSheet('sheet-time'); return; }
-  setSheetTitle('sheet-time', (p.name.trim() || 'Person') + ' · ' + (timeEdit.field === 'in' ? 'In' : 'Out'));
-  render(html`<${TimeEditor} vm=${vm} p=${p} field=${timeEdit.field} />`, sheetBody('sheet-time'));
 }
 
 function renderEditor(vm) {
@@ -648,13 +624,40 @@ function renderEditor(vm) {
   render(html`<${Editor} vm=${vm} p=${p} />`, sheetBody('sheet-staff'));
 }
 
-// ── Render ───────────────────────────────────────────────────────────────────
+// ── Elsewhere: a person's In / Out (Summary rows, the Person sheet) and the
+//    shift's open / close (Summary's Total row) — tap for the wheel. ────────
 
-export function renderStaff(vm) {
-  lastVm = vm;
+export function StaffTime({ vm, id, field, cls, tone, full, mins }) {
+  const p = vm.state.staff.find(x => x.id === id);
+  if (!p) return null;
+  const t = times(vm.state, p, vm);
+  const k = pickerFor(vm, p, field);
+  return html`<${DragTime} abs=${k.abs} set=${k.isSet} bad=${t.bad} tapWheel
+    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub} cls=${cls} tone=${tone} full=${full} mins=${mins}
+    label=${p.name + ' ' + field + ' time'} />`;
+}
+
+export function DefaultTime({ vm, field, cls, tone, full, mins }) {
+  if (field === 'out') return html`<${CloseTime} vm=${vm} cls=${cls} tone=${tone} />`;
+  const g = vm.state.defaults.global;
+  const gi = parseTime(g.in);
+  const inAbs = gi.value != null ? inAbsOf(gi) : null;
+  return html`<${DragTime} abs=${inAbs} set=${true} tapWheel min=${IN_MIN_ABS} max=${IN_MAX_ABS}
+    onSet=${abs => App.reviewed('Default open ' + fmtTimeAbs(abs), () => App.globalDefault('in', absToInRaw(abs), true))}
+    onPreview=${abs => App.previewDefault('in', abs == null ? null : absToInRaw(abs))}
+    cls=${cls} tone=${tone} full=${full} mins=${mins} label="Default open time" />`;
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+// preview: a would-be view model while a wheel turns — painted, but the
+// handlers keep reading the real state (lastVm).
+
+export function renderStaff(vm, { preview = false } = {}) {
+  if (!preview) lastVm = vm;
+  // Drop picks of people who are gone.
+  if (sel.size) sel = new Set([...sel].filter(id => vm.state.staff.some(p => p.id === id && named(p))));
   const root = $('staff-root');
   if (root) render(html`<${Staff} vm=${vm} />`, root);
   renderEditor(vm);
-  renderTimeEditor(vm);
-  renderRoster(vm);
+  renderBulk(vm);
 }

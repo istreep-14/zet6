@@ -177,12 +177,11 @@
     padding-top: calc(var(--safe-t) + var(--hdr-gap));
     height: calc(var(--hdr-h) + var(--safe-t) + var(--hdr-gap));
   }
-  .hdr-title {
-    position: absolute; left: 50%; bottom: calc(var(--hdr-h) / 2); max-width: 45%;
-    transform: translate(-50%, calc(50% + .25rem));
-    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+  /* Page dots: centred in the header, the current page as a named pill. */
+  .hdr-dots {
+    position: absolute; left: 50%; bottom: calc(var(--hdr-h) / 2); transform: translate(-50%, 50%);
+    display: flex; align-items: center; gap: .125rem; max-width: 56%;
   }
-  html.scrolled .hdr-title { opacity: 1; transform: translate(-50%, 50%); }
   .icon-btn {
     display: grid; place-items: center; flex-shrink: 0;
     width: 2.75rem; height: 2.75rem; border-radius: 999px;
@@ -214,50 +213,18 @@
     padding: 0.5rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 7.5rem) calc(var(--gutter) + var(--safe-l));
   }
   body.keyboard-open .content { padding-bottom: 1.5rem; }
-  html:has(.hud.is-review) .content, html:has(.hud.is-review) .pg-scroll { padding-bottom: calc(var(--dock) + 11rem); }   /* the HUD's Undo · Apply row */
+  html:has(.hud.is-review) .content { padding-bottom: calc(var(--dock) + 11rem); }   /* the HUD's Undo · Apply row */
 
   /* Sticky table heads sit flush with the top of .content (tucked into its 0.5rem padding). */
-  .panel { display: none; --thead-top: -0.5rem; }
+  .panel { display: none; --thead-top: -0.5rem; will-change: transform; }
   .panel.active { display: block; }
+  /* A page stepped to slides in from the side it came from (ui/pages.js). */
+  .panel.active.from-right { animation: inRight .24s cubic-bezier(.2, .8, .3, 1); }
+  .panel.active.from-left  { animation: inLeft .24s cubic-bezier(.2, .8, .3, 1); }
+  @keyframes inRight { from { opacity: .35; transform: translateX(35%); } to { opacity: 1; transform: none; } }
+  @keyframes inLeft  { from { opacity: .35; transform: translateX(-35%); } to { opacity: 1; transform: none; } }
 
-  /* ── Pages drawer (ui/pages.js): Staff · Tips · Payout rise from the
-     bottom over Summary, side by side on a track that follows the finger. */
-  .pages-scrim {
-    position: fixed; inset: 0; z-index: 70; background: rgb(0 0 0 / .32);
-    opacity: 0; pointer-events: none; transition: opacity .3s ease;
-  }
-  html.pages-open .pages-scrim { opacity: 1; pointer-events: auto; }
-  html.pages-drag .pages-scrim { transition: none; }
-  .pages {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 75;
-    top: calc(var(--safe-t) + 2.75rem);
-    max-width: 480px; margin: 0 auto;
-    display: flex; flex-direction: column;
-    background: var(--bg); color: var(--ink);
-    border-radius: 1.25rem 1.25rem 0 0;
-    box-shadow: 0 -0.5rem 2.5rem -0.5rem rgb(0 0 0 / .3);
-    transform: translateY(100%); visibility: hidden;
-    transition: transform .34s cubic-bezier(.2, .9, .25, 1), visibility 0s linear .34s;
-  }
-  html.standalone .pages { top: calc(var(--safe-t) + var(--hdr-gap) + 2.75rem); }
-  html.pages-open .pages { transform: none; visibility: visible; transition: transform .34s cubic-bezier(.2, .9, .25, 1); }
-  html.pages-drag .pages { visibility: visible; transition: none; }
-  .pages-head { flex-shrink: 0; touch-action: none; }
-  .pages-view { position: relative; flex: 1; min-height: 0; overflow: hidden; }
-  .pages-track { display: flex; width: 300%; height: 100%; transition: transform .3s cubic-bezier(.2, .9, .25, 1); }
-  html.pager-drag .pages-track { transition: none; }
-  .pg { width: calc(100% / 3); height: 100%; flex-shrink: 0; }
-  .pg-scroll {
-    height: 100%; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
-    padding: 0 calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 7.5rem) calc(var(--gutter) + var(--safe-l));
-    --thead-top: 0px;
-  }
-  .pg-scroll .page-title { padding-top: .5rem; padding-bottom: .75rem; }
-  /* the head's indicator under the page names follows the track (--pp 0…2) */
-  .pages-ind { transform: translateX(calc(var(--pp, 0) * 100%)); transition: transform .3s cubic-bezier(.2, .9, .25, 1); }
-  html.pager-drag .pages-ind { transition: none; }
-
-  /* ── Hub (ui/pages.js): pull down at the top of Summary ─────────────── */
+  /* ── Hub (ui/pages.js): pull down at the top of a page ──────────────── */
   .hub-scrim { position: fixed; inset: 0; z-index: 85; background: rgb(0 0 0 / .32); opacity: 0; pointer-events: none; transition: opacity .3s ease; }
   html.hub-open .hub-scrim { opacity: 1; pointer-events: auto; }
   html.hub-drag .hub-scrim { transition: none; pointer-events: auto; }
@@ -278,8 +245,8 @@
      screen height and the bottom-anchored layers sit inside it. */
   html.fill-screen, html.fill-screen body { height: var(--app-h); }
   html.fill-screen body { position: relative; }
-  html.fill-screen .hud, html.fill-screen .sheet-backdrop, html.fill-screen .pages, html.fill-screen .pages-scrim, html.fill-screen .hub, html.fill-screen .hub-scrim { position: absolute; }
-  html.fill-screen .pages-scrim, html.fill-screen .hub-scrim { height: var(--app-h); bottom: auto; }
+  html.fill-screen .hud, html.fill-screen .bulkbar, html.fill-screen .sheet-backdrop, html.fill-screen .hub, html.fill-screen .hub-scrim { position: absolute; }
+  html.fill-screen .hub-scrim { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet-backdrop { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet { max-height: calc(var(--app-h) - var(--safe-t) - 1rem); }
   html.fill-screen .sheet--tall { height: calc(var(--app-h) - var(--safe-t) - 2.5rem); }
@@ -287,7 +254,7 @@
   html.fill-screen .side--left { left: 0; }
   html.fill-screen .side--right { right: 0; }
 
-  /* ── Live HUD (floats at the bottom over Summary and the pages drawer) ── */
+  /* ── Live HUD (floats at the bottom over every page) ── */
   .hud {
     position: fixed;
     left: 50%;
@@ -304,7 +271,6 @@
     color: var(--ink);
     box-shadow: var(--shadow), 0 0 0 1px var(--line);
     z-index: 80;
-    touch-action: none;                 /* swipe up = the pages drawer */
     transition: bottom .2s ease;
   }
   .hud.is-empty { display: none; }
@@ -318,6 +284,18 @@
   }
   .hud.is-warn { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--bad); }
   body.keyboard-open .hud { bottom: 0.5rem; }
+
+  /* Staff's bulk bar (select mode): docks where the HUD sits, in its place. */
+  .bulkbar {
+    display: none; position: fixed; left: 50%; bottom: calc(var(--dock) + 0.625rem); transform: translateX(-50%);
+    width: calc(min(100vw, 480px) - 2 * var(--gutter)); max-height: 60dvh; overflow-y: auto;
+    padding: .75rem; border-radius: 1.25rem; background: var(--surface); color: var(--ink);
+    box-shadow: var(--shadow), 0 0 0 1px var(--line); z-index: 81;
+  }
+  html.bulk-on[data-page="staff"] .bulkbar { display: block; }
+  html.bulk-on[data-page="staff"] .hud { display: none; }
+  html.bulk-on[data-page="staff"] .content { padding-bottom: calc(var(--dock) + 19rem); }
+  body.keyboard-open .bulkbar { display: none !important; }
 
   /* ── Bottom sheets: the page colour, cards inside ─────────────────────── */
   .sheet-backdrop {
@@ -443,7 +421,7 @@
   .keypad > * { max-width: 30rem; margin: 0 auto; }
   .keypad.open { transform: none; }
   html.keypad-open .hud { visibility: hidden; }
-  html.keypad-open .content, html.keypad-open .pg-scroll { padding-bottom: calc(var(--kp-h, 18rem) + 5rem); }   /* + room for the previewing HUD */
+  html.keypad-open .content { padding-bottom: calc(var(--kp-h, 18rem) + 5rem); }   /* + room for the previewing HUD */
   html.fill-screen .keypad { position: absolute; }
   html.keypad-open .side-body, html.keypad-open .sheet-body { padding-bottom: calc(var(--kp-h, 18rem) + 1rem); }
   [data-kcell] { scroll-margin: 3rem 0 calc(var(--kp-h, 0px) + 4.5rem); }
