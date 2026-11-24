@@ -486,10 +486,16 @@ function Staff({ vm }) {
     <${Note} vm=${vm} />
     <${QuickAdd} vm=${vm} />
     ${groups.map(g => html`<${Group} key=${g.role || 'all'} vm=${vm} ...${g} />`)}
-    <p class="t-small px-6 text-center text-ink-3">Type a name, then times on the keypad (530 = 5:30) — Next moves along the row, ↓ down the column. Drag a time to nudge it; tap Hrs for more. Faded times are the defaults.</p>
+    <p class="t-small px-6 text-center text-ink-3">Type a name, then times on the keypad (530 = 5:30) — Next moves along the row, ↓ down the column. Hold a time for the wheel; swipe a row left to remove it; tap Hrs for more. Faint times are the defaults.</p>
     ${done && (vm.totalCash > 0 && !vm.blocked
       ? html`<${NextStep} tab="summary" label="See who gets what" sub=${fmtMoney(vm.totalCash) + ' over ' + fmtHrs(hours) + ' hours'} />`
       : html`<${NextStep} tab="tips" label="Next: enter the tips" sub=${named.length + ' on shift · ' + fmtHrs(hours) + ' hours'} />`)}
+    <${Section} title="This page"><${List}>
+      <${SwitchRow} on=${state.settings.allRoles} onClick=${() => App.toggleSetting('allRoles')}
+        icon="users" label="Roles" hint="A table per role: bartenders · servers · support" />
+      <${SwitchRow} on=${state.settings.clock24} onClick=${() => App.toggleSetting('clock24')}
+        icon="clock" label="24-hour times" hint="17:30 instead of 5:30p" />
+    <//><//>
   </div>`;
 }
 

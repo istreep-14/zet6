@@ -15,7 +15,8 @@ import { EDGE_TOKENS } from '../resolve.js';
 import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
 import { KeyTime } from '../ui/keytime.js';
 import { html, render, useState } from '../ui/preact.js';
-import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, Table, Money, INPUT, ROLE_DOT, zebra, holdRepeat } from '../ui/pkit.js';
+import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, Table, Money, SwitchRow, INPUT, ROLE_DOT, zebra, holdRepeat } from '../ui/pkit.js';
+import { useSwipeNav } from '../ui/swipenav.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
@@ -36,7 +37,6 @@ function windowSub(pool, vmPool) {
 // floor: Open / Close, Servers out, Bar out (resolvePools). A dragged or
 // typed time makes it fixed; a chip makes it follow the floor again.
 const rerender = () => { if (lastVm) renderTips(lastVm); };
-const EDGE_NAME = { srv: 'Servers out', bar: 'Bar out' };
 
 function edgeCell(vm, pool, vmPool, which, cls, tone) {
   const anchor = vm.resolved?.anchorAbs ?? 17;
@@ -66,11 +66,6 @@ function WindowEdge({ vm, pool, vmPool, which }) {
   </div>`;
 }
 
-// "Servers out → Bar out" style description of a derived window.
-function edgeWords(pool, which) {
-  const raw = String(pool.window[which] || '').trim();
-  return EDGE_NAME[raw] || (raw ? '' : which === 'start' ? 'open' : 'close');
-}
 
 function SharedBy({ pool }) {
   return html`<${FormRow} label="Shared by">
@@ -210,12 +205,10 @@ function PoolCard({ pool, vm }) {
   const vmPool = vm.pools.find(p => p.id === pool.id);
   const total = vmPool ? vmPool.total : 0;
   const counted = vmPool?.counted || 0, adj = vmPool?.adjust || 0;
-  const [count, setCount] = useState(counted > 0);
-  const [over, setOver] = useState(!!String(pool.cash.adjust || '').trim());
-  const counting = count || counted > 0;
-  const adjusting = over || adj !== 0;
+  const counting = counted > 0 || countOn.has(pool.id);
   const parts = [counted > 0 && fmtMoney(counted) + ' counted', counted > 0 && vmPool.rest > 0 && fmtMoney(vmPool.rest) + ' rest',
     adj !== 0 && fmtMoney(Math.abs(adj)) + (adj < 0 ? ' short' : ' over')].filter(Boolean);
+  const row = 'li flex min-h-[var(--row-lg)] w-full items-center gap-3 px-4 py-2 text-left transition active:bg-surface-2';
 
   return html`<${Card} flush data-pid=${pool.id}>
     <div class="flex w-full items-start gap-3 px-4 pb-1 pt-4">
@@ -230,22 +223,18 @@ function PoolCard({ pool, vm }) {
     </div>
     <div class="px-4 pb-4 pt-3"><${Amount} pool=${pool} vmPool=${vmPool} counting=${counting} /></div>
     <div class="flex flex-col divide-y divide-line border-t border-line">
-      <${OptRow} on=${counting} title="Count bills" sub=${counting ? 'The bills you can see at a glance' : 'Count some bills, the rest is picked for you'}
-        onClick=${() => { if (counting) { setCount(false); App.poolCounting(pool.id, false); } else { setCount(true); App.poolCounting(pool.id, true); } }} />
-      ${counting && html`<div class="flex flex-col">
-        <div class=${cx(BILL_GRID, 't-cap px-4 pb-1 pt-2 text-ink-3')}><span>Bill</span><span class="text-center">Count</span><span class="text-right">Amount</span></div>
-        ${DENOMS.map((d, i) => html`<div key=${d} class=${zebra(i)}><${BillRow} pool=${pool} d=${d} /></div>`)}
-        <div class=${cx(BILL_GRID, 'min-h-[var(--row)] bg-surface-2 px-4 font-semibold')}>
-          <span class="t-body">Counted</span>
-          <span class="t-small flex items-center justify-center gap-2 font-normal text-ink-3">Amount is the
-            <${Seg} size="sm" class="w-28" value=${pool.cash.restMode === 'total' ? 'total' : 'rest'} onChange=${m => App.poolRestMode(pool.id, m)}
-              items=${[{ value: 'total', label: 'Total' }, { value: 'rest', label: 'Rest' }]} /></span>
-          <span class="t-body text-right tabular-nums">${fmtMoney(counted)}</span>
-        </div>
-      </div>`}
-      <${OptRow} on=${adjusting} title="Register over / short" sub="Re-splits the tips"
-        onClick=${() => { if (adjusting) { setOver(false); App.poolAdjust(pool.id, ''); } else setOver(true); }} />
-      ${adjusting && html`<${FormRow}><${Adjust} key=${pool.id} pool=${pool} /><//>`}
+      <button class=${row} onClick=${() => openCashSheet('count', pool.id)}>
+        <span class="flex min-w-0 flex-1 flex-col"><span class="t-body font-medium">Count bills</span>
+          <span class="t-small text-ink-3">${counting ? fmtMoney(counted) + ' counted · the amount is the ' + (pool.cash.restMode === 'total' ? 'total' : 'rest') : 'Off — count the bills you can see'}</span></span>
+        ${counting && html`<span class="t-body font-semibold tabular-nums">${fmtMoney(counted)}</span>`}
+        <${Icon} name="chevR" class="size-4 shrink-0 text-ink-3/70" />
+      </button>
+      <button class=${row} onClick=${() => openCashSheet('adjust', pool.id)}>
+        <span class="flex min-w-0 flex-1 flex-col"><span class="t-body font-medium">Register over / short</span>
+          <span class="t-small text-ink-3">${adj ? 'Re-splits the tips' : 'None'}</span></span>
+        ${adj !== 0 && html`<span class=${cx('t-body font-semibold tabular-nums', adj < 0 ? 'text-bad' : 'text-good')}>${adj < 0 ? '−' : '+'}${fmtMoney(Math.abs(adj))}</span>`}
+        <${Icon} name="chevR" class="size-4 shrink-0 text-ink-3/70" />
+      </button>
       ${showChips && html`<${SharedBy} pool=${pool} />`}
       ${pool.includeSupport && html`<${SupportBox} pool=${pool} vm=${vm} vmPool=${vmPool} />`}
       ${!single && html`<${FormRow} label="Window" aside="tap a time to type it, hold for the wheel">
@@ -255,9 +244,59 @@ function PoolCard({ pool, vm }) {
           <${WindowEdge} vm=${vm} pool=${pool} vmPool=${vmPool} which="end" />
         <//>
         <${FormRow} label="Label"><input class=${cx(INPUT, 'h-11')} value=${pool.label} aria-label="Pool label" onInput=${e => App.poolLabel(pool.id, e.target.value)} /><//>
-        <div class="px-4 py-3"><${Button} variant="danger" size="sm" onClick=${() => { closeSheet('sheet-pool'); App.removePool(pool.id); }}>Remove pool<//></div>`}
+        <div class="px-4 py-3"><${Button} variant="danger" size="sm" onClick=${() => App.removePool(pool.id)}>Remove pool<//></div>`}
     </div>
   <//>`;
+}
+
+// ── The cash form's small drawers ───────────────────────────────────────────
+// Count bills: a switch, the bill rows (Bill · Count · Amount, large −/+ you
+// can hold), the Counted total with "the amount is the Total / Rest".
+// Over / short: the register adjustment.
+const countOn = new Set();          // pools whose Count bills is on with nothing counted yet
+let cashSheet = null;               // { which: 'count' | 'adjust', id }
+onSheetClose('sheet-count', () => { cashSheet = null; });
+onSheetClose('sheet-adjust', () => { cashSheet = null; });
+function openCashSheet(which, id) {
+  cashSheet = { which, id };
+  openSheet('sheet-' + which);
+  if (lastVm) renderCashSheet(lastVm);
+}
+function CountBody({ vm, pool }) {
+  const vmPool = vm.pools.find(p => p.id === pool.id);
+  const counted = vmPool?.counted || 0;
+  const on = counted > 0 || countOn.has(pool.id);
+  const flip = () => {
+    if (on) { countOn.delete(pool.id); App.poolCounting(pool.id, false); } else { countOn.add(pool.id); App.poolCounting(pool.id, true); }
+  };
+  return html`<${Card} flush>
+    <${OptRow} on=${on} title="Count bills" sub=${on ? 'Off folds the counted bills back into the amount' : 'Count the bills you can see — the rest is picked for you'} onClick=${flip} />
+    ${on && html`<div class="flex flex-col border-t border-line">
+      <div class=${cx(BILL_GRID, 't-cap px-4 pb-1 pt-2 text-ink-3')}><span>Bill</span><span class="text-center">Count</span><span class="text-right">Amount</span></div>
+      ${DENOMS.map((d, i) => html`<div key=${d} class=${zebra(i)}><${BillRow} pool=${pool} d=${d} /></div>`)}
+      <div class=${cx(BILL_GRID, 'min-h-[var(--row)] bg-surface-2 px-4 font-semibold')}>
+        <span class="t-body">Counted</span>
+        <span class="t-small flex items-center justify-center gap-2 font-normal text-ink-3">Amount is the
+          <${Seg} size="sm" class="w-28" value=${pool.cash.restMode === 'total' ? 'total' : 'rest'} onChange=${m => App.poolRestMode(pool.id, m)}
+            items=${[{ value: 'total', label: 'Total' }, { value: 'rest', label: 'Rest' }]} /></span>
+        <span class="t-body text-right tabular-nums">${fmtMoney(counted)}</span>
+      </div>
+    </div>`}
+  <//>`;
+}
+function AdjustBody({ pool }) {
+  return html`<p class="t-small px-1 text-ink-3">After counting the register: what it's over or short comes out of (or goes into) the tips, and the split is redone. Summary shows Was · Now · ±.</p>
+    <${Card}><${Adjust} key=${pool.id} pool=${pool} /><//>
+    ${String(pool.cash.adjust || '').trim() && html`<${Button} block onClick=${() => App.poolAdjust(pool.id, '')}>Clear — no over / short<//>`}`;
+}
+function renderCashSheet(vm) {
+  if (!cashSheet) return;
+  const id = 'sheet-' + cashSheet.which;
+  if (!isOpen(id)) return;
+  const pool = vm.state.pools.find(p => p.id === cashSheet.id);
+  if (!pool) { closeSheet(id); return; }
+  setSheetTitle(id, (cashSheet.which === 'count' ? 'Count bills' : 'Register over / short') + (vm.state.pools.length > 1 ? ' · ' + pool.label : ''));
+  render(cashSheet.which === 'count' ? html`<${CountBody} vm=${vm} pool=${pool} />` : html`<${AdjustBody} pool=${pool} />`, sheetBody(id));
 }
 
 // Which bills to pull for the uncounted rest (all pools together) — a Table
@@ -276,28 +315,25 @@ function Suggested({ vm }) {
   <//>`;
 }
 
-// Several pools: one compact card per pool → its sheet.
-// Several pools: one row per pool — name, its window as two times you can
-// drag or tap (keypad) right here, who shares it, total; tap the row → sheet.
-const TILE_TIME = 'relative z-[1] -my-1.5 rounded-md px-1 py-1.5 text-[0.9375rem] tabular-nums transition';
-function PoolTile({ pool, vm }) {
-  const vmPool = vm.pools.find(p => p.id === pool.id);
-  const total = vmPool ? vmPool.total : 0;
-  const who = [pool.roles?.bartender && 'bartender', pool.roles?.server && 'server', pool.includeSupport && 'support'].filter(Boolean);
-  const derived = [edgeWords(pool, 'start'), edgeWords(pool, 'end')];
-  return html`<div role="button" tabindex="0" class="li flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-2 text-left active:bg-surface-2"
-    style=${{ '--inset': '1rem' }} onClick=${() => App.openPool(pool.id)}>
-    <span class="flex min-w-0 flex-1 flex-col gap-0.5">
-      <span class="t-body flex items-center gap-2 font-medium">${pool.label}
-        ${vm.state.settings.allRoles && html`<span class="flex items-center gap-1">${who.map(r => html`<span key=${r} class=${cx('size-1.5 rounded-full', ROLE_DOT[r])}></span>`)}</span>`}
-        ${vmPool?.adjust ? html`<span class=${cx('t-small', vmPool.adjust < 0 ? 'text-bad' : 'text-good')}>${vmPool.adjust < 0 ? '−' : '+'}${fmtMoney(Math.abs(vmPool.adjust))}</span>` : null}</span>
-      <span class="t-small flex flex-wrap items-center text-ink-3">
-        ${edgeCell(vm, pool, vmPool, 'start', TILE_TIME, 'font-medium text-ink-2')}<span class="mx-0.5">–</span>${edgeCell(vm, pool, vmPool, 'end', TILE_TIME, 'font-medium text-ink-2')}
-        ${(derived[0] || derived[1]) && html`<span class="ml-1.5 truncate">${derived[0] || 'set'} → ${derived[1] || 'set'}</span>`}
-      </span>
-    </span>
-    <span class=${cx('t-body shrink-0 font-semibold tabular-nums', !total && 'text-ink-3')}>${fmtMoney(total)}</span>
-    <${Icon} name="chevR" class="size-4 shrink-0 text-ink-3/70" />
+// Several pools: their names as a switch over one pool's card; swipe the
+// card sideways to step through the pools (it follows the finger).
+function Pools({ vm }) {
+  const pools = vm.state.pools;
+  const sel = pools.find(p => p.id === vm.state.ui.selectedPool) || pools[0];
+  const at = pools.indexOf(sel);
+  const nav = useSwipeNav({
+    prev: at > 0 ? () => App.selectPool(pools[at - 1].id) : null,
+    next: at < pools.length - 1 ? () => App.selectPool(pools[at + 1].id) : null,
+  });
+  return html`<div class="flex flex-col gap-3" ...${nav.handlers}>
+    <div class="-mx-[var(--gutter)] overflow-x-auto px-[var(--gutter)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <${Seg} class="w-max min-w-full" value=${sel.id} onChange=${id => App.selectPool(id)}
+        items=${pools.map(p => {
+          const t = vm.pools.find(x => x.id === p.id)?.total || 0;
+          return { value: p.id, label: html`<span class="whitespace-nowrap px-1">${p.label}</span><span class="font-normal text-ink-3">${t ? fmtMoney(t) : ''}</span>` };
+        })} />
+    </div>
+    <div ref=${nav.ref} class="will-change-transform"><${PoolCard} key=${sel.id} pool=${sel} vm=${vm} /></div>
   </div>`;
 }
 
@@ -321,38 +357,27 @@ function Tips({ vm }) {
     ${vm.cashNote && html`<${Alert} tone="warn">${vm.cashNote}<//>`}
     <${ShiftType} vm=${vm} />
     ${state.meta.shiftType === 'day' && html`<p class="t-small px-1 text-ink-3">Day: bar + servers share the floor until the servers are out; then Mid is the bar’s alone. Parties are their own tips, shared by whoever worked inside the party’s window.</p>`}
-    ${single
-      ? html`<${PoolCard} pool=${state.pools[0]} vm=${vm} />`
-      : html`<${List}>${state.pools.map(pool => html`<${PoolTile} key=${pool.id} pool=${pool} vm=${vm} />`)}<//>`}
+    ${single ? html`<${PoolCard} pool=${state.pools[0]} vm=${vm} />` : html`<${Pools} vm=${vm} />`}
     ${state.settings.multiPool && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
     <${Suggested} vm=${vm} />
     ${ready && html`<${NextStep} tab="summary" label="See who gets what"
       sub=${fmtMoney(vm.totalCash) + ' · $' + vm.shares.rate.toFixed(2) + ' an hour'} />`}
     ${vm.blockedTab === 'staff' && html`<${NextStep} tab="staff" label="Back to Staff" sub=${vm.blocked} />`}
+    <${Section} title="This page"><${List}>
+      <${SwitchRow} on=${state.settings.multiPool} disabled=${state.pools.length > 1} onClick=${() => App.toggleSetting('multiPool')}
+        icon="dollar" label="Several pools" hint=${state.pools.length > 1 ? 'On while there’s more than one pool' : 'Split the night into pools (day · mid · parties)'} />
+      <${SwitchRow} on=${state.settings.allRoles} onClick=${() => App.toggleSetting('allRoles')}
+        icon="users" label="Roles" hint="Bar · servers · support share pools by role" />
+    <//><//>
   </div>`;
 }
 
-// The pool sheet (several pools): the full editor card for one pool.
-let sheetPool = null;
 let lastVm = null;
-onSheetClose('sheet-pool', () => { sheetPool = null; });
-export function openPoolSheet(id) {
-  sheetPool = id;
-  openSheet('sheet-pool');
-  if (lastVm) renderPoolSheet(lastVm);
-}
-function renderPoolSheet(vm) {
-  if (!sheetPool || !isOpen('sheet-pool')) return;
-  const pool = vm.state.pools.find(p => p.id === sheetPool);
-  if (!pool || vm.state.pools.length < 2) { closeSheet('sheet-pool'); return; }
-  setSheetTitle('sheet-pool', pool.label || 'Pool');
-  render(html`<${PoolCard} key=${pool.id} pool=${pool} vm=${vm} />`, sheetBody('sheet-pool'));
-}
 
 export function renderTips(vm) {
   lastVm = vm;
   const root = $('tips-root');
   if (root) render(html`<${Tips} vm=${vm} />`, root);
-  renderPoolSheet(vm);
+  renderCashSheet(vm);
 }
 

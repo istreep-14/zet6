@@ -125,7 +125,6 @@
   :root {
     --hdr-h: 3.25rem;
     --hdr-gap: 1.25rem;                 /* extra top room in the home-screen app */
-    --tab-h: 3.75rem;
     --gutter: 1rem;
     /* Touch sizes — one scale for every control and row (rem, so they follow
        Display size). --tap: chips, toggles, small buttons, tool chips;
@@ -137,7 +136,7 @@
     --safe-b: env(safe-area-inset-bottom, 0px);
     --safe-l: env(safe-area-inset-left, 0px);
     --safe-r: env(safe-area-inset-right, 0px);
-    --dock: calc(var(--tab-h) + var(--safe-b));   /* top of the tab bar */
+    --dock: var(--safe-b);                        /* the bottom edge (no tab bar) */
     --blur: saturate(1.8) blur(20px);
   }
   @media (max-width: 374px) { :root { --gutter: 0.75rem; } }
@@ -211,26 +210,76 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     touch-action: pan-y;
-    /* clearance for the tab bar + the HUD above it */
-    padding: 0.5rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 5.25rem) calc(var(--gutter) + var(--safe-l));
+    /* clearance for the HUD (and its pills) at the bottom */
+    padding: 0.5rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 7.5rem) calc(var(--gutter) + var(--safe-l));
   }
   body.keyboard-open .content { padding-bottom: 1.5rem; }
-  html:has(.hud.is-review) .content { padding-bottom: calc(var(--dock) + 8.75rem); }   /* the HUD's Undo · Apply row */
+  html:has(.hud.is-review) .content, html:has(.hud.is-review) .pg-scroll { padding-bottom: calc(var(--dock) + 11rem); }   /* the HUD's Undo · Apply row */
 
   /* Sticky table heads sit flush with the top of .content (tucked into its 0.5rem padding). */
   .panel { display: none; --thead-top: -0.5rem; }
-  .panel.active { display: block; animation: rise .2s ease; }
-  .panel.active.from-right { animation: inRight .24s cubic-bezier(.2, .8, .3, 1); }
-  .panel.active.from-left  { animation: inLeft .24s cubic-bezier(.2, .8, .3, 1); }
-  @keyframes rise    { from { opacity: 0; transform: translateY(.375rem); } to { opacity: 1; transform: none; } }
-  @keyframes inRight { from { opacity: .3; transform: translateX(2.5rem); } to { opacity: 1; transform: none; } }
-  @keyframes inLeft  { from { opacity: .3; transform: translateX(-2.5rem); } to { opacity: 1; transform: none; } }
+  .panel.active { display: block; }
+
+  /* ── Pages drawer (ui/pages.js): Staff · Tips · Payout rise from the
+     bottom over Summary, side by side on a track that follows the finger. */
+  .pages-scrim {
+    position: fixed; inset: 0; z-index: 70; background: rgb(0 0 0 / .32);
+    opacity: 0; pointer-events: none; transition: opacity .3s ease;
+  }
+  html.pages-open .pages-scrim { opacity: 1; pointer-events: auto; }
+  html.pages-drag .pages-scrim { transition: none; }
+  .pages {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 75;
+    top: calc(var(--safe-t) + 2.75rem);
+    max-width: 480px; margin: 0 auto;
+    display: flex; flex-direction: column;
+    background: var(--bg); color: var(--ink);
+    border-radius: 1.25rem 1.25rem 0 0;
+    box-shadow: 0 -0.5rem 2.5rem -0.5rem rgb(0 0 0 / .3);
+    transform: translateY(100%); visibility: hidden;
+    transition: transform .34s cubic-bezier(.2, .9, .25, 1), visibility 0s linear .34s;
+  }
+  html.standalone .pages { top: calc(var(--safe-t) + var(--hdr-gap) + 2.75rem); }
+  html.pages-open .pages { transform: none; visibility: visible; transition: transform .34s cubic-bezier(.2, .9, .25, 1); }
+  html.pages-drag .pages { visibility: visible; transition: none; }
+  .pages-head { flex-shrink: 0; touch-action: none; }
+  .pages-view { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+  .pages-track { display: flex; width: 300%; height: 100%; transition: transform .3s cubic-bezier(.2, .9, .25, 1); }
+  html.pager-drag .pages-track { transition: none; }
+  .pg { width: calc(100% / 3); height: 100%; flex-shrink: 0; }
+  .pg-scroll {
+    height: 100%; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    padding: 0 calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 7.5rem) calc(var(--gutter) + var(--safe-l));
+    --thead-top: 0px;
+  }
+  .pg-scroll .page-title { padding-top: .5rem; padding-bottom: .75rem; }
+  /* the head's indicator under the page names follows the track (--pp 0…2) */
+  .pages-ind { transform: translateX(calc(var(--pp, 0) * 100%)); transition: transform .3s cubic-bezier(.2, .9, .25, 1); }
+  html.pager-drag .pages-ind { transition: none; }
+
+  /* ── Hub (ui/pages.js): pull down at the top of Summary ─────────────── */
+  .hub-scrim { position: fixed; inset: 0; z-index: 85; background: rgb(0 0 0 / .32); opacity: 0; pointer-events: none; transition: opacity .3s ease; }
+  html.hub-open .hub-scrim { opacity: 1; pointer-events: auto; }
+  html.hub-drag .hub-scrim { transition: none; pointer-events: auto; }
+  .hub {
+    position: fixed; left: 0; right: 0; top: 0; z-index: 86; max-width: 480px; margin: 0 auto;
+    padding: calc(var(--safe-t) + 1rem) var(--gutter) 0.75rem;
+    background: var(--bg); color: var(--ink);
+    border-radius: 0 0 1.5rem 1.5rem; box-shadow: var(--shadow);
+    transform: translateY(-100%); visibility: hidden; touch-action: none;
+    transition: transform .34s cubic-bezier(.2, .9, .25, 1), visibility 0s linear .34s;
+  }
+  html.standalone .hub { padding-top: calc(var(--safe-t) + var(--hdr-gap) + 0.5rem); }
+  html.hub-open .hub { transform: none; visibility: visible; transition: transform .34s cubic-bezier(.2, .9, .25, 1); }
+  html.hub-drag .hub { visibility: visible; transition: none; }
+  .hub::after { content: ''; display: block; width: 2.5rem; height: .3125rem; margin: .75rem auto 0; border-radius: 999px; background: color-mix(in srgb, var(--ink) 22%, transparent); }
 
   /* Home-screen app with a short viewport (main.js): the page box is the real
      screen height and the bottom-anchored layers sit inside it. */
   html.fill-screen, html.fill-screen body { height: var(--app-h); }
   html.fill-screen body { position: relative; }
-  html.fill-screen .tabbar, html.fill-screen .hud, html.fill-screen .sheet-backdrop { position: absolute; }
+  html.fill-screen .hud, html.fill-screen .sheet-backdrop, html.fill-screen .pages, html.fill-screen .pages-scrim, html.fill-screen .hub, html.fill-screen .hub-scrim { position: absolute; }
+  html.fill-screen .pages-scrim, html.fill-screen .hub-scrim { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet-backdrop { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet { max-height: calc(var(--app-h) - var(--safe-t) - 1rem); }
   html.fill-screen .sheet--tall { height: calc(var(--app-h) - var(--safe-t) - 2.5rem); }
@@ -238,65 +287,7 @@
   html.fill-screen .side--left { left: 0; }
   html.fill-screen .side--right { right: 0; }
 
-  /* ── Tab bar: docked at the bottom, frosted, a hairline on top ────────── */
-  .tabbar {
-    position: fixed;
-    left: 0; right: 0; bottom: 0;
-    max-width: 480px;
-    margin: 0 auto;
-    height: var(--dock);
-    padding: 0 calc(var(--gutter) + var(--safe-r)) var(--safe-b) calc(var(--gutter) + var(--safe-l));
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.25rem;
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--blur);
-    backdrop-filter: var(--blur);
-    box-shadow: 0 -1px 0 var(--line);
-    z-index: 20;
-    transition: transform .25s ease, opacity .2s;
-  }
-  body.keyboard-open .tabbar { transform: translateY(100%); opacity: 0; }
-  .tab {
-    position: relative;
-    min-width: 0;
-    height: var(--tab-h);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-    color: var(--ink-3);
-    transition: color .15s;
-  }
-  .tab svg { width: 1.5rem; height: 1.5rem; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-  .tab.active { color: var(--ink); }
-  .tab.active svg { color: var(--accent); }
-  .tab-label { font-size: 0.6875rem; font-weight: 500; line-height: 1.2; }
-  .tab.active .tab-label { font-weight: 600; }
-  /* count / total badge on the icon's shoulder */
-  .tab-sub {
-    position: absolute;
-    top: 0.375rem;
-    left: calc(50% + 0.375rem);
-    min-width: 1.0625rem;
-    height: 1.0625rem;
-    padding: 0 0.3125rem;
-    border-radius: 999px;
-    font-size: 0.625rem;
-    font-weight: 600;
-    line-height: 1.0625rem;
-    white-space: nowrap;
-    text-align: center;
-    color: var(--ink-2);
-    background: var(--surface-2);
-    box-shadow: 0 0 0 2px var(--bg);
-  }
-  .tab-sub:empty { display: none; }
-  .tab-sub.ok { color: var(--on-accent); background: var(--accent); }
-  .tab-sub.warn { color: #fff; background: var(--bad); }
-
-  /* ── Live HUD (floats above the tab bar on Summary / Staff / Tips) ────── */
+  /* ── Live HUD (floats at the bottom over Summary and the pages drawer) ── */
   .hud {
     position: fixed;
     left: 50%;
@@ -312,11 +303,19 @@
     background: var(--surface);
     color: var(--ink);
     box-shadow: var(--shadow), 0 0 0 1px var(--line);
-    z-index: 19;
+    z-index: 80;
+    touch-action: none;                 /* swipe up = the pages drawer */
     transition: bottom .2s ease;
   }
-  .hud.is-off, .hud.is-empty { display: none; }
-  .hud.is-off.is-review:not(.is-empty) { display: flex; }   /* Undo · Apply follows you to Payout */
+  .hud.is-empty { display: none; }
+  /* Two quiet pills on the HUD's top edge: the close time, the chump. */
+  .hud-pills { position: absolute; left: .25rem; right: .25rem; bottom: 100%; display: flex; justify-content: space-between; padding-bottom: .375rem; pointer-events: none; }
+  .hud-pill {
+    pointer-events: auto; color: var(--ink-2);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+    box-shadow: 0 0 0 1px var(--line), 0 .25rem .75rem -.5rem rgb(0 0 0 / .3);
+  }
   .hud.is-warn { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--bad); }
   body.keyboard-open .hud { bottom: 0.5rem; }
 
@@ -443,8 +442,8 @@
   }
   .keypad > * { max-width: 30rem; margin: 0 auto; }
   .keypad.open { transform: none; }
-  html.keypad-open .tabbar, html.keypad-open .hud { visibility: hidden; }
-  html.keypad-open .content { padding-bottom: calc(var(--kp-h, 18rem) + 5rem); }   /* + room for the previewing HUD */
+  html.keypad-open .hud { visibility: hidden; }
+  html.keypad-open .content, html.keypad-open .pg-scroll { padding-bottom: calc(var(--kp-h, 18rem) + 5rem); }   /* + room for the previewing HUD */
   html.fill-screen .keypad { position: absolute; }
   html.keypad-open .side-body, html.keypad-open .sheet-body { padding-bottom: calc(var(--kp-h, 18rem) + 1rem); }
   [data-kcell] { scroll-margin: 3rem 0 calc(var(--kp-h, 0px) + 4.5rem); }
@@ -516,32 +515,47 @@
 }
 
 @layer components {
-  /* ── Wheel picker (ui/wheel.js): hold a time / the tips total → a popup
-     beside the thumb with an iOS-style wheel (scroll-snap, so a flick's
-     speed carries it), the change on top, its effect under it. ────────── */
-  .wheel-scrim { position: fixed; inset: 0; z-index: 140; background: rgb(0 0 0 / .18); animation: wheel-fade .15s ease-out; }
+  /* ── Wheel picker (ui/wheel.js): a narrow wheel right on the held box —
+     the band is the box (accent), the values above and below on no
+     background, haloed in the page colour; ✕ / ✓ beside the band. ─────── */
   .wheel {
-    position: fixed; width: min(calc(100vw - 1.5rem), 21rem); overflow: hidden;
-    background: var(--surface); color: var(--ink); border-radius: 1.25rem;
-    box-shadow: var(--shadow), 0 0 0 1px var(--line);
-    animation: wheel-pop .17s cubic-bezier(.2, .9, .3, 1.2);
+    position: fixed; z-index: 140;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    animation: wheel-in .14s ease-out;
   }
-  @keyframes wheel-fade { from { opacity: 0; } }
-  @keyframes wheel-pop { from { opacity: 0; transform: scale(.92); } }
+  @keyframes wheel-in { from { opacity: 0; transform: scale(.94); } }
   .wheel-list {
     position: relative; overflow-y: scroll; overscroll-behavior: contain;
     scroll-snap-type: y mandatory; scrollbar-width: none; touch-action: pan-y;
-    -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
-    mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+    -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
+    mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent);
   }
   .wheel-list::-webkit-scrollbar { display: none; }
   .wheel-item {
-    position: relative; display: flex; width: 100%; align-items: center; justify-content: center;
-    scroll-snap-align: center; color: var(--ink-3); transition: transform .12s, opacity .12s, color .12s;
+    display: flex; width: 100%; align-items: center; justify-content: center;
+    scroll-snap-align: center; outline: none; -webkit-tap-highlight-color: transparent;
+    font-size: 1rem; font-variant-numeric: tabular-nums; white-space: nowrap;
+    color: var(--ink-2);
+    font-weight: 600;
+    /* a thick halo of the page colour: the numbers read over whatever's under them */
+    text-shadow: 0 0 2px var(--bg), 0 0 3px var(--bg), 0 0 5px var(--bg), 0 0 8px var(--bg), 0 0 12px var(--bg), 0 0 16px var(--bg);
+    transition: transform .12s, opacity .12s, color .12s;
   }
-  .wheel-item > :nth-child(2) { position: absolute; right: 1.5rem; }
-  .wheel-band { position: absolute; left: .75rem; right: .75rem; border-radius: .875rem; background: color-mix(in srgb, var(--accent) 11%, transparent); pointer-events: none; }
-  html.fill-screen .wheel-scrim { position: absolute; height: var(--app-h); }
+  .wheel-item.is-on { color: var(--on-accent); font-weight: 600; text-shadow: none; }
+  .wheel-item.is-near { opacity: .9; transform: scale(.94); }
+  .wheel-item.is-far { opacity: .55; transform: scale(.88); }
+  .wheel-band {
+    position: absolute; left: 0; right: 0; border-radius: .625rem; pointer-events: none;
+    background: var(--accent); box-shadow: 0 .375rem 1rem -.375rem rgb(0 0 0 / .45);
+  }
+  .wheel-btn {
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
+    box-shadow: 0 0 0 1px var(--line), 0 .25rem .75rem -.375rem rgb(0 0 0 / .35);
+  }
+  /* A finger resting on a time / amount box: no text selection anywhere
+     (iOS's long-press select-and-highlight), no callout. */
+  html.holding, html.holding * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
 }
 
 @media (prefers-reduced-motion: reduce) {

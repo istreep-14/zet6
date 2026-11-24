@@ -22,9 +22,10 @@ import { fmtHrs, fmtMoney, hasMinutes, hrsDecimals, hrsText } from '../util.js';
 import { TIME_TEXT, ARROW_BEFORE, DragAmount } from '../ui/dragtime.js';
 import { html, render, useRef, useState, useEffect, useLayoutEffect } from '../ui/preact.js';
 import { payDelta, sumDelta, timeMoved, defaultMoved } from '../ui/changes.js';
-import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Seg, Delta, Flash, ToolChips, Table, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL } from '../ui/pkit.js';
+import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Seg, Delta, Flash, Table, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL } from '../ui/pkit.js';
 import { StaffTime, DefaultTime } from './staff.js';
 import { EnvelopeTable } from './payout.js';
+import { useSwipeNav } from '../ui/swipenav.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
@@ -267,6 +268,20 @@ function PayRow({ vm, p, n, tint, before, view, col = {} }) {
   </div>`;
 }
 
+// The chump: a small quiet row just above Total — the dollars left after
+// rounding that stay in the drawer. Tap → Closer bonus & chump.
+function ChumpRow({ vm, view }) {
+  const adj = !!vm.sharesBefore;
+  const s = vm.shares;
+  const amt = html`<span class="text-right tabular-nums">${fmtMoney(s.leftover)}</span>`;
+  const was = vm.sharesBefore?.leftover || 0;
+  const mid = adj ? html`<span class="text-right tabular-nums">${fmtMoney(was)}</span>${amt}<span class="text-right tabular-nums">${signed(s.leftover - was)}</span>`
+    : view === 'shift' ? html`<span></span><span></span><span></span>${amt}` : html`<span></span>${amt}`;
+  return html`<button style=${{ '--inset': '3.5rem' }} class=${cx('li t-small w-full px-4 py-1 text-left text-ink-3 transition active:bg-surface-2', gridFor(adj, view))}
+    onClick=${() => App.openBonus()} aria-label="Chump — closer bonus and chump">
+    <span></span><span class="truncate">Chump <span class="text-ink-3/70">· stays in the drawer</span></span>${mid}</button>`;
+}
+
 // The Total row's open / close: semibold ink-2, accent while it's moving.
 const TOTAL_TONE = mv => (mv === 'preview' ? 'font-semibold text-accent' : mv ? 'font-semibold text-accent' : 'font-semibold text-ink-2');
 
@@ -402,6 +417,7 @@ function PayoutList({ vm, name, view }) {
     </div>
     <${List}>
       ${ordered.map((p, i) => html`<${PayRow} key=${p.id} vm=${vm} p=${p} n=${i + 1} tint=${tint} before=${was(p.id)} view=${view} col=${col} />`)}
+      ${s.leftover > 0 && html`<${ChumpRow} vm=${vm} view=${view} />`}
       <${TotalRow} vm=${vm} hours=${hours} paidOut=${paidOut} before=${paidBefore} view=${view} col=${col} />
     <//>
     ${footer && html`<div class="t-small px-4 text-ink-3">${footer}</div>`}
@@ -569,18 +585,6 @@ function renderPoolSheet(vm) {
   render(html`<${PoolTable} key=${pools[i].id} vm=${vm} pool=${pools[i]} index=${i} />`, sheetBody('sheet-poolsum'));
 }
 
-// The shift's tools, up top where a thumb finds them (they used to sit at
-// the foot of the page): Close-time what-if (with the close time), Closer
-// bonus & chump (with the chump), Copy as text.
-function Tools({ vm }) {
-  const close = vm.resolved?.closeAbs;
-  const chump = vm.shares?.leftover || 0;
-  return html`<${ToolChips} items=${[
-    { icon: 'clock', label: 'Close time', value: close != null ? html`<${Clock} abs=${close} />` : '', onClick: () => App.openCloseTime() },
-    { icon: 'gift', label: 'Bonus & chump', value: chump > 0 ? fmtMoney(chump) : '', onClick: () => App.openBonus() },
-    { icon: 'copy', label: 'Copy', onClick: () => App.copySummary() },
-  ]} />`;
-}
 
 // Bills view: each person's envelope as a grid — Name · one column per bill
 // size · Pay, chump and drawer totals (Payout's EnvelopeTable, Staff order).
@@ -625,26 +629,37 @@ const VIEWS = [
 
 function Summary({ vm, name }) {
   const [pick, setView] = useState(null);             // list · shift · pools · bills · math (null = default)
-  if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
-  const several = vm.shares.perPool.length > 1;
+  const several = !vm.blocked && vm.shares.perPool.length > 1;
   // Several pools open on the Pools table — hours and tips per pool per person.
   const view = (pick === 'pools' && !several) ? 'shift' : pick || (several ? 'pools' : 'shift');
+  // Swipe the view sideways to step through List · Shift · Pools · Bills ·
+  // Math (it follows the finger; useSwipeNav).
+  const order = VIEWS.map(v => v.value).filter(v => v !== 'pools' || several);
+  const at = order.indexOf(view);
+  const nav = useSwipeNav({
+    prev: at > 0 ? () => setView(order[at - 1]) : null,
+    next: at < order.length - 1 ? () => setView(order[at + 1]) : null,
+  });
+  if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   const billsOff = view === 'bills' && (!vm.dist || vm.dist.error);
   // Five views: icons over the labels' room would crowd a 375pt screen, so
   // the icons drop out on narrow phones (max-[400px]).
   const items = VIEWS.filter(v => v.value !== 'pools' || several)
     .map(v => ({ ...v, label: html`<span class="max-[25rem]:hidden">${html`<${Icon} name=${v.icon} class="size-4" />`}</span>${v.label}`, icon: null }));
-  return html`<div class="flex flex-col gap-5">
+  // The whole page takes the sideways swipe (down to the bottom of the
+  // screen, so the empty space under a short list counts too).
+  return html`<div class="flex min-h-[calc(100dvh-12rem)] flex-col gap-5" ...${nav.handlers}>
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map(w => html`<${Alert}>${w}<//>`)}
     <${AdjustBanner} vm=${vm} />
-    <${Tools} vm=${vm} />
     <div class="flex flex-col gap-3">
       <${Seg} size="lg" value=${view} onChange=${setView} items=${items} />
-      ${billsOff && html`<${Alert} tone="warn" action=${{ label: 'Payout', onClick: () => App.tab('payout') }}>The bills don’t work out yet — Payout has the swap.<//>`}
-      ${view === 'pools' ? html`<${PoolGrid} vm=${vm} />`
-        : view === 'bills' ? html`<${BillsTable} vm=${vm} />`
-        : view === 'math' ? html`<${MathTable} vm=${vm} />`
-        : html`<${PayoutList} vm=${vm} name=${name} view=${view} />`}
+      <div ref=${nav.ref} class="flex flex-col gap-3 will-change-transform">
+        ${billsOff && html`<${Alert} tone="warn" action=${{ label: 'Payout', onClick: () => App.tab('payout') }}>The bills don’t work out yet — Payout has the swap.<//>`}
+        ${view === 'pools' ? html`<${PoolGrid} vm=${vm} />`
+          : view === 'bills' ? html`<${BillsTable} vm=${vm} />`
+          : view === 'math' ? html`<${MathTable} vm=${vm} />`
+          : html`<${PayoutList} vm=${vm} name=${name} view=${view} />`}
+      </div>
     </div>
     ${view !== 'pools' && html`<${PoolsList} vm=${vm} />`}
   </div>`;

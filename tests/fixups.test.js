@@ -55,3 +55,36 @@ assert.deepEqual(stackSizes({ stacks: { 1: '40', 5: 152, 10: 100 } }), { 1: 40, 
 }
 
 console.log('fixups / stacks ok');
+
+// shortFixes: register short — no change from the register.
+import { shortFixes } from '../src/fixups.js';
+{
+  // Ana owes $9 with a $5 and four $1s: exact on her own.
+  const fx = shortFixes({ byPerson: { a: { 20: 5, 5: 1, 1: 4 }, b: { 20: 5 } }, pay: { a: 109, b: 100 } }, { a: 100, b: 100 });
+  assert.equal(fx.register, 9);
+  assert.equal(fx.moves.length, 1);
+  assert.equal(fx.moves[0].from, 'a');
+  assert.equal(fx.notes.length, 0);
+}
+{
+  // Ana owes $15 with only $20s — not exact alone. Ben owes $5. Together: Ana's
+  // $20 goes in, Ben hands Ana his $5. No change from the register.
+  const fx = shortFixes({ byPerson: { a: { 20: 2 }, b: { 10: 1, 5: 1 } }, pay: { a: 40, b: 15 } }, { a: 25, b: 10 });
+  assert.equal(fx.register, 20);
+  assert.equal(fx.notes.length, 0, JSON.stringify(fx));
+  const net = id => fx.moves.reduce((t, m) => t + (m.from === id ? -value(m.bills) : 0) + (m.to === id ? value(m.bills) : 0), 0);
+  assert.equal(net('a'), -15);
+  assert.equal(net('b'), -5);
+}
+console.log('shortFixes ok');
+{
+  // Ana owes $13 with $20s and a $10; Cy owes $7 with only $1s and $20s.
+  // Exact alone fails for Ana; together they settle with change hand to hand.
+  const fx = shortFixes({ byPerson: { a: { 20: 2, 10: 1 }, c: { 20: 1, 1: 9 } }, pay: { a: 50, c: 29 } }, { a: 37, c: 22 });
+  assert.equal(fx.register, 20);
+  assert.equal(fx.notes.length, 0, JSON.stringify(fx));
+  const net = id => fx.moves.reduce((t, m) => t + (m.from === id ? -value(m.bills) : 0) + (m.to === id ? value(m.bills) : 0), 0);
+  assert.equal(net('a'), -13);
+  assert.equal(net('c'), -7);
+}
+console.log('shortFixes change ok');
