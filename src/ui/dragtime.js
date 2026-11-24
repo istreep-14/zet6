@@ -36,6 +36,13 @@ function swallowNextClick() {
   setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 400);
 }
 const buzz = ms => { try { navigator.vibrate?.(ms); } catch { /* optional */ } };
+// While a finger rests on a box (and while its wheel is open) nothing on the
+// page can be selected — iOS's long-press would otherwise select the text and
+// paint it blue (html.holding in app.css).
+const hold = on => {
+  document.documentElement.classList.toggle('holding', on);
+  if (on) { try { window.getSelection()?.removeAllRanges(); } catch { /* none */ } }
+};
 
 // The gesture, shared by DragTime and DragAmount. Hold → openWheel() with
 // wheel(v0) → { values, index, title, text, sub, change }. The same touch
@@ -59,24 +66,27 @@ function useHoldWheel({ value, enabled, onSet, onPreview, wheel }) {
     onPointerDown: e => {
       if (!enabled || value == null || isWheelOpen()) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (e.pointerType !== 'mouse') e.currentTarget.blur?.();
       const d = { x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, v0: value, armed: false, id: e.pointerId, el: e.currentTarget, t: Date.now(), vy: 0, moved: false };
       st.current = d;
       setHeld('press');
+      hold(true);
       clearTimeout(timer.current);
       timer.current = setTimeout(() => {
         const c = st.current;
         if (!c || c !== d) return;
         c.armed = true;
+        hold(true);
         try { c.el.setPointerCapture?.(c.id); } catch { /* gone */ }
         dragFlags.lastArmed = Date.now();
         buzz(10);
         setHeld('open');
         const v0 = c.v0, k = cfg.current;
         openWheel({
-          ...k.wheel(v0), x: c.x, y: c.y,
+          ...k.wheel(v0), anchor: c.el,
           onChange: v => k.onPreview?.(v === v0 ? null : v, v0) || null,
-          onDone: v => { setHeld(null); if (v !== v0) cfg.current.onSet(v, v0); cfg.current.onPreview?.(null); },
-          onCancel: () => { setHeld(null); cfg.current.onPreview?.(null); },
+          onDone: v => { setHeld(null); hold(false); if (v !== v0) cfg.current.onSet(v, v0); cfg.current.onPreview?.(null); },
+          onCancel: () => { setHeld(null); hold(false); cfg.current.onPreview?.(null); },
         });
       }, HOLD_MS);
     },
@@ -84,7 +94,7 @@ function useHoldWheel({ value, enabled, onSet, onPreview, wheel }) {
       const d = st.current;
       if (!d) return;
       if (!d.armed) {
-        if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > SLOP) { clearTimeout(timer.current); st.current = null; setHeld(null); swallowNextClick(); }
+        if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > SLOP) { clearTimeout(timer.current); st.current = null; setHeld(null); hold(false); swallowNextClick(); }
         else { d.x = e.clientX; d.y = e.clientY; }
         return;
       }
@@ -102,12 +112,12 @@ function useHoldWheel({ value, enabled, onSet, onPreview, wheel }) {
       const d = st.current;
       st.current = null;
       if (!d) return;
-      if (!d.armed) { setHeld(null); return; }
+      if (!d.armed) { setHeld(null); hold(false); return; }
       swallow.current = true;
       dragFlags.lastArmed = Date.now();
       wheelRelease(d.moved && Date.now() - d.t < 100 ? d.vy : 0);   // the wheel stays open to flick / Done
     },
-    onPointerCancel: () => { clearTimeout(timer.current); const d = st.current; st.current = null; if (!d?.armed) setHeld(null); },
+    onPointerCancel: () => { clearTimeout(timer.current); const d = st.current; st.current = null; if (!d?.armed) { setHeld(null); hold(false); } },
     // Once the wheel is open the thumb owns it: no page scroll, no long-press menu.
     onTouchMove: e => { if (st.current?.armed && e.cancelable) e.preventDefault(); },
     onContextMenu: e => { if (st.current) e.preventDefault(); },

@@ -2,8 +2,10 @@
 // Remove), the iOS list gesture. The row follows the finger; let go past
 // half the action's width and it stays open, otherwise it springs back. A
 // tap anywhere else, or opening another row, closes it. Only clear
-// horizontal swipes count (vertical scrolls and pinches pass), and a swipe
-// here doesn't also turn the page (dragFlags, like a held drag box).
+// horizontal swipes count (vertical scrolls and pinches pass). Only a
+// leftward swipe (or any swipe on an open row) is the row's; a rightward one
+// on a closed row is left to the pages drawer (it pages back), and a swipe
+// here never also turns the page (dragFlags, like a held box).
 
 import { html, useState, useRef } from './preact.js';
 import { cx, Icon } from './pkit.js';
@@ -48,7 +50,9 @@ export function SwipeRow({ action = 'Remove', icon = 'trash', onAction, enabled 
     dragFlags.lastArmed = Date.now();
     if (x < -W / 2) { setX(-W); closeOpen = close; } else close();
   };
-  return html`<div class=${cx('relative overflow-hidden', cls)} onTouchStart=${start} onTouchMove=${move} onTouchEnd=${end} onTouchCancel=${end}>
+  // data-swipe-row: the pages drawer leaves a leftward swipe that starts here
+  // to the row (rightward still pages back).
+  return html`<div data-swipe-row=${enabled ? "" : undefined} class=${cx('relative overflow-hidden', cls)} onTouchStart=${start} onTouchMove=${move} onTouchEnd=${end} onTouchCancel=${end}>
     ${enabled && (x < 0 || live) && html`<button class="absolute inset-y-0 right-0 flex items-center justify-center gap-1.5 bg-bad px-4 font-semibold text-white"
       style=${{ width: W + 'px' }}
       onClick=${() => { close(); onAction?.(); }}><${Icon} name=${icon} class="size-4" /><span class="t-small">${action}</span></button>`}

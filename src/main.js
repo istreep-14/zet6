@@ -10,14 +10,14 @@ import { setClock24, setAmFrom, parseTime, inAbsOf } from './time.js';
 import { countedValue } from './util.js';
 import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL } from './shifts.js';
 import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
-import { switchTab, updateTabIndicators, normalizeTab, TAB_ORDER } from './render/tabs.js';
+import { switchTab, updateTabIndicators, normalizeTab } from './render/tabs.js';
+import { initPages, openHub, closeHub, pagesOpen } from './ui/pages.js';
 import { renderStaff, openStaffEditor, openTimeEditor, openRosterSheet, rosterSelected, rosterAdded } from './render/staff.js';
 import { loadRoster, rememberName, forgetName, getRoster } from './roster.js';
-import { renderTips, openPoolSheet } from './render/tips.js';
-import { renderPayout, applyPendingTradeUp, applyPendingTradeDown } from './render/payout.js';
+import { renderTips } from './render/tips.js';
+import { renderPayout, applyPendingTradeUp, applyPendingTradeDown, openPayoutSheet } from './render/payout.js';
 import { refreshSticky } from './ui/sticky.js';
 import { trackChanges, resetChanges, snapOf, SHOW } from './ui/changes.js';
-import { dragFlags } from './ui/dragtime.js';
 import { toast, copyText } from './ui/toast.js';
 import { summaryText } from './textout.js';
 import { renderSummary, openPoolSummary } from './render/summary.js';
@@ -28,7 +28,7 @@ import {
 import { renderDrawer, toggleDrawerEdit } from './render/drawer.js';
 import { renderShiftPanel, calendarStep, scrollShiftTo } from './render/shiftpanel.js';
 import {
-  openPanel, closePanel, closePanels, togglePanel, isPanelOpen, initPanelGestures, EDGE,
+  openPanel, closePanel, closePanels, togglePanel, isPanelOpen, initPanelGestures,
 } from './ui/panels.js';
 
 const $ = id => document.getElementById(id);
@@ -77,7 +77,7 @@ function render(s) {
   renderSummary(lastVm, sessionName());
   renderCloseTime(lastVm);
   renderSheets(lastVm);
-  updateTabIndicators(lastVm);
+  updateTabIndicators(lastVm, sessionName());
   sessions.saveCurrent(s, {
     total: lastVm.totalCash || 0,
     people: s.staff.filter(p => p.name.trim()).length,
@@ -243,13 +243,17 @@ const fromPanel = fn => (...a) => { closePanels(); fn(...a); };
 
 window.App = {
   // tabs
+  // Summary closes the pages drawer; Staff / Tips / Payout open it there.
   tab(name, opts = {}) {
+    closeHub();
     switchTab(name, opts);
     store.setActiveTab(name);
   },
 
   // HUD: from Staff / Tips → Summary; from Summary → Payout (the bills).
   hudTap() { App.tab(store.getState().ui.activeTab === 'summary' ? 'payout' : 'summary'); },
+  // The hub (pull down at the top of Summary): every page and tool.
+  hub(on = true) { if (on) openHub(); else closeHub(); },
 
   // sheets
   closeSheet,
@@ -325,6 +329,8 @@ window.App = {
     withReview('Tips ' + (delta > 0 ? '+$' : '−$') + Math.abs(delta).toLocaleString('en-US'),
       () => store.mutate(s => nudgeCash(s, vmPool, delta), { immediate: true }));
   },
+  // Payout's extras, each a small drawer: 'fix' · 'stacks' · 'tidy'.
+  openPayoutSheet,
   // Stacks of small bills for managers (Payout).
   toggleStackTo: id => store.toggleStackTo(id),
   setStackSize: (d, v) => store.setStackSize(d, v),
@@ -361,8 +367,10 @@ window.App = {
   supportDefault: value => store.setSupportDefault(value.trim()),
 
   // pools
-  addPool() { const id = store.addPool(); if (store.getState().pools.length > 1) openPoolSheet(id); },
-  openPool: id => openPoolSheet(id),
+  // Several pools: the Tips page shows one pool at a time (swipe between them).
+  selectPool: id => store.mutate(s => { s.ui.selectedPool = id; }, { immediate: true }),
+  addPool() { const id = store.addPool(); App.selectPool(id); App.tab('tips'); },
+  openPool(id) { App.selectPool(id); App.tab('tips'); },
   openPoolSummary: id => openPoolSummary(id),
   removePool: store.removePool,
   poolRole: store.togglePoolRole,
@@ -634,42 +642,6 @@ if (window.visualViewport) {
   }, { passive: false });
 })();
 
-// Swipe left/right on the page to move between the bottom tabs (Summary ·
-// Staff · Tips · Payout). Only from the first tab does
-// a right swipe open the left panel, and only from the last does a left swipe
-// open the shift panel (the screen edges always drag the panels). Ignored
-// inside sideways-scrolling areas, on a touch that held a drag box long
-// enough to drag it (dragFlags), at the screen edges, while
-// typing, or on vertical drags.
-(() => {
-  const area = $('mainContent');
-  let x0 = 0, y0 = 0, t0 = 0, tracking = false;
-  area.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) { tracking = false; return; }
-    const t = e.target;
-    const x = e.touches[0].clientX, box = document.body.getBoundingClientRect();
-    tracking = x - box.left >= EDGE && box.right - x >= EDGE
-      && !t.closest('.overflow-x-auto')
-      && !(t.matches('input') && t === document.activeElement)
-      && !document.body.classList.contains('keyboard-open');
-    x0 = x;
-    y0 = e.touches[0].clientY;
-    t0 = Date.now();
-  }, { passive: true });
-  area.addEventListener('touchend', e => {
-    if (!tracking) return;
-    tracking = false;
-    if (dragFlags.lastArmed >= t0) return;          // that touch was a drag (held on a drag box)
-    const dx = e.changedTouches[0].clientX - x0;
-    const dy = e.changedTouches[0].clientY - y0;
-    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.8 || Date.now() - t0 > 700) return;
-    const i = TAB_ORDER.indexOf(store.getState().ui.activeTab);
-    const j = i + (dx < 0 ? 1 : -1);
-    if (j >= 0 && j < TAB_ORDER.length) App.tab(TAB_ORDER[j], { swipe: dx < 0 ? 'left' : 'right' });
-    else openPanel(dx > 0 ? 'left' : 'right');
-  }, { passive: true });
-})();
-
 // ── First render ──────────────────────────────────────────────────────────────
 
 loadRoster();
@@ -681,7 +653,15 @@ render(state);
 // Side panels: drag in from either screen edge, drag back to close.
 initPanelGestures({
   canOpen: () => !document.body.classList.contains('keyboard-open')
-    && !document.querySelector('.sheet-backdrop.open'),
+    && !document.querySelector('.sheet-backdrop.open') && !pagesOpen(),
+});
+
+// The pages drawer and the hub (ui/pages.js): a swipe that moves the drawer
+// to another page, closes it, or raises it from the HUD keeps state in step.
+initPages({
+  onChange: name => App.tab(name),
+  canPull: () => !pagesOpen() && !document.querySelector('.sheet-backdrop.open')
+    && !document.documentElement.classList.contains('panel-open') && !document.body.classList.contains('keyboard-open'),
 });
 
 // Reveal once Tailwind has styled the page (it compiles in the browser): a

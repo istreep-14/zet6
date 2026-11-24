@@ -15,6 +15,11 @@ export const SHEETS = {
   'sheet-close': { title: 'Close-time what-if' },
   'sheet-pool': { title: 'Pool', tall: true },
   'sheet-poolsum': { title: 'Pool' },
+  'sheet-fix': { title: 'Envelopes already made' },
+  'sheet-stacks': { title: 'Stacks for a manager' },
+  'sheet-tidy': { title: 'Tidy the drawer' },
+  'sheet-count': { title: 'Count bills', tall: true },
+  'sheet-adjust': { title: 'Register over / short' },
 };
 
 const closeHooks = {};
