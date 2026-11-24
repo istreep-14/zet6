@@ -116,8 +116,8 @@ function Wheel({ values, index, title, text, onChange, onDone, onCancel, anchor 
     };
     const key = e => {
       // (preventDefault: Enter on the focused box would click it open again)
-      if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-      else if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); finish(true); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); settleTo(cur.current - 1); }
       else if (e.key === 'ArrowDown') { e.preventDefault(); settleTo(cur.current + 1); }
     };
@@ -132,12 +132,12 @@ function Wheel({ values, index, title, text, onChange, onDone, onCancel, anchor 
     };
     // The wheel stays on its box when the page underneath scrolls.
     const follow = e => { if (!box.current?.contains(e.target)) placeOn(); };
-    document.addEventListener('keydown', key);
+    document.addEventListener('keydown', key, true);
     document.addEventListener('click', outside, true);
     document.addEventListener('scroll', follow, true);
     return () => {
       cancelAnimationFrame(raf);
-      document.removeEventListener('keydown', key);
+      document.removeEventListener('keydown', key, true);
       document.removeEventListener('click', outside, true);
       document.removeEventListener('scroll', follow, true);
     };

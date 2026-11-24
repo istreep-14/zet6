@@ -13,7 +13,7 @@ import { envelopeFixes, shortFixes } from '../fixups.js';
 import { STACK_BILLS, STACK_DEFAULTS } from '../stacks.js';
 import { updatePool } from '../store.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra, Delta } from '../ui/pkit.js';
+import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra, Delta, SwitchRow, hueVar, hueIndex } from '../ui/pkit.js';
 import { openSheet, isOpen, sheetBody } from '../ui/sheet.js';
 import { payDelta } from '../ui/changes.js';
 
@@ -102,7 +102,7 @@ export function EnvelopeTable({ vm, byPerson, remBills, order }) {
   const n = v => v > 0 ? html`<span class="font-semibold">${v}</span>` : html`<span class="text-ink-3/40">–</span>`;
   // Bill heads / drawer totals: the bill's tint on a faint wash of it (BILL_HEAD).
   const head = (d, v) => html`<span class=${BILL_HEAD} data-d=${d}>${v}</span>`;
-  const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', !(p.final > 0) && 'text-ink-3')} /><${Delta} d=${payDelta(vm, p.id, p.final)} under /></span>`;
+  const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} /><${Delta} d=${payDelta(vm, p.id, p.final)} under /></span>`;
   const stackNote = id => {
     const st = vm.stacks?.[id];
     if (!st) return '';
@@ -113,10 +113,10 @@ export function EnvelopeTable({ vm, byPerson, remBills, order }) {
     cols=${[{ label: 'Name', w: 'w-[28%]' }, ...cols.map(d => ({ head: head(d, d) })), { label: 'Pay', align: 'right', w: 'w-[22%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => App.personModal(p.id),
-        cells: [html`<span class="block truncate">${p.name}</span>${stackNote(p.id)}`, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), pay(p)] })),
+        cells: [html`<span class="flex min-w-0 items-center gap-1.5"><span class="size-2 shrink-0 rounded-full" style=${{ background: hueVar(hueIndex(vm.state, p.id)) }}></span><span class="truncate">${p.name}</span></span>${stackNote(p.id)}`, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), pay(p)] })),
       ...(s.leftover > 0 ? [{ key: 'chump', tone: 'muted', cells: ['Chump', ...cols.map(d => n(rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
     ]}
-    foot=${['Total', ...cols.map(d => head(d, colTotal(d))), html`<${Money} value=${grand} />`]} />`;
+    foot=${['Total', ...cols.map(d => head(d, colTotal(d))), html`<${Money} value=${grand} class="text-money" />`]} />`;
 }
 
 function Envelopes({ vm, byPerson, remBills, note }) {
@@ -395,9 +395,32 @@ function Payout({ vm, errMsg, tradeDown, tradeUp }) {
     ${warnings}
     ${errMsg ? html`<${FixCard} vm=${vm} errMsg=${errMsg} plan=${tradeDown} />` : html`<${ExactChange} vm=${vm} />`}
     <${Envelopes} vm=${vm} byPerson=${bills.byPerson} remBills=${bills.remainderBills} note=${bills.note} />
-    <${Extras} vm=${vm} tradeUp=${tradeUp} />
-    ${vm.state.pools.length > 1 ? html`<${PoolsList} vm=${vm} />` : html`<${Worksheet} vm=${vm} />`}
+    ${vm.state.settings.show?.working !== false && (vm.state.pools.length > 1 ? html`<${PoolsList} vm=${vm} />` : html`<${Worksheet} vm=${vm} />`)}
   </div>`;
+}
+
+// ── The page drawer's Payout part: the extras (each a small drawer of its
+//    own) and what it shows. ────────────────────────────────────────────────
+
+export function PayoutOptions({ vm }) {
+  const show = vm.state.settings.show || {};
+  return html`${!vm.blocked && html`<${Section} title="Do"><div onClickCapture=${() => App.closeSheet('sheet-page')}><${Extras} vm=${vm} tradeUp=${pendingTradeUp} /></div><//>`}
+    <${Section} title="Show"><${List}>
+      <${SwitchRow} on=${show.working !== false} onClick=${() => App.toggleShow('working')}
+        icon="calc" label="How the split works" hint=${vm.state.pools.length > 1 ? 'The pools, each with its own rate' : 'Step by step under the envelopes'} />
+    <//><//>`;
+}
+
+// The HUD's actions on Payout (pills): envelopes already made (register over
+// / short), stacks for a manager, tidy the drawer.
+export function payoutPills(vm) {
+  if (vm.blocked) return [];
+  const fx = fixesFor(vm);
+  return [
+    ...(fx && (fx.rows?.length || fx.moves?.length) ? [{ icon: 'envelope', label: 'Already made?', onClick: () => App.openPayoutSheet('fix') }] : []),
+    { icon: 'cash', label: 'Stacks', on: Object.keys(vm.stacks || {}).length > 0, onClick: () => App.openPayoutSheet('stacks') },
+    ...(pendingTradeUp ? [{ icon: 'swap', label: 'Tidy', onClick: () => App.openPayoutSheet('tidy') }] : []),
+  ];
 }
 
 export function renderPayout(vm) {

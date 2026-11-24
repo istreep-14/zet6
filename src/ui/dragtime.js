@@ -18,7 +18,7 @@ export const CELL = 'h-10 w-full rounded-lg text-center text-[1rem] tabular-nums
 // centred in the column gap to its left (`gap` = that gap's width), so it
 // adds no margin between the boxes.
 export const ARROW_BEFORE = gap => `relative before:pointer-events-none before:absolute before:left-[calc(${gap}*-0.5)] before:top-1/2 before:-translate-x-1/2 before:-translate-y-1/2 before:text-[0.75rem] before:font-normal before:text-ink-3/70 before:content-['→']`;
-export const TIME_TEXT = 'text-[0.8125rem] tabular-nums [&>span]:relative [&>span]:block [&>span]:h-[1.3125rem] [&>span]:leading-[1.225rem] [&>span>span]:absolute [&>span>span]:left-1/2 [&>span>span]:top-[1.1rem] [&>span>span]:-translate-x-1/2 [&>span>span]:ml-0 [&>span>span]:text-[.62em] [&>span>span]:leading-none [&>span>span]:font-normal [&>span>span]:tracking-wide [&>span>span]:opacity-70 [&>span>span]:after:content-[\'m\']';
+export const TIME_TEXT = 'text-[0.8125rem] tabular-nums [&>span]:relative [&>span]:block [&>span]:h-[1.3125rem] [&>span]:leading-[1.225rem] [&>span>span]:absolute [&>span>span]:left-1/2 [&>span>span]:top-[1.1rem] [&>span>span]:-translate-x-1/2 [&>span>span]:ml-0 [&>span>span]:text-[.62em] [&>span>span]:leading-none [&>span>span]:font-normal [&>span>span]:tracking-wide [&>span>span]:opacity-90 [&>span>span]:after:content-[\'m\']';
 // Hold to open the wheel: a box only opens the wheel picker (ui/wheel.js;
 // the box fills accent, a tick of haptics) after the finger has rested on it
 // for HOLD_MS. Moving more than SLOP px before then lets the gesture go — it

@@ -9,10 +9,11 @@ import { buildViewModel } from './viewmodel.js';
 import { setClock24, setAmFrom, parseTime, inAbsOf } from './time.js';
 import { countedValue } from './util.js';
 import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL } from './shifts.js';
-import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
+import { mountSheets, closeSheet, closeAllSheets, dragToOpen } from './ui/sheet.js';
 import { switchTab, updateTabIndicators, normalizeTab } from './render/tabs.js';
-import { initPages, openHub, closeHub, hubOpen } from './ui/pages.js';
+import { initPages } from './ui/pages.js';
 import { renderStaff, openStaffEditor } from './render/staff.js';
+import { openPageSheet, fillPageSheet, renderPageSheet } from './render/pagesheet.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderTips } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown, openPayoutSheet } from './render/payout.js';
@@ -86,6 +87,7 @@ function render(s) {
   const list = sessions.list(), cur = sessions.currentId();
   renderDrawer(lastVm, list, cur);
   renderShiftPanel(lastVm, list, cur);
+  renderPageSheet(lastVm, sessionName());
 }
 
 // ── What changed / what would change (ui/changes.js) ─────────────────────────
@@ -247,13 +249,26 @@ window.App = {
   // pages: Summary · Staff · Tips · Payout (opts.dir: the side a swiped-to
   // page slides in from)
   tab(name, opts = {}) {
-    closeHub();
+    closeSheet('sheet-page');
     switchTab(name, opts);
     store.setActiveTab(name);
   },
-
-  // The hub (pull down at the top of a page): every page and tool.
-  hub(on = true) { if (on) openHub(); else closeHub(); },
+  // A bottom tab: another page goes there; the page you're on opens its drawer.
+  tabTap(name) {
+    if (store.getState().ui.activeTab === name) openPageSheet();
+    else App.tab(name);
+  },
+  // The page drawer (render/pagesheet.js): the page's actions, Show
+  // switches, Go to. Also More on the HUD, a swipe up from the bottom.
+  pageSheet: () => openPageSheet(),
+  // Repaint the pages that show the keypad's active cell (no data change).
+  repaint() {
+    if (previewing) return;
+    renderSummary(lastVm, sessionName());
+    renderStaff(lastVm);
+    renderSheets(lastVm);
+  },
+  toggleShow: key => store.toggleShow(key),
 
   // sheets
   closeSheet,
@@ -693,14 +708,18 @@ initPanelGestures({
     && !document.querySelector('.sheet-backdrop.open'),
 });
 
-// Page swipes and the hub (ui/pages.js): a swipe to another page goes
-// through App.tab; past the first / last page it opens that side's panel.
+// Page swipes (ui/pages.js): a swipe to another page goes through App.tab;
+// past the first / last page it opens that side's panel.
+const calm = () => !document.querySelector('.sheet-backdrop.open')
+  && !document.documentElement.classList.contains('panel-open') && !document.documentElement.classList.contains('wheel-open')
+  && !document.documentElement.classList.contains('keypad-open');
 initPages({
   go: (name, dir) => App.tab(name, { dir }),
   ends: side => openPanel(side),
-  can: () => !hubOpen() && !document.querySelector('.sheet-backdrop.open')
-    && !document.documentElement.classList.contains('panel-open') && !document.documentElement.classList.contains('wheel-open'),
+  can: calm,
 });
+// Swipe up from the bottom — the HUD or the tab bar — for the page drawer.
+dragToOpen([$('pipHud'), document.querySelector('.tabbar')], 'sheet-page', fillPageSheet, calm);
 
 // Reveal once Tailwind has styled the page (it compiles in the browser): a
 // probe with `hidden` turns display:none once the utilities exist.
