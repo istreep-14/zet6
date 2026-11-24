@@ -20,7 +20,9 @@ export function computeShares(pools, staff, overrides = {}) {
     role: p.role,
     inAbs: p.inAbs,
     outAbs: p.outAbs,
-    shiftHours: p.hours,
+    shiftHours: p.hours,          // Out − In − the break
+    brkLen: p.brkLen || 0,
+    brkStart: p.brkStart ?? null,
     closer: p.closer,
     autoCloser: p.autoCloser,
     usedDefaults: p.usedDefaults,

@@ -62,6 +62,18 @@ function useHoldWheel({ value, enabled, onSet, onPreview, wheel }) {
   const swallow = useRef(false);
   const cfg = useRef(null);
   cfg.current = { onSet, onPreview, wheel };
+  // Open the wheel on a box (after a hold, or straight from a tap).
+  const openOn = (el, v0) => {
+    setHeld('open');
+    hold(true);
+    const k = cfg.current;
+    openWheel({
+      ...k.wheel(v0), anchor: el,
+      onChange: v => k.onPreview?.(v === v0 ? null : v, v0) || null,
+      onDone: v => { setHeld(null); hold(false); if (v !== v0) cfg.current.onSet(v, v0); cfg.current.onPreview?.(null); },
+      onCancel: () => { setHeld(null); hold(false); cfg.current.onPreview?.(null); },
+    });
+  };
   const handlers = {
     onPointerDown: e => {
       if (!enabled || value == null || isWheelOpen()) return;
@@ -80,14 +92,7 @@ function useHoldWheel({ value, enabled, onSet, onPreview, wheel }) {
         try { c.el.setPointerCapture?.(c.id); } catch { /* gone */ }
         dragFlags.lastArmed = Date.now();
         buzz(10);
-        setHeld('open');
-        const v0 = c.v0, k = cfg.current;
-        openWheel({
-          ...k.wheel(v0), anchor: c.el,
-          onChange: v => k.onPreview?.(v === v0 ? null : v, v0) || null,
-          onDone: v => { setHeld(null); hold(false); if (v !== v0) cfg.current.onSet(v, v0); cfg.current.onPreview?.(null); },
-          onCancel: () => { setHeld(null); hold(false); cfg.current.onPreview?.(null); },
-        });
+        openOn(c.el, c.v0);
       }, HOLD_MS);
     },
     onPointerMove: e => {
@@ -127,7 +132,10 @@ function useHoldWheel({ value, enabled, onSet, onPreview, wheel }) {
     swallow.current = false;
     return true;
   };
-  return { held, handlers, consumeClick };
+  // A tap that opens the wheel at once (no hold): the wheel's own outside-
+  // click guard skips the opening click.
+  const openNow = el => { if (enabled && value != null && !isWheelOpen()) openOn(el, value); };
+  return { held, handlers, consumeClick, openNow };
 }
 
 const NO_CALLOUT = 'touch-pan-y select-none [-webkit-touch-callout:none]';
@@ -158,9 +166,9 @@ function moved(v, v0) {
 // land on the sheet it just opened. `data-drag` marks it for the sheet
 // swipe; clicks don't bubble (so a box inside a tappable row doesn't also
 // open the row).
-export function DragTime({ abs, min, max, onSet, onTap, set, bad, label, cls = CELL, tone, full = false, mins = false, kcell, active = false, preview = null, onPreview, wheelSub }) {
+export function DragTime({ abs, min, max, onSet, onTap, tapWheel = false, set, bad, label, cls = CELL, tone, full = false, mins = false, kcell, active = false, preview = null, onPreview, wheelSub }) {
   const input = useRef(null);                     // keypad cells: the focusable input
-  const { held, handlers, consumeClick } = useHoldWheel({
+  const { held, handlers, consumeClick, openNow } = useHoldWheel({
     value: abs, enabled: abs != null && !bad, onSet, onPreview,
     wheel: v0 => {
       const values = [];
@@ -175,10 +183,10 @@ export function DragTime({ abs, min, max, onSet, onTap, set, bad, label, cls = C
       : active ? cx('bg-accent/12 font-semibold ring-2 ring-inset ring-accent', preview != null ? 'text-accent' : 'text-ink')
       : cx(held && 'bg-ink/10', bad ? 'font-semibold text-bad' : (typeof tone === 'function' ? tone(set) : tone) || (set ? 'font-semibold text-ink' : 'text-ink-2')));
   const body = bad && !active ? '?' : shown != null ? html`<${Clock} abs=${shown} full=${full} mins=${mins} />` : '—';
-  const aria = label + ' — tap to edit, hold to pick from a wheel';
+  const aria = label + (tapWheel ? ' — tap to pick from a wheel' : ' — tap to edit, hold to pick from a wheel');
   if (!kcell) {
     return html`<button data-drag class=${look} ...${handlers}
-      onClick=${e => { e.stopPropagation(); if (consumeClick()) return; onTap?.(); }}
+      onClick=${e => { e.stopPropagation(); if (consumeClick()) return; if (tapWheel) openNow(e.currentTarget); else onTap?.(); }}
       aria-label=${aria}>${body}</button>`;
   }
   // Keypad cell: a tap focuses the hidden input; focus opens the keypad.

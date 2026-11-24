@@ -25,7 +25,6 @@ import { payDelta, sumDelta, timeMoved, defaultMoved } from '../ui/changes.js';
 import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Seg, Delta, Flash, Table, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL } from '../ui/pkit.js';
 import { StaffTime, DefaultTime } from './staff.js';
 import { EnvelopeTable } from './payout.js';
-import { useSwipeNav } from '../ui/swipenav.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
@@ -632,28 +631,18 @@ function Summary({ vm, name }) {
   const several = !vm.blocked && vm.shares.perPool.length > 1;
   // Several pools open on the Pools table — hours and tips per pool per person.
   const view = (pick === 'pools' && !several) ? 'shift' : pick || (several ? 'pools' : 'shift');
-  // Swipe the view sideways to step through List · Shift · Pools · Bills ·
-  // Math (it follows the finger; useSwipeNav).
-  const order = VIEWS.map(v => v.value).filter(v => v !== 'pools' || several);
-  const at = order.indexOf(view);
-  const nav = useSwipeNav({
-    prev: at > 0 ? () => setView(order[at - 1]) : null,
-    next: at < order.length - 1 ? () => setView(order[at + 1]) : null,
-  });
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   const billsOff = view === 'bills' && (!vm.dist || vm.dist.error);
   // Five views: icons over the labels' room would crowd a 375pt screen, so
   // the icons drop out on narrow phones (max-[400px]).
   const items = VIEWS.filter(v => v.value !== 'pools' || several)
     .map(v => ({ ...v, label: html`<span class="max-[25rem]:hidden">${html`<${Icon} name=${v.icon} class="size-4" />`}</span>${v.label}`, icon: null }));
-  // The whole page takes the sideways swipe (down to the bottom of the
-  // screen, so the empty space under a short list counts too).
-  return html`<div class="flex min-h-[calc(100dvh-12rem)] flex-col gap-5" ...${nav.handlers}>
+  return html`<div class="flex flex-col gap-5">
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map(w => html`<${Alert}>${w}<//>`)}
     <${AdjustBanner} vm=${vm} />
     <div class="flex flex-col gap-3">
       <${Seg} size="lg" value=${view} onChange=${setView} items=${items} />
-      <div ref=${nav.ref} class="flex flex-col gap-3 will-change-transform">
+      <div class="flex flex-col gap-3">
         ${billsOff && html`<${Alert} tone="warn" action=${{ label: 'Payout', onClick: () => App.tab('payout') }}>The bills don’t work out yet — Payout has the swap.<//>`}
         ${view === 'pools' ? html`<${PoolGrid} vm=${vm} />`
           : view === 'bills' ? html`<${BillsTable} vm=${vm} />`

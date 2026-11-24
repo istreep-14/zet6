@@ -17,6 +17,8 @@ export function newStaff(role = 'bartender') {
     role,
     in: '',
     out: '',
+    brk: '',                       // break length in hours ('0.5'), '' = none
+    brkAt: '',                     // when the break began (a time reading), '' = not placed
     closerOverride: false,
   };
 }

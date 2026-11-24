@@ -60,8 +60,9 @@
   <button type="button" class="icon-btn" onclick="App.panel('left')" aria-label="Sessions and settings" aria-controls="drawer">
     <svg class="size-[1.125rem]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
   </button>
-  <!-- Small title: fades in once the page's big title scrolls away (html.scrolled) -->
-  <span class="hdr-title t-head truncate" id="hdrTitle" aria-hidden="true">Payout</span>
+  <!-- Page dots: where you are among Summary · Staff · Tips · Payout (tap one
+       to go there; a sideways swipe on the page steps through them) -->
+  <nav class="hdr-dots" id="pageDots" aria-label="Pages"></nav>
   <!-- Date pill: opens this shift's panel (calendar, times, tools) -->
   <button type="button" class="hdr-pill" id="hdrDateBtn" onclick="App.panel('right')" aria-label="Shift date and settings" aria-controls="shiftPanel">
     <span class="truncate" id="hdrDateLabel">Today</span>
@@ -70,33 +71,24 @@
 </header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
-<!-- Summary is home: the one page in the scroller. Pull down at its top for
-     the hub (every page and tool); swipe sideways to change its view. -->
+<!-- Four pages side by side — Summary (home) · Staff · Tips · Payout. Swipe
+     sideways to step between them (src/ui/pages.js); pull down at the top of
+     a page for the hub (every page and tool). -->
 <main class="content" id="mainContent">
   <section class="panel active" id="tab-summary"><h1 class="page-title t-title">Summary</h1><div id="summary-root"></div></section>
+  <section class="panel" id="tab-staff"><h1 class="page-title t-title">Staff</h1><div id="staff-root"></div></section>
+  <section class="panel" id="tab-tips"><h1 class="page-title t-title">Tips</h1><div id="tips-root"></div></section>
+  <section class="panel" id="tab-payout"><h1 class="page-title t-title">Payout</h1><div id="payout-root"></div></section>
 </main>
 
 <!-- Live HUD — Tips · Hours · Rate · Bills, each cell opens its page; two
-     small pills on top (close time, chump) open their tools; swipe up opens
-     the pages drawer (render/tabs.js) -->
+     small pills on top (close time, chump) open their tools (render/tabs.js) -->
 <div class="hud is-empty" id="pipHud" role="group" aria-label="Live totals"></div>
 
-<!-- Pages drawer (src/ui/pages.js): Staff · Tips · Payout rise from the
-     bottom over Summary. Swipe sideways between them (the pages follow the
-     finger), down on the head — or on a page scrolled to its top — to close. -->
-<div class="pages-scrim" id="pagesScrim" onclick="App.tab('summary')"></div>
-<section class="pages" id="pages" aria-hidden="true" aria-label="Pages">
-  <div class="pages-head" id="pagesHead"></div>
-  <div class="pages-view">
-    <div class="pages-track" id="pagesTrack">
-      <div class="pg" id="tab-staff"><div class="pg-scroll"><h1 class="page-title t-title">Staff</h1><div id="staff-root"></div></div></div>
-      <div class="pg" id="tab-tips"><div class="pg-scroll"><h1 class="page-title t-title">Tips</h1><div id="tips-root"></div></div></div>
-      <div class="pg" id="tab-payout"><div class="pg-scroll"><h1 class="page-title t-title">Payout</h1><div id="payout-root"></div></div></div>
-    </div>
-  </div>
-</section>
+<!-- Staff: the bulk bar (select people, set their times) docks here -->
+<div class="bulkbar" id="bulkBar" aria-label="Selected people"></div>
 
-<!-- Hub (src/ui/pages.js): pull down at the top of Summary — every page and tool -->
+<!-- Hub (src/ui/pages.js): pull down at the top of a page — every page and tool -->
 <div class="hub-scrim" id="hubScrim" onclick="App.hub(false)"></div>
 <section class="hub" id="hub" aria-hidden="true" aria-label="Go to"></section>
 

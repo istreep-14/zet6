@@ -16,7 +16,6 @@ import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
 import { KeyTime } from '../ui/keytime.js';
 import { html, render, useState } from '../ui/preact.js';
 import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, Table, Money, SwitchRow, INPUT, ROLE_DOT, zebra, holdRepeat } from '../ui/pkit.js';
-import { useSwipeNav } from '../ui/swipenav.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
 const $ = id => document.getElementById(id);
@@ -315,25 +314,11 @@ function Suggested({ vm }) {
   <//>`;
 }
 
-// Several pools: their names as a switch over one pool's card; swipe the
-// card sideways to step through the pools (it follows the finger).
+// Several pools: each pool's card in turn, one under the other (a page swipe
+// moves between pages, not pools).
 function Pools({ vm }) {
-  const pools = vm.state.pools;
-  const sel = pools.find(p => p.id === vm.state.ui.selectedPool) || pools[0];
-  const at = pools.indexOf(sel);
-  const nav = useSwipeNav({
-    prev: at > 0 ? () => App.selectPool(pools[at - 1].id) : null,
-    next: at < pools.length - 1 ? () => App.selectPool(pools[at + 1].id) : null,
-  });
-  return html`<div class="flex flex-col gap-3" ...${nav.handlers}>
-    <div class="-mx-[var(--gutter)] overflow-x-auto px-[var(--gutter)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-      <${Seg} class="w-max min-w-full" value=${sel.id} onChange=${id => App.selectPool(id)}
-        items=${pools.map(p => {
-          const t = vm.pools.find(x => x.id === p.id)?.total || 0;
-          return { value: p.id, label: html`<span class="whitespace-nowrap px-1">${p.label}</span><span class="font-normal text-ink-3">${t ? fmtMoney(t) : ''}</span>` };
-        })} />
-    </div>
-    <div ref=${nav.ref} class="will-change-transform"><${PoolCard} key=${sel.id} pool=${sel} vm=${vm} /></div>
+  return html`<div class="flex flex-col gap-5">
+    ${vm.state.pools.map(p => html`<${PoolCard} key=${p.id} pool=${p} vm=${vm} />`)}
   </div>`;
 }
 

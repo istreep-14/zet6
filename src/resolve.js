@@ -6,6 +6,8 @@
 // In times use the fixed 9–11:59=AM rule; out times are the next occurrence of
 // their reading after that person's own In (so they always fall after In).
 // Closers (hybrid rule): closerOverride || out ≥ peak out across tipped staff.
+// Breaks: hours = Out − In − brk; in a pool, a placed break (brkAt) comes off
+// the pool it falls in, an unplaced one off each pool pro rata.
 // Blank-out people sit at close time, so they're closers via latest-out
 // naturally — someone typed *past* close becomes the closer, ties share.
 
@@ -72,7 +74,17 @@ export function resolveStaff(state, opts = {}) {
         outAbs = inAbs !== null ? afterAbsOf(outParsed, inAbs) : inAbsOf(outParsed);
       }
     }
-    return { p, name, role: p.role, explicitIn, explicitOut, hasOut: !!outRaw, inAbs, outAbs };
+    // A break: brk = its length in hours ('0.5'), brkAt = when it began
+    // ('' = not placed — then it comes off every pool in proportion).
+    const brk = parseDecimalNumber(p.brk);
+    if (!brk.valid) errors.push(name + "'s break must be a number of hours, e.g. 0.5.");
+    let brkStart = null;
+    const atRaw = String(p.brkAt || '').trim();
+    if (brk.valid && brk.value > 0 && atRaw) {
+      const at = parseField(atRaw, name + "'s break time", errors);
+      if (at.valid && !at.empty) brkStart = inAbs !== null ? atOrAfterOf(at, inAbs) : inAbsOf(at);
+    }
+    return { p, name, role: p.role, explicitIn, explicitOut, hasOut: !!outRaw, inAbs, outAbs, brkLen: brk.valid ? brk.value : 0, brkStart };
   });
 
   // Close time = resolved global Out (next occurrence after the anchor). Fallback:
@@ -95,13 +107,21 @@ export function resolveStaff(state, opts = {}) {
       else errors.push(r.name + ' needs an Out time (or set a close time).');
     }
 
-    let hours = 0;
+    let hours = 0, brkLen = r.brkLen, brkStart = r.brkStart;
     if (r.inAbs !== null && outAbs !== null) {
-      hours = outAbs - r.inAbs;
-      if (hours <= 0 || hours > 12) {
-        errors.push(r.name + ' has invalid shift hours (' + parseFloat(hours.toFixed(2)) + 'h). Check In/Out times.');
+      const span = outAbs - r.inAbs;
+      if (span <= 0 || span > 12) {
+        errors.push(r.name + ' has invalid shift hours (' + parseFloat(span.toFixed(2)) + 'h). Check In/Out times.');
       }
-    }
+      if (brkLen > 0 && span > 0) {
+        if (brkLen >= span) { errors.push(r.name + "'s break is as long as their shift."); brkLen = 0; }
+        else if (brkStart !== null && (brkStart < r.inAbs - EPS || brkStart + brkLen > outAbs + EPS)) {
+          errors.push(r.name + "'s break falls outside their shift.");
+          brkStart = null;
+        }
+      }
+      hours = span - (brkLen > 0 && brkLen < span ? brkLen : 0);
+    } else brkStart = null;
 
     return {
       id: r.p.id,
@@ -109,7 +129,9 @@ export function resolveStaff(state, opts = {}) {
       role: r.role,
       inAbs: r.inAbs,
       outAbs,
-      hours,
+      hours,                       // worked: Out − In − the break
+      brkLen: brkLen > 0 ? brkLen : 0,
+      brkStart: brkLen > 0 ? brkStart : null,
       closerOverride: !!r.p.closerOverride,
       usedDefaults: { in: !r.explicitIn, out: !r.explicitOut },
       usedCloseTime,
@@ -262,6 +284,14 @@ export function poolParticipants(pool, staff) {
     .filter(p => pool.roles[p.role] || (p.role === 'support' && pool.includeSupport))
     .map(p => {
       let hours = overlapHours(p.inAbs, p.outAbs, pool.startAbs, pool.endAbs);
+      // A break comes off the pool it fell in (placed), or off every pool in
+      // proportion to the time worked in it (not placed).
+      if (p.brkLen > 0 && hours > 0) {
+        const cut = p.brkStart != null
+          ? overlapHours(p.brkStart, p.brkStart + p.brkLen, pool.startAbs, pool.endAbs)
+          : p.brkLen * hours / Math.max(EPS, p.outAbs - p.inAbs);
+        hours = Math.max(0, hours - cut);
+      }
       if (p.role === 'support') {
         const override = pool.support?.hoursOverrides?.[p.id];
         if (override != null) hours = override;
