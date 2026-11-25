@@ -10,7 +10,7 @@ import { html, render } from '../ui/preact.js';
 import { cx, Icon, Meta } from '../ui/pkit.js';
 import { sideways } from '../ui/nav.js';
 import { DateTile, rowsOf, titleOf, peopleOf, dayLabel } from './settings.js';
-import { DayDisc, fmtDay } from './tabs.js';
+import { DayDisc, fmtDay, shiftHours } from './tabs.js';
 
 const $ = id => document.getElementById(id);
 const RECENT = 4;
@@ -91,18 +91,18 @@ function Menu({ vm, sessions, currentId }) {
   return html`<div class="flex min-h-full flex-col">
     <div class="menu-head">
       <div class="flex items-start justify-between">
-        <${DayDisc} iso=${s.meta.date} size="size-12" text="text-[1.375rem]" />
+        <${DayDisc} iso=${s.meta.date} size="size-12" text="text-[1.25rem]" />
         <button class="grid size-10 place-items-center rounded-full border border-line text-ink active:bg-surface-2"
           onClick=${then(() => App.newSession())} aria-label="New session"><${Icon} name="plus" class="size-5" /></button>
       </div>
       <div class="mt-3 flex min-w-0 flex-col">
-        <span class="truncate text-[1.25rem] font-bold leading-tight tracking-tight">${titleOf(cur)}</span>
+        <span class="truncate text-[1.25rem] font-semibold leading-tight tracking-tight">${titleOf(cur)}</span>
         <span class="t-small mt-0.5 truncate text-ink-3">${[cur.name ? fmtDay(s.meta.date) : '', (SHIFT_LABEL[s.meta.shiftType] || 'Night') + ' shift'].filter(Boolean).join(' · ')}</span>
       </div>
-      <${Meta} class="mt-3 !text-[0.875rem]" items=${[
+      <${Meta} class="mt-3 !text-[0.8125rem]" items=${[
         { v: named, l: named === 1 ? 'person' : 'people' },
         { v: fmtMoney(vm.totalCash || 0), l: 'in tips' },
-        sh && { v: fmtHrs(sh.totalHours), l: 'h', tight: true },
+        sh && { v: fmtHrs(shiftHours(sh)), l: 'h', tight: true },
       ]} />
     </div>
 
@@ -119,7 +119,7 @@ function Menu({ vm, sessions, currentId }) {
       ${others.map(e => html`<button key=${e.id} class="flex items-center gap-3 px-5 py-2 text-left active:bg-surface-2" onClick=${then(() => App.switchSession(e.id))}>
         <${DateTile} iso=${e.date} />
         <span class="flex min-w-0 flex-1 flex-col">
-          <span class="t-body truncate font-medium">${titleOf(e)}</span>
+          <span class="t-body truncate">${titleOf(e)}</span>
           <span class="t-small truncate text-ink-3">${[e.name ? dayLabel(e.date) : '', peopleOf(e.people)].filter(Boolean).join(' · ')}</span>
         </span>
         <span class=${cx('t-small shrink-0 font-semibold tabular-nums', e.total > 0 ? 'text-ink-2' : 'text-ink-3')}>${e.total > 0 ? fmtMoney(e.total) : '—'}</span>

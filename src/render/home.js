@@ -34,7 +34,7 @@ const PoolDot = ({ i }) => html`<span class="inline-block size-2 shrink-0 rounde
 // A pool's round tile for list rows: its first letter on its colour.
 const PoolTile = ({ i, label }) => {
   const c = POOL_HUES[i % POOL_HUES.length];
-  return html`<span class="grid size-10 shrink-0 place-items-center rounded-full text-[0.9375rem] font-semibold"
+  return html`<span class="grid size-10 shrink-0 place-items-center rounded-full text-[1rem] font-semibold"
     style=${{ background: `color-mix(in srgb, ${c} 20%, transparent)`, color: c }} aria-hidden="true">${(label || '?').trim()[0]?.toUpperCase()}</span>`;
 };
 // The closer's dot only means something while not everyone closes.
@@ -88,7 +88,7 @@ function PayValue({ vm, p }) {
   const before = vm.sharesBefore?.perPerson.find(x => x.id === p.id)?.final;
   const ch = before == null ? 0 : p.final - before;
   return html`<span class="flex shrink-0 flex-col items-end leading-tight">
-    <${Money} value=${p.final} class=${cx('text-[1.125rem] font-semibold tracking-tight', isSup(p) ? SUP_TEXT : p.final > 0 ? 'text-money' : 'text-ink-3')} />
+    <${Money} value=${p.final} class=${cx('text-[1rem] font-semibold tracking-tight', isSup(p) ? SUP_TEXT : p.final > 0 ? 'text-money' : 'text-ink-3')} />
     ${vm.sharesBefore && html`<span class=${cx('t-small tabular-nums', ch < 0 ? 'text-bad' : ch > 0 ? 'text-good' : 'text-ink-3')}>${ch ? signed(ch) : 'same'}</span>`}
   </span>`;
 }
@@ -108,11 +108,11 @@ function Pay({ vm, name }) {
         sub=${html`<span class="tabular-nums"><${Times} a=${p.inAbs} b=${p.outAbs} /> · ${fmtHrs(hoursOf(p))}h</span>`}
         trail=${html`<${PayValue} vm=${vm} p=${p} />`} />`)}
       ${s.leftover > 0 && html`<${Item} lead=${html`<${RoundIcon} name="cash" />`} title=${html`<span class="font-normal text-ink-2">Chump</span>`} sub="Stays in the drawer"
-        value=${fmtMoney(s.leftover)} valueTone="font-medium text-ink-2" />`}
+        value=${fmtMoney(s.leftover)} valueTone=" text-ink-2" />`}
       <${Item} class="bg-surface-2/60" lead=${html`<${RoundIcon} name="sigma" />`} title=${html`<span class="font-semibold">Total</span>`}
         sub=${html`<${Meta} items=${[{ v: html`<${Times} a=${R?.anchorAbs} b=${R?.closeAbs} />` }, { v: fmtHrs(hours), l: 'h', tight: true }, { v: rate2(s.rate), l: '/h', tight: true }]} />`}
         trail=${html`<span class="flex shrink-0 flex-col items-end leading-tight">
-          <${Money} value=${paid} class="text-[1.125rem] font-semibold tracking-tight text-money" />
+          <${Money} value=${paid} class="text-[1rem] font-semibold tracking-tight text-money" />
           ${vm.sharesBefore && html`<span class="t-small tabular-nums text-ink-3">was ${fmtMoney(vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0))}</span>`}
         </span>`} />
     <//>
@@ -170,7 +170,7 @@ function MathTable({ vm }) {
   const round = p => {
     const d = p.final - p.exact;
     if (Math.abs(d) < 0.005) return dash;
-    return d > 0 ? html`<span class="font-medium text-good">+${r2(d)}</span>` : html`<span class="text-ink-3">−${r2(-d)}</span>`;
+    return d > 0 ? html`<span class=" text-good">+${r2(d)}</span>` : html`<span class="text-ink-3">−${r2(-d)}</span>`;
   };
   const paid = people.reduce((t, p) => t + p.final, 0);
   return html`<${Section} title="Each person" footer=${'Hours × rate = the exact share, rounded down to whole dollars; + is a closer bonus' + (s.perPool.length > 1 ? '. With several pools the rate is the blend.' : '.')}>
@@ -203,19 +203,19 @@ function PoolGrid({ vm }) {
   const paid = people.reduce((t, p) => t + p.final, 0);
   return html`<${Section} title="By pool" footer="Each pool: what it paid · their hours in it (exact, before rounding). Blank = their role isn’t in that pool · — = didn’t work its window.">
     <${Card} flush class="page-table"><div class="overflow-x-auto [scrollbar-width:thin]">
-      <table class="min-w-full border-separate border-spacing-0 text-[0.9375rem]">
+      <table class="min-w-full border-separate border-spacing-0 text-[1rem]">
         <thead><tr class="bg-surface shadow-[0_1px_0_var(--line)]">
           <th class=${cx(NAME, TH, 't-cap z-[2] align-bottom text-ink-3')}>Name</th>
           ${pools.map((pl, i) => html`<th key=${pl.id} class=${cx(TH, SEP, 'text-right')}>
             <span class="inline-flex flex-col items-end">
               <span class="t-small inline-flex items-center gap-1.5 font-semibold text-ink"><${PoolDot} i=${i} />${pl.label}</span>
-              <span class="whitespace-nowrap text-[0.75rem] tabular-nums text-ink-3">${rate2(pl.rate)}/h</span>
+              <span class="whitespace-nowrap text-[0.6875rem] tabular-nums text-ink-3">${rate2(pl.rate)}/h</span>
             </span></th>`)}
           <th class=${cx(TH, SEP, 'pr-4 text-right align-bottom')}><span class="t-small font-semibold text-ink">Total</span></th>
         </tr></thead>
         <tbody>
           ${people.map((p, i) => html`<tr key=${p.id} class=${cx(zebra(i), 'cursor-pointer active:brightness-95')} onClick=${() => openPerson(p.id)}>
-            <td class=${cx(NAME, 'py-2 align-top font-medium')}><span class="flex max-w-[9rem] items-center gap-1.5"><span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span></td>
+            <td class=${cx(NAME, 'py-2 align-top')}><span class="flex max-w-[9rem] items-center gap-1.5"><span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span></td>
             ${pools.map(pl => {
               const x = p.perPool?.[pl.id];
               return html`<td key=${pl.id} class=${cx(TD, SEP, isSup(p) && SUP_TEXT)}>${x ? html`<${Two} top=${r2(x.raw)} sub=${fmtHrs(x.hours) + 'h'} />`
@@ -226,7 +226,7 @@ function PoolGrid({ vm }) {
         </tbody>
         <tfoot><tr class=${TOTAL_FILL}>
           <td class=${cx(NAME, 'py-2.5 align-top font-semibold')}>Total</td>
-          ${pools.map(pl => html`<td key=${pl.id} class=${cx(TD, SEP, 'py-2.5')}><${Two} top=${html`<${Money} value=${pl.total} class="font-semibold" />`} sub=${fmtHrs(pl.tippedHours) + 'h'} subCls="font-medium text-ink-2" /></td>`)}
+          ${pools.map(pl => html`<td key=${pl.id} class=${cx(TD, SEP, 'py-2.5')}><${Two} top=${html`<${Money} value=${pl.total} class="font-semibold" />`} sub=${fmtHrs(pl.tippedHours) + 'h'} subCls=" text-ink-2" /></td>`)}
           <td class=${cx(TD, SEP, 'py-2.5 pr-4')}><${Money} value=${paid} class="font-semibold" /></td>
         </tr></tfoot>
       </table>
@@ -287,7 +287,7 @@ function PersonView({ vm, id }) {
     <div class="flex items-center gap-4 px-0.5">
       <${PersonAv} vm=${vm} p=${p} size="lg" />
       <span class="flex min-w-0 flex-1 flex-col gap-1">
-        <span class="t-small font-medium text-ink-3">Takes home${before != null ? ' · was ' + fmtMoney(before) : ''}</span>
+        <span class="t-small text-ink-3">Takes home${before != null ? ' · was ' + fmtMoney(before) : ''}</span>
         <${Money} value=${p.final} class=${cx('t-display', isSup(p) ? SUP_TEXT : 'text-money')} />
       </span>
       <span class="flex shrink-0 flex-col items-end gap-1">
@@ -295,16 +295,16 @@ function PersonView({ vm, id }) {
       </span>
     </div>
     <${List}>
-      <${Item} icon="clock" title="Shift" value=${html`<span class="tabular-nums"><${Times} a=${p.inAbs} b=${p.outAbs} /></span>`} valueTone="font-medium" />
-      ${p.brkLen > 0 && html`<${Item} icon="coffee" title="Break" value=${fmtBreak(p.brkLen)} valueTone="font-medium" />`}
-      <${Item} icon="hourglass" title="Hours" value=${fmtHrs(hoursOf(p))} valueTone="font-medium" />
-      <${Item} icon="calc" title="Exact share" sub="Hours × rate" value=${'$' + r2(p.exact)} valueTone="font-medium" />
-      <${Item} icon="dollar" title="Rounded down" value=${'$' + p.base} valueTone="font-medium" />
+      <${Item} icon="clock" title="Shift" value=${html`<span class="tabular-nums"><${Times} a=${p.inAbs} b=${p.outAbs} /></span>`} valueTone="" />
+      ${p.brkLen > 0 && html`<${Item} icon="coffee" title="Break" value=${fmtBreak(p.brkLen)} valueTone="" />`}
+      <${Item} icon="hourglass" title="Hours" value=${fmtHrs(hoursOf(p))} valueTone="" />
+      <${Item} icon="calc" title="Exact share" sub="Hours × rate" value=${'$' + r2(p.exact)} valueTone="" />
+      <${Item} icon="dollar" title="Rounded down" value=${'$' + p.base} valueTone="" />
       ${p.bonus > 0 && html`<${Item} icon="gift" title="Closer bonus" sub="Dollars left after rounding" value=${'+$' + p.bonus} valueTone="text-good" />`}
     <//>
     ${pools.length > 1 && html`<${Section} title="Pools"><${List}>${pools.map(pl => html`<${Item} key=${pl.id} title=${pl.label}
       lead=${html`<${PoolTile} i=${vm.shares.perPool.indexOf(pl)} label=${pl.label} />`}
-      sub=${fmtHrs(p.perPool[pl.id].hours) + 'h × ' + rate2(pl.rate) + '/h'} value=${'$' + r2(p.perPool[pl.id].raw)} valueTone="font-medium" />`)}<//><//>`}
+      sub=${fmtHrs(p.perPool[pl.id].hours) + 'h × ' + rate2(pl.rate) + '/h'} value=${'$' + r2(p.perPool[pl.id].raw)} valueTone="" />`)}<//><//>`}
     <${Section} title="Envelope">
       ${hasBills
         ? html`<div class="grid grid-cols-3 gap-1.5">${DENOMS.map(d => html`<div key=${d} class=${cx('flex items-center justify-between rounded-xl bg-surface px-3 py-2.5', !bills[d] && 'opacity-40')}>

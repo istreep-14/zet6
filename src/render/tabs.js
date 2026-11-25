@@ -76,7 +76,7 @@ function metaOf(vm, tab, sessionName) {
   const R = vm.resolved;
   const span = R?.anchorAbs != null && R?.closeAbs != null
     && { v: html`<${Clock} abs=${R.anchorAbs} /> – <${Clock} abs=${R.closeAbs} />` };
-  const hours = sh && { v: fmtHrs(sh.totalHours), l: 'h', tight: true };
+  const hours = sh && { v: fmtHrs(shiftHours(sh)), l: 'h', tight: true };
   if (tab === 'home') return sh
     ? [{ v: fmtMoney(sh.perPerson.reduce((t, p) => t + p.final, 0)), l: 'paid' }, people(sh.perPerson.length), { v: rate2(sh.rate), l: '/h', tight: true }]
     : [{ v: fmtDay(s.meta.date) }, named ? people(named) : { v: 'Nobody yet', tone: 'text-ink-3' }];
@@ -89,10 +89,15 @@ function metaOf(vm, tab, sessionName) {
   return [{ v: sessionName || fmtDay(s.meta.date) }, sessionName && { v: fmtDay(s.meta.date), tone: 'text-ink-3' }];
 }
 
+// Hours actually worked by the tipped staff (support is a tip-out). Not
+// shares.totalHours: that sums each pool's hours, so overlapping pools (Day /
+// Mid / a party) count the same hour more than once.
+export const shiftHours = sh => sh.perPerson.filter(p => p.role !== 'support').reduce((t, p) => t + (p.shiftHours ?? p.hours), 0);
+
 // The session's day, as the round avatar that opens the menu.
-export function DayDisc({ iso, size = 'size-9', text = 'text-[0.9375rem]' }) {
+export function DayDisc({ iso, size = 'size-9', text = 'text-[1rem]' }) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
-  return html`<span class=${cx('grid shrink-0 place-items-center rounded-full bg-accent font-bold tabular-nums text-on-accent', size, text)}>${m ? +m[3] : '·'}</span>`;
+  return html`<span class=${cx('grid shrink-0 place-items-center rounded-full bg-accent font-semibold tabular-nums text-on-accent', size, text)}>${m ? +m[3] : '·'}</span>`;
 }
 
 function Header({ vm, tab, subs, sessionName }) {

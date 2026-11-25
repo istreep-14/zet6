@@ -243,7 +243,7 @@ export function AxisLabels({ span }) {
 // ── The list ─────────────────────────────────────────────────────────────────
 // Name · In · → · Out · Hrs
 const COLS = 'grid grid-cols-[minmax(0,1fr)_3.75rem_0.625rem_3.75rem_2rem] items-center gap-x-2';
-const BOX = 'h-11 w-full rounded-lg bg-surface-2 text-[0.9375rem] tabular-nums transition';
+const BOX = 'h-11 w-full rounded-lg bg-surface-2 text-[1rem] tabular-nums transition';
 const TONE = set => (set ? 'font-semibold text-ink' : 'font-normal text-ink-3');
 
 function TimeBox({ vm, p, field }) {
@@ -278,11 +278,11 @@ function PersonRow({ vm, p, allClose }) {
     <button class="flex min-h-11 min-w-0 items-center gap-2.5 text-left active:opacity-60" onClick=${() => App.editStaff(p.id)} aria-label=${'Edit ' + p.name}>
       <${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} closer=${closer} forced=${t.forced} size="sm" />
       <span class="flex min-w-0 flex-col">
-        <span class="t-body truncate font-medium">${p.name}</span>
+        <span class="t-body truncate">${p.name}</span>
         ${sub && html`<span class=${cx('t-small truncate', t.bad ? 'text-bad' : 'text-ink-3')}>${sub}</span>`}
       </span>
     </button>
-    <${TimeBox} vm=${vm} p=${p} field="in" /><span class="text-center text-[0.75rem] text-ink-3/70">→</span><${TimeBox} vm=${vm} p=${p} field="out" />
+    <${TimeBox} vm=${vm} p=${p} field="in" /><span class="text-center text-[0.6875rem] text-ink-3/70">→</span><${TimeBox} vm=${vm} p=${p} field="out" />
     <span class=${cx('t-body text-right font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) : '?'}</span>
   </div>`;
 }
@@ -321,7 +321,7 @@ function AddRow({ vm }) {
   const next = { bartender: 'server', server: 'support', support: 'bartender' };
   return html`<div class="li flex items-center gap-2.5 px-4 py-1.5" data-addbox>
     <span class="grid size-8 shrink-0 place-items-center rounded-full bg-accent/12 text-accent"><${Icon} name="plus" class="size-[1.125rem]" /></span>
-    <input data-addnames class="h-11 min-w-0 flex-1 bg-transparent text-[1.0625rem] font-medium text-ink outline-none placeholder:font-normal placeholder:text-ink-3"
+    <input data-addnames class="h-11 min-w-0 flex-1 bg-transparent text-[1rem] text-ink outline-none placeholder:font-normal placeholder:text-ink-3"
       placeholder="Add a name" aria-label="Add a name" value=${draft} onBlur=${() => { leftField = Date.now(); }}
       autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="next"
       onKeyDown=${e => {
@@ -410,14 +410,14 @@ function People({ vm }) {
 
 // ── Shift: the open / close, per-role times, the close-time what-if. ─────────
 function ShiftTimes({ vm }) {
-  const cell = 'h-11 w-[4.5rem] rounded-lg bg-surface-2 text-[0.9375rem] tabular-nums transition';
+  const cell = 'h-11 w-[4.5rem] rounded-lg bg-surface-2 text-[1rem] tabular-nums transition';
   return html`<${List}>
     <div class="li flex min-h-12 items-center justify-between gap-3 px-4 py-1.5">
-      <span class="t-body font-medium">Open</span>
+      <span class="t-body">Open</span>
       <${DefaultTime} vm=${vm} field="in" cls=${cell} tone="font-semibold text-ink" />
     </div>
     <div class="li flex min-h-12 items-center justify-between gap-3 px-4 py-1.5">
-      <span class="t-body flex items-center gap-1.5 font-medium"><span class="size-1.5 rounded-full bg-bad"></span>Close</span>
+      <span class="t-body flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-bad"></span>Close</span>
       <${CloseTime} vm=${vm} cls=${cell} tone="font-semibold text-ink" />
     </div>
   <//>`;
@@ -494,7 +494,7 @@ function BreakField({ vm, p }) {
     on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2')} aria-pressed=${String(on)} onClick=${onClick}>${label}</button>`;
   return html`<div class="flex flex-col gap-3 rounded-card bg-surface p-3.5">
     <div class="flex items-center justify-between">
-      <span class="t-body font-medium">Break</span>
+      <span class="t-body">Break</span>
       <span class="t-small text-ink-3">${len > 0 ? 'Off their hours' : 'None'}</span>
     </div>
     <div class="flex flex-wrap gap-1.5">
@@ -510,7 +510,7 @@ function BreakField({ vm, p }) {
       </span>
       ${placed
         ? html`<${DragTime} abs=${t.brkStart} set=${true} tapWheel min=${t.inAbs} max=${t.outAbs - len}
-            onSet=${placeAt} cls="h-10 min-w-[4.5rem] rounded-lg bg-surface-2 px-2 text-[0.9375rem] tabular-nums transition" tone="font-semibold text-ink" label="Break start" />
+            onSet=${placeAt} cls="h-10 min-w-[4.5rem] rounded-lg bg-surface-2 px-2 text-[1rem] tabular-nums transition" tone="font-semibold text-ink" label="Break start" />
           <button class="t-small h-10 px-1 font-semibold text-accent" onClick=${() => App.staffField(p.id, 'brkAt', '', true)}>Clear</button>`
         : canPlace && html`<${Button} size="sm" variant="tonal" icon="clock"
             onClick=${() => placeAt(Math.round((t.inAbs + (t.span - len) / 2) * 4) / 4)}>Set time<//>`}

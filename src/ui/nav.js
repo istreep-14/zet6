@@ -20,9 +20,12 @@
 // position of each view. onNav(fn) is told after every change (the header,
 // the sub-tab row and the pages re-render from it).
 //
-// Touches in a sideways scroller (.overflow-x-auto), on a text field, in the
-// wheel, on a box being held (dragFlags) or marked [data-noswipe] are left
-// alone; so is everything while the keypad or the keyboard is up.
+// A sideways scroller under the finger (a wide table, a chip row) scrolls
+// first: the swipe is left to it while it can still move that way, and the
+// page takes the swipe once it's at that end (or when it doesn't overflow at
+// all). Touches on a text field, in the wheel, on a box being held
+// (dragFlags) or marked [data-noswipe] are left alone; so is everything while
+// the keypad or the keyboard is up.
 
 import { dragFlags } from './dragtime.js';
 import { render } from './preact.js';
@@ -84,7 +87,11 @@ export const onSwipe = fn => swipeFns.push(fn);
 const swipeTo = (progress, live) => swipeFns.forEach(fn => fn(progress, live));
 
 // ── The header hides on the way down, shows on the way up ───────────────────
-let lastY = 0, quietUntil = 0;
+// Only a scroll the user makes (a finger, its momentum, a mouse wheel)
+// hides it — not one the app makes (scrolling a new card into view after a
+// tap). A tap has no touchmove, so it never counts.
+let lastY = 0, quietUntil = 0, userAt = -1e9;
+const byUser = () => performance.now() - userAt < 1500;
 export function revealHeader() {
   root().classList.remove('hdr-hide');
   quietUntil = performance.now() + 300;        // a restored scroll position isn't a scroll
@@ -96,6 +103,7 @@ function headerOnScroll() {
   const y = m.scrollTop;
   const r = root();
   if (performance.now() < quietUntil || r.classList.contains('keypad-open') || topPage()) { lastY = y; return; }
+  if (!byUser() && y > lastY) { lastY = y; return; }
   const bar = parseFloat(getComputedStyle(r).fontSize) * 3;
   if (y <= bar) { r.classList.remove('hdr-hide'); lastY = y; return; }
   if (y > m.scrollHeight - m.clientHeight - 2) { lastY = y; return; }   // the bounce at the bottom
@@ -267,11 +275,25 @@ const swallowClick = () => {
 export function ignored(e, can) {
   if (e.touches.length !== 1 || !can()) return true;
   const t = e.target;
-  if (t.closest?.('.overflow-x-auto, textarea, .wheel, [data-noswipe]')) return true;
+  if (t.closest?.('textarea, .wheel, [data-noswipe]')) return true;
   if (t.matches?.('input') && t === document.activeElement && !t.hasAttribute('data-kinput')) return true;
   if (root().classList.contains('keypad-open') || document.body.classList.contains('keyboard-open')) return true;
   return false;
 }
+
+// The sideways scroller under the touch that can actually scroll (its content
+// is wider than it), from the target up to `el`.
+function hScroller(t, el) {
+  for (let n = t; n && n !== el && n.nodeType === 1; n = n.parentElement) {
+    if (n.scrollWidth > n.clientWidth + 1) {
+      const ox = getComputedStyle(n).overflowX;
+      if (ox === 'auto' || ox === 'scroll') return n;
+    }
+  }
+  return null;
+}
+// Can it scroll further the way the finger moves (dx < 0 reveals the right)?
+const canScroll = (sc, dx) => (dx < 0 ? sc.scrollLeft < sc.scrollWidth - sc.clientWidth - 1 : sc.scrollLeft > 1);
 
 // A horizontal drag on `el`. move(dx) while it follows the finger, end(dx,
 // fast) on release, cancel() when interrupted.
@@ -281,7 +303,7 @@ export function sideways(el, can, { move, end, cancel }) {
     g = null;
     if (ignored(e, can)) return;
     const p = e.touches[0];
-    g = { x0: p.clientX, y0: p.clientY, t0: Date.now(), mode: null, dx: 0 };
+    g = { x0: p.clientX, y0: p.clientY, t0: Date.now(), mode: null, dx: 0, sc: hScroller(e.target, el) };
   }, { passive: true });
   el.addEventListener('touchmove', e => {
     if (!g) return;
@@ -289,7 +311,10 @@ export function sideways(el, can, { move, end, cancel }) {
     const dx = p.clientX - g.x0, dy = p.clientY - g.y0;
     if (!g.mode) {
       if (dragFlags.lastArmed >= g.t0) { g = null; return; }     // a held box took this touch
-      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.4) g.mode = 'x';
+      if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        if (g.sc && canScroll(g.sc, dx)) { g = null; return; }      // the table scrolls instead
+        g.mode = 'x';
+      }
       else if (Math.abs(dx) > 12 || Math.abs(dy) > 12) { g = null; return; }
       else return;
     }
@@ -326,7 +351,11 @@ export function initNav({ can = () => true, subsOn = () => true, edge = null } =
   const settle = () => { const el = panel(); setX(el, 0, SPRING); if (el) el.style.opacity = ''; swipeTo(0, false); };
   let pulling = false;                         // this swipe is pulling the menu
 
-  if (m) m.addEventListener('scroll', headerOnScroll, { passive: true });
+  if (m) {
+    m.addEventListener('scroll', headerOnScroll, { passive: true });
+    const mark = () => { userAt = performance.now(); };
+    ['touchmove', 'wheel'].forEach(t => m.addEventListener(t, mark, { passive: true }));
+  }
 
   // Root pages: step through the sub-tabs; right off the first = the menu.
   if (m) sideways(m, () => can() && !topPage(), {

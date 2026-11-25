@@ -41,7 +41,7 @@ export function DateTile({ iso, active }) {
   const wk = d ? new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(d) : '—';
   return html`<span class=${cx('flex size-10 shrink-0 flex-col items-center justify-center rounded-[0.625rem] leading-none',
     active ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink')}>
-    <span class=${cx('text-[0.5625rem] font-semibold uppercase tracking-[.06em]', active ? 'text-on-accent/75' : 'text-ink-3')}>${wk}</span>
+    <span class=${cx('text-[0.6875rem] font-semibold uppercase tracking-[.06em]', active ? 'text-on-accent/75' : 'text-ink-3')}>${wk}</span>
     <span class="t-head mt-0.5 leading-none tabular-nums">${d ? d.getDate() : '?'}</span>
   </span>`;
 }
@@ -181,7 +181,7 @@ function Calendar({ selected, sessionDates }) {
     const v = iso(d);
     const sel = v === selected;
     cells.push(html`<button key=${v} class=${cx(
-      'relative mx-auto grid size-10 place-items-center rounded-full text-[0.9375rem] font-medium tabular-nums transition active:scale-90',
+      'relative mx-auto grid size-10 place-items-center rounded-full text-[1rem] tabular-nums transition active:scale-90',
       sel ? 'bg-accent text-on-accent' : v === today ? 'text-accent ring-1 ring-inset ring-accent/60' : 'text-ink active:opacity-70',
     )} onClick=${() => App.setDate(v)} aria-label=${v} aria-pressed=${String(sel)}>${d}${
       !sel && sessionDates.has(v) && html`<i class="absolute bottom-1 left-1/2 size-1 -translate-x-1/2 rounded-full bg-ink-2"></i>`}</button>`);
@@ -221,7 +221,7 @@ function navFrom(k) {
   };
 }
 const parsed = raw => { const p = parseTime(raw); return p.value != null ? p : null; };
-const CELLCLS = 'h-11 w-full rounded-xl bg-surface-2 text-center text-[1.0625rem] tabular-nums transition';
+const CELLCLS = 'h-11 w-full rounded-xl bg-surface-2 text-center text-[1rem] tabular-nums transition';
 
 // One default time. `raw` is what's stored ('' = inherits `fallback`).
 function DefCell({ k, title, raw, fallback, field, inAbs, write }) {
@@ -263,7 +263,7 @@ export function RoleTimes({ vm }) {
   return html`<${Section} title="Per role" footer=${'Role times win over the shift’s open / close for that role. Remembered for the next ' + (day ? 'day' : 'night') + ' shift.' + (day ? ' Servers’ Out is where Day hands over to Mid (unless a server stays later).' : '')}>
     <${Card}>
       <div class="grid grid-cols-[4.5rem_1fr_1fr] items-center gap-x-3 gap-y-2.5">
-        <span></span><span class="t-small text-center font-medium text-ink-2">In</span><span class="t-small text-center font-medium text-ink-2">Out</span>
+        <span></span><span class="t-small text-center text-ink-2">In</span><span class="t-small text-center text-ink-2">Out</span>
         ${ROLES3.map(r => {
           const rin = parsed(d.byRole[r].in) ?? parsed(d.global.in);
           return html`

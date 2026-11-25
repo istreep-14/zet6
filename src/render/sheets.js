@@ -16,7 +16,7 @@ import { StaffTime } from './staff.js';
 
 // The shift's In / Out in the Person sheet: the same time box as Staff and
 // Summary (tap → quick time sheet, hold → the wheel picker, Undo · Apply).
-const SHEET_TIME = 'h-12 w-full rounded-xl bg-surface text-center text-[1.125rem] tabular-nums transition';
+const SHEET_TIME = 'h-12 w-full rounded-xl bg-surface text-center text-[1rem] tabular-nums transition';
 
 let personId = null;
 onSheetClose('sheet-person', () => { personId = null; });
@@ -40,7 +40,7 @@ function Person({ vm, p }) {
       </div>
     </div>
     <div class="flex items-center justify-between rounded-card bg-surface px-4 py-4">
-      <span class="t-small font-medium text-ink-3">Takes home</span>
+      <span class="t-small text-ink-3">Takes home</span>
       <${Money} value=${p.final} class="t-display text-money" />
     </div>
     <div class="grid grid-cols-2 gap-2">
@@ -57,7 +57,7 @@ function Person({ vm, p }) {
     <${Label} aside="tap a time for its wheel">Shift<//>
     <div class="grid grid-cols-2 gap-3">
       ${['in', 'out'].map(f => html`<div key=${f} class="flex flex-col gap-1.5">
-        <span class="t-small px-1 font-medium text-ink-2">${f === 'in' ? 'In' : 'Out'}</span>
+        <span class="t-small px-1 text-ink-2">${f === 'in' ? 'In' : 'Out'}</span>
         <${StaffTime} vm=${vm} id=${p.id} field=${f} full cls=${SHEET_TIME} />
       </div>`)}
     </div>`;
@@ -89,7 +89,7 @@ function Bonus({ vm }) {
   const manual = s.bonusMode === 'manual';
 
   return html`<${LiveStrip} vm=${vm} />
-    <div class="t-body flex items-center justify-between gap-2 rounded-card bg-surface px-4 py-3.5 font-medium">
+    <div class="t-body flex items-center justify-between gap-2 rounded-card bg-surface px-4 py-3.5">
       <span>$${remainder} left after rounding down</span>
       ${manual ? html`<${Badge} tone="amber">manual<//>` : html`<${Badge} tone="green">auto · closers<//>`}
     </div>

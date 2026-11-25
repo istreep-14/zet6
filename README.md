@@ -10,7 +10,7 @@ No server, no login, no build step. Add it to your iPhone home screen and it run
 
 **Home** is the first tab — every session opens on it — and it's only for reading: nothing on it changes anything. Until the shift is complete it shows the three close-out steps (who worked → the tips → who gets what), each one tap away. **Staff** and **Tips** are only for entering things; they end with a **Next** button.
 
-Each tab's header shows its name and the numbers that matter at a glance (Home: paid out, people, $/hour; Staff: people, hours, open – close; Tips: the total), with the tab's views underneath — tap one, or swipe sideways on the page to move between them. The header tucks away as you scroll down and comes back as you scroll up. Tabs change only by tapping them.
+Each tab's header shows its name and the numbers that matter at a glance (Home: paid out, people, $/hour; Staff: people, hours, open – close; Tips: the total), with the tab's views underneath — tap one, or swipe sideways on the page to move between them. The header's title and the tab bar tuck away as you scroll down and come back as you scroll up. A swipe on a wide table scrolls the table first, then moves to the next view once it's at the end. Tabs change only by tapping them.
 
 Tap the round date in the top-left corner — or swipe right from a tab's first view — for the **menu**: this session at a glance, the other sessions to switch to, copy / export / import, settings and a light / dark toggle.
 

@@ -51,7 +51,7 @@ export const hueTile = i => ({ background: `color-mix(in srgb, ${hueVar(i)} 20%,
 // A person's round avatar: their initials on their colour (hueTile). `closer`
 // puts a red dot on its shoulder (solid = forced). Sizes: sm 2rem (Staff's
 // rows), md 2.5rem (list rows), lg 3.5rem (a person's page).
-const AV = { sm: 'size-8 text-[0.8125rem]', md: 'size-10 text-[0.9375rem]', lg: 'size-14 text-[1.25rem]' };
+const AV = { sm: 'size-8 text-[0.8125rem]', md: 'size-10 text-[1rem]', lg: 'size-14 text-[1.25rem]' };
 export const initials = name => {
   const w = String(name || '').trim().split(/\s+/).filter(Boolean);
   return ((w[0]?.[0] || '?') + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase();
@@ -145,7 +145,7 @@ export function Denom({ d, class: cls = '' }) {
 
 export function Alert({ tone = 'error', action, children }) {
   const t = { error: 'bg-bad/10 text-bad', warn: 'bg-warn/12 text-warn', info: 'bg-surface text-ink-2' }[tone];
-  return html`<div class=${cx('t-small flex items-start gap-3 rounded-card px-4 py-3 font-medium', t)}>
+  return html`<div class=${cx('t-small flex items-start gap-3 rounded-card px-4 py-3', t)}>
     ${tone !== 'info' && html`<${Icon} name="alert" class="size-[1.125rem] mt-px" />`}
     <span class="flex-1">${children}</span>
     ${action && html`<button class="shrink-0 font-semibold text-accent" onClick=${action.onClick}>${action.label}</button>`}
@@ -182,7 +182,7 @@ export function Blocked({ vm }) {
     ${pristine && html`<${Empty} logo title="No shift yet" body="Three steps to close out — start with who worked." />`}
     <${List}>${steps.map((x, i) => html`<${Item} key=${x.tab} onClick=${() => App.tab(x.tab === 'home' ? (next?.tab || 'home') : x.tab)}
       tone=${x === next ? 'active' : ''}
-      lead=${html`<span class=${cx('grid size-8 shrink-0 place-items-center rounded-full text-[0.875rem] font-semibold',
+      lead=${html`<span class=${cx('grid size-8 shrink-0 place-items-center rounded-full text-[0.8125rem] font-semibold',
         x.ok ? 'bg-good/15 text-good' : err(x.tab) ? 'bg-bad/12 text-bad' : x === next ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-3')}>
         ${x.ok ? html`<${Icon} name="check" class="size-4" />` : err(x.tab) ? '!' : i + 1}</span>`}
       title=${x.title} sub=${html`<span class=${err(x.tab) ? 'text-bad' : ''}>${x.sub}</span>`} />`)}<//>
@@ -204,14 +204,14 @@ export function NextStep({ label, sub, tab }) {
 
 // Boxed input. INPUT sits inside a card (surface-2 fill); INPUT_PAGE stands
 // on the page / a sheet (surface fill).
-const INPUT_BASE = 'h-11 w-full min-w-0 rounded-xl px-3 text-[1.0625rem] text-ink outline-none transition placeholder:text-ink-3 focus:ring-2 focus:ring-accent/40';
+const INPUT_BASE = 'h-11 w-full min-w-0 rounded-xl px-3 text-[1rem] text-ink outline-none transition placeholder:text-ink-3 focus:ring-2 focus:ring-accent/40';
 export const INPUT = cx(INPUT_BASE, 'bg-surface-2');
 export const INPUT_PAGE = cx(INPUT_BASE, 'bg-surface');
 
 // Segmented control: items [{ value, label, icon }], onChange(value).
 // Sizes (SEG_H): sm (inside a card row) · md (default) · lg — a view switch
 // you hit with a thumb (Summary's List · Shift · Pools · Bills · Math).
-const SEG_H = { sm: 'h-8 t-small', md: 'h-10 t-small', lg: 'h-11 text-[0.875rem] leading-tight' };
+const SEG_H = { sm: 'h-8 t-small', md: 'h-10 t-small', lg: 'h-11 text-[0.8125rem] leading-tight' };
 export function Seg({ items, value, onChange, size = 'md', class: cls = '' }) {
   const h = SEG_H[size] || SEG_H.md;
   return html`<div class=${cx('flex rounded-xl bg-surface-2 p-0.5', size === 'lg' && 'rounded-[0.875rem] p-1', cls)} role="tablist">
@@ -235,7 +235,7 @@ export function Chip({ on, role, onClick, children }) {
 // `page`: the field stands on the page / a sheet, not inside a card.
 export function Field({ label, page = false, class: cls = '', inputClass = '', ...input }) {
   return html`<label class=${cx('flex min-w-0 flex-1 flex-col gap-1.5', cls)}>
-    <span class="t-small font-medium text-ink-2">${label}</span>
+    <span class="t-small text-ink-2">${label}</span>
     <input class=${cx(page ? INPUT_PAGE : INPUT, inputClass)} ...${input} />
   </label>`;
 }
@@ -320,14 +320,14 @@ export function ToolChips({ items, class: cls = '' }) {
   return html`<div class=${cx('-mx-[var(--gutter)] overflow-x-auto px-[var(--gutter)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', cls)}>
     <div class="flex w-max gap-2">${items.filter(Boolean).map(it => html`<button key=${it.label}
       class="t-small inline-flex h-[var(--tap)] items-center gap-1.5 rounded-full bg-surface pl-3 pr-3.5 font-semibold text-ink transition active:scale-95"
-      onClick=${it.onClick}><${Icon} name=${it.icon} class="size-4 text-accent" />${it.label}${it.value != null && it.value !== '' && html`<span class="font-medium text-ink-3">${it.value}</span>`}</button>`)}</div>
+      onClick=${it.onClick}><${Icon} name=${it.icon} class="size-4 text-accent" />${it.label}${it.value != null && it.value !== '' && html`<span class=" text-ink-3">${it.value}</span>`}</button>`)}</div>
   </div>`;
 }
 
 export function Stat({ label, value, sub, tone = '', big = false }) {
   return html`<div class="rounded-card bg-surface px-4 py-3">
-    <div class="t-small font-medium text-ink-3">${label}</div>
-    <div class=${cx('font-semibold tracking-tight tabular-nums', big ? 't-display' : 'text-[1.375rem] leading-tight', tone)}>${value}</div>
+    <div class="t-small text-ink-3">${label}</div>
+    <div class=${cx('font-semibold tracking-tight tabular-nums', big ? 't-display' : 'text-[1.25rem] leading-tight', tone)}>${value}</div>
     ${sub && html`<div class="t-small text-ink-3">${sub}</div>`}
   </div>`;
 }
@@ -404,7 +404,7 @@ export function Item({ lead, icon, title, sub, trail, value, valueTone = '', che
     <span class="flex w-full items-center gap-3">
       ${icon ? html`<span class=${cx('grid size-8 shrink-0 place-items-center rounded-lg', tone === 'danger' ? 'bg-bad/12 text-bad' : 'bg-surface-2 text-ink-2')}><${Icon} name=${icon} class="size-[1.125rem]" /></span>` : lead}
       <span class="flex min-w-0 flex-1 flex-col">
-        <span class=${cx('t-body flex min-w-0 items-center gap-1.5 font-medium', tone === 'danger' && 'text-bad')}>${title}</span>
+        <span class=${cx('t-body flex min-w-0 items-center gap-1.5', tone === 'danger' && 'text-bad')}>${title}</span>
         ${sub && html`<span class="t-small line-clamp-2 text-ink-3">${sub}</span>`}
       </span>
       ${trail}
@@ -441,7 +441,7 @@ export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, sc
       <tbody>${rows.map((r, n) => r.section
         ? html`<tr key=${'s' + n} class="bg-surface"><td colspan=${cols.length} class="t-cap px-4 pb-1 pt-3 text-ink-3">${r.section}</td></tr>`
         : html`<tr key=${r.key ?? n} class=${cx(zebra(n), r.onClick && 'cursor-pointer transition active:bg-surface-2', r.tone === 'muted' && 'text-ink-2')} onClick=${r.onClick}>
-            ${r.cells.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-[var(--row)]', i === 0 && 'max-w-[7rem] truncate font-medium')}>${v}</td>`)}
+            ${r.cells.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-[var(--row)]', i === 0 && 'max-w-[7rem] truncate')}>${v}</td>`)}
           </tr>`)}</tbody>
       ${foot && html`<tfoot><tr class=${cx('font-semibold', TOTAL_FILL)}>
         ${foot.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-[var(--row-lg)]')}>${v}</td>`)}

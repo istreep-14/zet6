@@ -25,7 +25,7 @@ import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose }
 const $ = id => document.getElementById(id);
 
 const fmtAmt = v => String(parseFloat((v ?? 0).toFixed(2)));
-const EYEBROW = 't-small font-medium text-ink-2';
+const EYEBROW = 't-small text-ink-2';
 
 function windowSub(pool, vmPool) {
   const start = pool.window.start.trim();
@@ -61,7 +61,7 @@ function WindowEdge({ vm, pool, vmPool, which }) {
   const opts = [{ v: '', label: which === 'start' ? 'Open' : 'Close' }, { v: 'srv', label: 'Servers out' }, { v: 'bar', label: 'Bar out' }];
   const chip = on => cx('t-small h-9 shrink-0 rounded-full px-3 font-semibold transition active:scale-95', on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2');
   return html`<div class="flex items-center gap-2">
-    <span class="t-small w-10 shrink-0 font-medium text-ink-2">${which === 'start' ? 'From' : 'To'}</span>
+    <span class="t-small w-10 shrink-0 text-ink-2">${which === 'start' ? 'From' : 'To'}</span>
     <div class="w-[4.75rem] shrink-0">${edgeCell(vm, pool, vmPool, which, 'h-10 w-full rounded-lg bg-surface-2 text-center text-[1rem] tabular-nums transition')}</div>
     <div class="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       ${opts.map(o => html`<button key=${o.v} class=${chip(raw === o.v)} onClick=${() => App.poolWindow(pool.id, which, o.v, true)}>${o.label}</button>`)}
@@ -93,7 +93,7 @@ function SupportBox({ pool, vm, vmPool }) {
   return html`<div class="flex flex-col gap-3 px-4 py-3">
     <div class="flex items-baseline justify-between gap-2">
       <span class=${cx(EYEBROW, 'inline-flex items-center gap-1.5')}><span class="size-2 rounded-full bg-sup"></span>Support tip-out</span>
-      <span class="t-small text-right font-medium text-sup">${cut}</span>
+      <span class="t-small text-right text-sup">${cut}</span>
     </div>
     <div class="flex gap-3">
       <${Field} label="Percent" inputmode="decimal" placeholder=${pctPh} value=${cfg.pct ?? ''}
@@ -121,12 +121,12 @@ function BillRow({ pool, d, batch = null }) {
   const v = (batch ? batch.billCounts : pool.cash.billCounts)[d] ?? '';
   const parsed = parseWholeNumber(v);
   const sub = parsed.valid ? parsed.value * d : 0;
-  const step = 'grid size-11 shrink-0 select-none place-items-center rounded-full text-[1.375rem] text-ink-2 active:bg-ink/10 active:text-ink [-webkit-touch-callout:none]';
+  const step = 'grid size-11 shrink-0 select-none place-items-center rounded-full text-[1.25rem] text-ink-2 active:bg-ink/10 active:text-ink [-webkit-touch-callout:none]';
   return html`<div class=${cx(BILL_GRID, 'min-h-[var(--row-lg)] px-4 py-1')}>
     <${Denom} d=${d} />
     <div class="flex items-center rounded-full bg-surface-2 focus-within:ring-2 focus-within:ring-accent/40">
       <button class=${step} ...${holdRepeat(() => batch ? App.cashBatchStep(pool.id, batch.id, String(d), -1) : App.billStep(pool.id, String(d), -1))} aria-label=${'One fewer $' + d} tabindex="-1">−</button>
-      <input class="h-11 w-full min-w-0 bg-transparent text-center text-[1.125rem] font-semibold text-ink outline-none placeholder:text-ink-3"
+      <input class="h-11 w-full min-w-0 bg-transparent text-center text-[1rem] font-semibold text-ink outline-none placeholder:text-ink-3"
         type="number" min="0" step="1" placeholder="0" inputmode="numeric" enterkeyhint=${batch ? 'done' : 'next'} data-bill=${batch ? undefined : d}
         aria-label=${'$' + d + ' bills' + (batch ? ' in ' + (batch.label || 'checkpoint') : '')} value=${v} onInput=${e => batch ? App.cashBatchBill(pool.id, batch.id, String(d), e.target.value) : App.poolBill(pool.id, String(d), e.target.value)}
         onKeyDown=${batch ? undefined : e => App.billKey(e, pool.id)} />
@@ -145,8 +145,8 @@ function Amount({ pool }) {
   const display = !pool.cash.baseMode && pool.cash.restMode !== 'total' && raw.trim() && parsed.valid
     ? String(parsed.value + countedValue(pool.cash.billCounts)) : raw;
   return html`<div class="relative">
-    <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[1.5rem] font-medium text-ink-3">$</span>
-    <input class=${cx(INPUT, 'h-14 pl-10 text-[1.75rem] font-semibold tracking-tight')}
+    <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[1.25rem] text-ink-3">$</span>
+    <input class=${cx(INPUT, 'h-14 pl-10 text-[1.25rem] font-semibold tracking-tight')}
       id=${'cash-' + pool.id} type="number" min="0" step="1" placeholder="0" inputmode="numeric" data-rest
       aria-label="Total cash" value=${display} onInput=${e => App.poolTotal(pool.id, e.target.value)} />
   </div>`;

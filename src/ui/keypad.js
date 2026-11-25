@@ -174,7 +174,7 @@ document.addEventListener('keydown', e => {
   else if (k === 'Escape') closeKeypad({ commit: false });
 });
 
-const KEY = 'grid h-12 place-items-center rounded-xl bg-surface text-[1.375rem] font-medium tabular-nums text-ink shadow-[0_1px_0_rgb(0_0_0/.12)] transition select-none active:scale-95 active:bg-surface-2 max-[400px]:h-11';
+const KEY = 'grid h-12 place-items-center rounded-xl bg-surface text-[1.25rem] tabular-nums text-ink shadow-[0_1px_0_rgb(0_0_0/.12)] transition select-none active:scale-95 active:bg-surface-2 max-[400px]:h-11';
 const FN = 'flex h-12 items-center justify-center gap-0.5 rounded-xl text-[1rem] font-semibold transition select-none active:scale-95 max-[400px]:h-11';
 
 function Pad() {
@@ -186,11 +186,11 @@ function Pad() {
   const am = abs != null ? merOf(abs) : null;
   const k = (label, v = label, cls = KEY) => html`<button type="button" class=${cls} onClick=${() => press(v)}>${label}</button>`;
   const ap = v => html`<button type="button" aria-pressed=${String(am === v)} onClick=${() => press(v)}
-    class=${cx('h-8 w-9 rounded-lg text-[0.9375rem] font-semibold transition', am === v ? (mer === v ? 'bg-accent text-on-accent' : 'bg-raised text-ink shadow-[0_1px_3px_rgb(0_0_0/.14)]') : 'text-ink-3')}>${v}</button>`;
+    class=${cx('h-8 w-9 rounded-lg text-[1rem] font-semibold transition', am === v ? (mer === v ? 'bg-accent text-on-accent' : 'bg-raised text-ink shadow-[0_1px_3px_rgb(0_0_0/.14)]') : 'text-ink-3')}>${v}</button>`;
   return html`<div class="flex flex-col gap-2 px-2 pb-2 pt-2">
     <div class="flex items-center gap-2 px-1">
-      <span class="t-small min-w-0 flex-1 truncate font-medium text-ink-2">${cfg.title}</span>
-      <span class=${cx('min-w-[5.5rem] text-center text-[1.5rem] font-semibold tabular-nums tracking-tight',
+      <span class="t-small min-w-0 flex-1 truncate text-ink-2">${cfg.title}</span>
+      <span class=${cx('min-w-[5.5rem] text-center text-[1.25rem] font-semibold tabular-nums tracking-tight',
         error ? 'text-bad' : buf || mer ? 'text-accent' : 'text-ink-3')}>${error ? 'Not a time' : shown}</span>
       <span class="flex flex-1 items-center justify-end gap-1">
         <span class="flex rounded-[0.625rem] bg-surface-2 p-0.5" role="group" aria-label="am or pm">${ap('a')}${ap('p')}</span>

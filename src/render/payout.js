@@ -206,9 +206,9 @@ export function Worksheet({ vm }) {
   const line = (p, rate) => html`<span class="truncate py-1.5 text-ink">${p.name}</span>
     <span class="py-1.5 pl-2 text-right">${h(p.hours)} × ${rate.toFixed(4)}</span>
     <span class="py-1.5 pl-2 text-right">= ${cents(p.exact)}</span>
-    <span class="py-1.5 pl-2 text-right font-semibold text-ink">${p.base}${p.bonus > 0 && html`<em class="ml-0.5 text-[0.75rem] not-italic text-bad">+${p.bonus}</em>`}</span>`;
+    <span class="py-1.5 pl-2 text-right font-semibold text-ink">${p.base}${p.bonus > 0 && html`<em class="ml-0.5 text-[0.6875rem] not-italic text-bad">+${p.bonus}</em>`}</span>`;
   step('Hours × rate, rounded down to whole dollars',
-    html`<div class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] whitespace-nowrap rounded-xl bg-surface-2 px-2.5 py-0.5 text-[0.8125rem] text-ink-2 max-[23.375rem]:text-[0.75rem]">
+    html`<div class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] whitespace-nowrap rounded-xl bg-surface-2 px-2.5 py-0.5 text-[0.8125rem] text-ink-2 max-[23.375rem]:text-[0.6875rem]">
       ${tipped.map(p => line(p, pool.rate))}${supPeople.map(p => line(p, sup.rate))}</div>`);
 
   const bonusSum = ordered.reduce((t, p) => t + p.bonus, 0);
@@ -227,7 +227,7 @@ export function Worksheet({ vm }) {
   <${Card}>
     <ol class="flex flex-col gap-4">
       ${steps.map((st, i) => html`<li key=${i} class="grid grid-cols-[1.375rem_minmax(0,1fr)] gap-2.5">
-        <span class="grid size-[1.375rem] place-items-center rounded-full bg-surface-2 text-[0.75rem] font-semibold text-ink-2">${i + 1}</span>
+        <span class="grid size-[1.375rem] place-items-center rounded-full bg-surface-2 text-[0.6875rem] font-semibold text-ink-2">${i + 1}</span>
         <div class="flex min-w-0 flex-col gap-1"><div class="t-small font-semibold">${st.label}</div>${st.body}</div>
       </li>`)}
     </ol>
@@ -280,7 +280,7 @@ function FixBody({ vm }) {
   if (!fx.short) {
     return html`${head}<${List}>${fx.rows.map(r => html`<div key=${r.id} class="li flex flex-col gap-1.5 px-4 py-2.5" style=${{ '--inset': '1rem' }}>
       <span class="flex items-baseline justify-between gap-3">
-        <span class="t-body truncate font-medium">${name(r.id)}</span>
+        <span class="t-body truncate">${name(r.id)}</span>
         <span class="t-small shrink-0 tabular-nums text-ink-3">${fmtMoney(r.was)} → <b class="font-semibold text-ink">${fmtMoney(r.now)}</b>
           <span class=${r.d < 0 ? 'text-bad' : 'text-good'}> ${r.d < 0 ? '−' : '+'}$${Math.abs(r.d)}</span></span>
       </span>
@@ -297,14 +297,14 @@ function FixBody({ vm }) {
     const notes = fx.notes.filter(n => n.id === id);
     return html`<div key=${id} class="li flex flex-col gap-1.5 px-4 py-2.5" style=${{ '--inset': '1rem' }}>
       <span class="flex items-baseline justify-between gap-3">
-        <span class="t-body truncate font-medium">${name(id)}</span>
+        <span class="t-body truncate">${name(id)}</span>
         <span class="t-small shrink-0 tabular-nums text-ink-3">${fmtMoney(was)} → <b class="font-semibold text-ink">${fmtMoney(now)}</b>
           <span class=${d < 0 ? 'text-bad' : 'text-good'}> ${d < 0 ? '−' : '+'}$${Math.abs(d)}</span></span>
       </span>
       ${mine.map((m, k) => html`<span key=${k} class="flex flex-wrap items-center gap-1">
         <span class=${STEP}>${m.from === id ? (m.to === 'register' ? 'Put in' : 'Give ' + name(m.to)) : 'Get from ' + name(m.from)}</span>
         <${BillPills} bills=${m.bills} sign=${m.from === id ? '−' : '+'} /></span>`)}
-      ${notes.map((n, k) => html`<span key=${'n' + k} class="t-small font-medium text-warn">${n.text}</span>`)}
+      ${notes.map((n, k) => html`<span key=${'n' + k} class="t-small text-warn">${n.text}</span>`)}
     </div>`;
   })}<//>${total}`;
 }
@@ -329,17 +329,17 @@ function StacksBody({ vm }) {
   const chip = on => cx('t-small inline-flex h-[var(--tap)] items-center gap-1.5 rounded-full px-3.5 font-semibold transition active:scale-95', on ? 'bg-accent text-on-accent' : 'bg-surface text-ink-2');
   return html`<p class="t-small px-1 text-ink-3">${stacksSub(vm)}</p>
     <div class="flex flex-col gap-2">
-      <span class="t-small px-1 font-medium text-ink-2">Who takes the stacks</span>
+      <span class="t-small px-1 text-ink-2">Who takes the stacks</span>
       <div class="flex flex-wrap gap-2">${people.map(p => html`<button key=${p.id} class=${chip(takers.includes(p.id))}
         aria-pressed=${String(takers.includes(p.id))} onClick=${() => App.toggleStackTo(p.id)}>
         ${takers.includes(p.id) && html`<${Icon} name="check" class="size-4" />`}${p.name}</button>`)}</div>
     </div>
     <div class="flex flex-col gap-2">
-      <span class="t-small px-1 font-medium text-ink-2">A stack is <span class="font-normal text-ink-3">· 0 = don’t bundle</span></span>
+      <span class="t-small px-1 text-ink-2">A stack is <span class="font-normal text-ink-3">· 0 = don’t bundle</span></span>
       <div class="grid grid-cols-3 gap-2">${STACK_BILLS.map(d => html`<label key=${d} class="flex flex-col gap-1">
         <span class="t-small px-1 text-ink-3">$${d}s</span>
         <span class="relative"><span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3">$</span>
-          <input class="h-11 w-full rounded-xl bg-surface pl-7 pr-2 text-[1.0625rem] font-semibold tabular-nums outline-none focus:ring-2 focus:ring-accent/40"
+          <input class="h-11 w-full rounded-xl bg-surface pl-7 pr-2 text-[1rem] font-semibold tabular-nums outline-none focus:ring-2 focus:ring-accent/40"
             inputmode="numeric" placeholder=${String(STACK_DEFAULTS[d])} value=${vm.state.settings.stacks?.[d] ?? ''}
             aria-label=${'Stack of $' + d + 's, in dollars'} onInput=${e => App.setStackSize(d, e.target.value)} /></span>
         <span class="t-small px-1 text-ink-3">${sizes[d] > 0 ? sizes[d] / d + ' bills' : 'off'}</span>
