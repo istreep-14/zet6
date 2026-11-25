@@ -7,7 +7,7 @@ import { fmtTimeAbs } from '../time.js';
 import { setBonuses, clearBonuses } from '../store.js';
 import { html, render } from '../ui/preact.js';
 import {
-  cx, Button, Stepper, Badge, Stat, Label, Money, Denom, LiveStrip, List, Item,
+  cx, Button, Stepper, Badge, Stat, Label, Money, Denom, LiveStrip, List, Item, Avatar, hueIndex,
 } from '../ui/pkit.js';
 import { closeSheet, isOpen, openSheet, sheetBody, onSheetClose } from '../ui/sheet.js';
 import { StaffTime } from './staff.js';
@@ -94,8 +94,8 @@ function Bonus({ vm }) {
       ${manual ? html`<${Badge} tone="amber">manual<//>` : html`<${Badge} tone="green">auto · closers<//>`}
     </div>
     <${List}>
-      ${s.perPerson.map(p => html`<${Item} key=${p.id} chevron=${false}
-        title=${html`<span class="truncate">${p.name}</span>${p.closer && html`<${Badge} tone="red">closer<//>`}`}
+      ${s.perPerson.map(p => html`<${Item} key=${p.id} chevron=${false} lead=${html`<${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} closer=${p.closer} />`}
+        title=${html`<span class="truncate">${p.name}</span>`}
         sub=${'$' + p.exact.toFixed(2) + ' → $' + p.base}
         trail=${html`<${Stepper} value=${p.bonus > 0 ? '+' + p.bonus : '0'} on=${p.bonus > 0}
           onDec=${() => App.remBonus(p.id, -1)} onInc=${() => App.remBonus(p.id, 1)}
@@ -103,10 +103,10 @@ function Bonus({ vm }) {
         value=${'$' + p.final} valueTone="min-w-12 text-right" />`)}
     <//>
     <${List}>
-      <${Item} title="Rounded-down shares" chevron=${false} value=${fmtMoney(floored)}  />
-      <${Item} title="Remainder" chevron=${false} value=${fmtMoney(remainder)}  />
-      <${Item} title="Given as bonus" chevron=${false} value=${bonusSum > 0 ? fmtMoney(bonusSum) : '—'}  />
-      <${Item} title="Chump" sub="Stays in the drawer" chevron=${false} value=${leftover > 0 ? fmtMoney(leftover) : '—'} valueTone="" />
+      <${Item} icon="calc" title="Rounded-down shares" chevron=${false} value=${fmtMoney(floored)}  />
+      <${Item} icon="dollar" title="Remainder" chevron=${false} value=${fmtMoney(remainder)}  />
+      <${Item} icon="gift" title="Given as bonus" chevron=${false} value=${bonusSum > 0 ? fmtMoney(bonusSum) : '—'}  />
+      <${Item} icon="cash" title="Chump" sub="Stays in the drawer" chevron=${false} value=${leftover > 0 ? fmtMoney(leftover) : '—'} valueTone="" />
     <//>
     ${manual && html`<${Button} block onClick=${() => App.resetRemBonuses()}>↺ Reset to auto (closers split)<//>`}`;
 }

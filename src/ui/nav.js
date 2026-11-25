@@ -1,13 +1,17 @@
 // Navigation: four tabs — Home · Staff · Tips · Settings — changed only by
 // tapping the tab bar. Inside a tab:
 //
-//   sub-tabs   every tab has them, as the segmented control that is the
-//              header (Home: Pay · Shift · Bills · Split; Staff: People ·
-//              Shift; Tips: Cash · Pools · Drawer; Settings:
-//              Shift · Sessions · App). A sideways swipe on the page
-//              moves between them; the page follows the finger, past the
-//              ends it rubber-bands. Elements in a tab's panel marked
+//   sub-tabs   every tab has them, as the tab row under the header's title
+//              (Home: Pay · Shift · Bills · Split; Staff: People · Shift;
+//              Tips: Cash · Pools · Drawer; Settings: Shift · Sessions ·
+//              App). A sideways swipe on the page moves between them; the
+//              page and the row's underline follow the finger (onSwipe),
+//              past the last one it rubber-bands. A swipe right on the
+//              first one pulls the menu in from the left (the `edge`
+//              handed to initNav). Elements in a tab's panel marked
 //              data-sub="x" show only while sub-tab x is on.
+//   header     slides its title row away as the page scrolls down and back
+//              on the way up (html.hdr-hide); any navigation brings it back.
 //   subpages   a row can push a page in from the right (pushPage). A swipe
 //              right on it (or Back in the header) pops it. Subpages have no
 //              sub-tabs, so a sideways swipe on one only ever means back.
@@ -70,7 +74,35 @@ export const subsOf = (tab = cur) => SUBS[tab] || [];
 export const stackOf = (tab = cur) => stacks[tab];
 export const topPage = (tab = cur) => stacks[tab][stacks[tab].length - 1] || null;
 export const onNav = fn => listeners.push(fn);
-const changed = () => listeners.forEach(fn => fn());
+const changed = () => { revealHeader(); listeners.forEach(fn => fn()); };
+
+// The tab row's underline follows a sub-tab swipe: fn(progress, live) —
+// progress in sub-tabs from the current one (−1 … 1), live while the finger
+// is down (no easing).
+const swipeFns = [];
+export const onSwipe = fn => swipeFns.push(fn);
+const swipeTo = (progress, live) => swipeFns.forEach(fn => fn(progress, live));
+
+// ── The header hides on the way down, shows on the way up ───────────────────
+let lastY = 0, quietUntil = 0;
+export function revealHeader() {
+  root().classList.remove('hdr-hide');
+  quietUntil = performance.now() + 300;        // a restored scroll position isn't a scroll
+  lastY = main()?.scrollTop || 0;
+}
+function headerOnScroll() {
+  const m = main();
+  if (!m) return;
+  const y = m.scrollTop;
+  const r = root();
+  if (performance.now() < quietUntil || r.classList.contains('keypad-open') || topPage()) { lastY = y; return; }
+  const bar = parseFloat(getComputedStyle(r).fontSize) * 3;
+  if (y <= bar) { r.classList.remove('hdr-hide'); lastY = y; return; }
+  if (y > m.scrollHeight - m.clientHeight - 2) { lastY = y; return; }   // the bounce at the bottom
+  const dy = y - lastY;
+  if (dy > 8) { r.classList.add('hdr-hide'); lastY = y; }
+  else if (dy < -8) { r.classList.remove('hdr-hide'); lastY = y; }
+}
 
 const viewKey = () => (topPage() ? 'p:' + topPage().id : cur + ':' + (sub[cur] || ''));
 const main = () => $('mainContent');
@@ -232,7 +264,7 @@ const swallowClick = () => {
   setTimeout(() => document.removeEventListener('click', stop, { capture: true }), 350);
 };
 
-function ignored(e, can) {
+export function ignored(e, can) {
   if (e.touches.length !== 1 || !can()) return true;
   const t = e.target;
   if (t.closest?.('.overflow-x-auto, textarea, .wheel, [data-noswipe]')) return true;
@@ -243,7 +275,7 @@ function ignored(e, can) {
 
 // A horizontal drag on `el`. move(dx) while it follows the finger, end(dx,
 // fast) on release, cancel() when interrupted.
-function sideways(el, can, { move, end, cancel }) {
+export function sideways(el, can, { move, end, cancel }) {
   let g = null;
   el.addEventListener('touchstart', e => {
     g = null;
@@ -279,7 +311,10 @@ function sideways(el, can, { move, end, cancel }) {
 
 const SPRING = 'transform .22s cubic-bezier(.2,.8,.3,1), opacity .22s';
 
-export function initNav({ can = () => true } = {}) {
+// subsOn(): false while the tab's sub-tabs are hidden (Home's checklist) —
+// a sideways swipe then never steps them. edge: { drag(dx), release(dx,
+// fast) } — the menu, pulled by a swipe right on the first sub-tab.
+export function initNav({ can = () => true, subsOn = () => true, edge = null } = {}) {
   const m = main();
   const panel = () => $('tab-' + cur);
   const setX = (el, x, anim = '') => {
@@ -287,26 +322,44 @@ export function initNav({ can = () => true } = {}) {
     el.style.transition = anim;
     el.style.transform = x ? `translateX(${x}px)` : '';
   };
+  const canStep = delta => subsOn() && stepSub(delta, false);
+  const settle = () => { const el = panel(); setX(el, 0, SPRING); if (el) el.style.opacity = ''; swipeTo(0, false); };
+  let pulling = false;                         // this swipe is pulling the menu
 
-  // Root pages: step through the sub-tabs.
+  if (m) m.addEventListener('scroll', headerOnScroll, { passive: true });
+
+  // Root pages: step through the sub-tabs; right off the first = the menu.
   if (m) sideways(m, () => can() && !topPage(), {
     move(dx) {
-      const open = stepSub(dx < 0 ? 1 : -1, false);
+      const w = m.clientWidth || 360;
+      if (edge && dx > 0 && !canStep(-1)) {
+        if (!pulling) { pulling = true; setX(panel(), 0); swipeTo(0, true); }
+        edge.drag(dx);
+        return;
+      }
+      if (pulling) { pulling = false; edge.drag(0); }
+      const open = canStep(dx < 0 ? 1 : -1);
       const el = panel();
       setX(el, open ? dx : dx / 3);
-      if (el) el.style.opacity = open ? String(Math.max(0.35, 1 - Math.abs(dx) / (m.clientWidth * 1.4))) : '';
+      if (el) el.style.opacity = open ? String(Math.max(0.35, 1 - Math.abs(dx) / (w * 1.4))) : '';
+      swipeTo(open ? -dx / w : -dx / w / 4, true);
     },
     end(dx, fast) {
+      if (pulling) { pulling = false; edge.release(dx, fast); return; }
       const el = panel();
       const w = m.clientWidth || 360;
       const far = Math.abs(dx) > w / 4 || (fast && Math.abs(dx) > 40);
       const delta = dx < 0 ? 1 : -1;
-      if (!far || !stepSub(delta, false)) { setX(el, 0, SPRING); if (el) el.style.opacity = ''; return; }
+      if (!far || !canStep(delta)) { settle(); return; }
       setX(el, Math.sign(dx) * w * 0.5, 'transform .12s ease-in, opacity .12s');
       if (el) el.style.opacity = '0.2';
+      swipeTo(delta, false);
       setTimeout(() => stepSub(delta, true), 120);
     },
-    cancel() { const el = panel(); setX(el, 0, SPRING); if (el) el.style.opacity = ''; },
+    cancel() {
+      if (pulling) { pulling = false; edge.release(0, false); }
+      settle();
+    },
   });
 
   // Subpages: a swipe right pops the top one.

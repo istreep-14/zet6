@@ -48,6 +48,37 @@ export const hueVar = i => `var(--p${(((i % 8) + 8) % 8) + 1})`;
 export const hueIndex = (state, id) => state.staff.filter(p => (p.name || '').trim()).findIndex(p => p.id === id);
 export const hueTile = i => ({ background: `color-mix(in srgb, ${hueVar(i)} 20%, transparent)`, color: hueVar(i) });
 
+// A person's round avatar: their initials on their colour (hueTile). `closer`
+// puts a red dot on its shoulder (solid = forced). Sizes: sm 2rem (Staff's
+// rows), md 2.5rem (list rows), lg 3.5rem (a person's page).
+const AV = { sm: 'size-8 text-[0.8125rem]', md: 'size-10 text-[0.9375rem]', lg: 'size-14 text-[1.25rem]' };
+export const initials = name => {
+  const w = String(name || '').trim().split(/\s+/).filter(Boolean);
+  return ((w[0]?.[0] || '?') + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase();
+};
+export function Avatar({ name, i = 0, closer = false, forced = true, size = 'md', class: cls = '' }) {
+  return html`<span class=${cx('relative grid shrink-0 place-items-center rounded-full font-semibold tracking-tight', AV[size] || AV.md, cls)} style=${hueTile(i)} aria-hidden="true">
+    ${initials(name)}
+    ${closer && html`<span class=${cx('absolute -right-0.5 -top-0.5 size-2.5 rounded-full ring-2 ring-bg', forced ? 'bg-bad' : 'bg-bad/70')}></span>`}
+  </span>`;
+}
+
+// An icon in a round tile the size of an avatar — for the non-person rows of a
+// person list (Chump, Total) so every row's text starts at the same place.
+export function RoundIcon({ name, class: cls = 'bg-surface-2 text-ink-2' }) {
+  return html`<span class=${cx('grid size-10 shrink-0 place-items-center rounded-full', cls)} aria-hidden="true"><${Icon} name=${name} class="size-5" /></span>`;
+}
+
+// Derived figures as one quiet line, the way a profile shows its counts:
+// each value in ink, its label after it in ink-3 ("5 people  45h  $26.24/h").
+// items: [{ v, l, tone, tight }] (falsy items are skipped; l is optional;
+// tight = no space before it: "$26.24/h").
+export function Meta({ items, class: cls = '' }) {
+  return html`<span class=${cx('t-small block min-w-0 truncate text-ink-3', cls)}>
+    ${items.filter(Boolean).map((it, k) => html`<span key=${k} class="mr-3 last:mr-0"><span class=${cx('font-semibold tabular-nums', it.tone || 'text-ink-2')}>${it.v}</span>${it.l && html`<span>${(it.tight ? '' : ' ') + it.l}</span>`}</span>`)}
+  </span>`;
+}
+
 export const ROLE_DOT = { bartender: 'bg-bar', server: 'bg-srv', support: 'bg-sup' };
 export const ROLE_TEXT = { bartender: 'text-bar', server: 'text-srv', support: 'text-sup' };
 export const ROLE_PLURAL = { bartender: 'Bartenders', server: 'Servers', support: 'Support' };
@@ -343,12 +374,12 @@ export function SheetShell({ id, title, tall = false, foot = false }) {
 // A captioned group: small uppercase caption (+ optional aside) above its content.
 export function Section({ title, aside, footer, class: cls = '', children }) {
   return html`<section class=${cx('ui-section flex flex-col gap-2', cls)}>
-    ${(title || aside) && html`<div class="section-heading flex min-h-5 items-end justify-between gap-3 px-4">
+    ${(title || aside) && html`<div class="section-heading flex min-h-5 items-end justify-between gap-3">
       <span class="t-cap flex min-w-0 items-center gap-2 text-ink-3">${title}</span>
       ${aside && html`<span class="t-small shrink-0 text-ink-3">${aside}</span>`}
     </div>`}
     ${children}
-    ${footer && html`<div class="t-small px-4 text-ink-3">${footer}</div>`}
+    ${footer && html`<div class="section-foot t-small text-ink-3">${footer}</div>`}
   </section>`;
 }
 
@@ -367,7 +398,7 @@ export function List({ class: cls = '', children }) {
 
 export function Item({ lead, icon, title, sub, trail, value, valueTone = '', chevron, onClick, tone = '', disabled, class: cls = '', children, ...rest }) {
   const Tag = onClick ? 'button' : 'div';
-  const inset = lead ? '4.25rem' : icon ? '3.5rem' : '1rem';
+  const inset = lead ? '4.25rem' : icon ? '3.75rem' : '1rem';     // where the text starts (px-4 + lead + gap-3)
   return html`<${Tag} class=${cx('li flex min-h-12 w-full flex-col justify-center gap-2.5 px-4 py-2.5 text-left disabled:opacity-50',
       tone === 'active' && 'bg-accent/8', cls)} style=${{ '--inset': inset }} onClick=${onClick} disabled=${disabled} ...${rest}>
     <span class="flex w-full items-center gap-3">
@@ -403,7 +434,7 @@ export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, sc
     lines && i > 0 && 'border-l border-line');
   const table = html`<table class=${cx('t-body w-full border-collapse whitespace-nowrap', fixed && 'table-fixed')}>
       ${fixed && html`<colgroup>${cols.map((c, i) => html`<col key=${i} class=${c.w || ''} />`)}</colgroup>`}
-      <thead class="thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--line)]"><tr>
+      <thead class="thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--line)] transition-[top] duration-200"><tr>
         ${cols.map((c, i) => html`<th key=${i} class=${cx(cell(c, i), T_HEAD, 'h-9 transition-[height] group-data-[stuck]:h-7', c.onHead && 'cursor-pointer', c.hl && 'text-accent')}
           onClick=${c.onHead}>${c.head ?? c.label}</th>`)}
       </tr></thead>
@@ -465,5 +496,5 @@ export const TABLE_HEAD = 't-cap text-center text-ink-3';
 // Card flush uses overflow-clip (not hidden) so sticky still works inside it.
 export const ZEBRA = 'bg-[color-mix(in_srgb,var(--ink)_3%,var(--surface))]';
 export const zebra = i => (i % 2 ? ZEBRA : 'bg-surface');
-export const THEAD = 'thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--line)] transition-[height,padding] duration-150';
+export const THEAD = 'thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--line)] transition-[top,height,padding] duration-200';
 export const Sentinel = ({ cls = '' }) => html`<div class=${cx('thead-sentinel h-0', cls)} aria-hidden="true"></div>`;

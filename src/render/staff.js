@@ -17,7 +17,7 @@ import { fmtHrs, fmtMoney } from '../util.js';
 import { parseTime, fmtTimeAbs, fmtClockShort, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, absToEdgeRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { getRoster } from '../roster.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Button, Alert, Seg, SwitchRow, List, Item, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_TINT, ROLE_PLURAL, Sentinel, THEAD } from '../ui/pkit.js';
+import { cx, Icon, Button, Alert, Seg, SwitchRow, List, Item, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_TINT, ROLE_PLURAL, Sentinel, THEAD, Avatar, hueIndex } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 import { DragTime } from '../ui/dragtime.js';
 import { openKeypad, activeKey, bufferAbs } from '../ui/keypad.js';
@@ -259,7 +259,7 @@ function Head() {
   const cap = 't-cap text-ink-3';
   return html`<${Sentinel} /><div class=${cx(THEAD, 'li bg-bg px-4 py-2')} style=${{ '--inset': '0' }}>
     <div class=${COLS}>
-      <span class=${cap}>Name</span>
+      <span class=${cx(cap, 'pl-[2.625rem]')}>Name</span>
       <span class=${cx(cap, 'text-center')}>In</span><span></span><span class=${cx(cap, 'text-center')}>Out</span>
       <span class=${cx(cap, 'text-right')}>Hrs</span>
     </div>
@@ -275,12 +275,12 @@ function PersonRow({ vm, p, allClose }) {
     t.brk > 0 ? fmtBreak(t.brk) + ' break' : '',
   ].filter(Boolean).join(' · ');
   return html`<div class=${cx('li px-4 py-1.5', COLS)}>
-    <button class="flex min-h-11 min-w-0 flex-col items-start justify-center text-left active:opacity-60" onClick=${() => App.editStaff(p.id)} aria-label=${'Edit ' + p.name}>
-      <span class="flex max-w-full items-center gap-1.5">
+    <button class="flex min-h-11 min-w-0 items-center gap-2.5 text-left active:opacity-60" onClick=${() => App.editStaff(p.id)} aria-label=${'Edit ' + p.name}>
+      <${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} closer=${closer} forced=${t.forced} size="sm" />
+      <span class="flex min-w-0 flex-col">
         <span class="t-body truncate font-medium">${p.name}</span>
-        ${closer && html`<span class=${cx('size-1.5 shrink-0 rounded-full', t.forced ? 'bg-bad' : 'bg-bad/60')} aria-label="closer"></span>`}
+        ${sub && html`<span class=${cx('t-small truncate', t.bad ? 'text-bad' : 'text-ink-3')}>${sub}</span>`}
       </span>
-      ${sub && html`<span class=${cx('t-small truncate', t.bad ? 'text-bad' : 'text-ink-3')}>${sub}</span>`}
     </button>
     <${TimeBox} vm=${vm} p=${p} field="in" /><span class="text-center text-[0.75rem] text-ink-3/70">→</span><${TimeBox} vm=${vm} p=${p} field="out" />
     <span class=${cx('t-body text-right font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) : '?'}</span>
@@ -319,8 +319,8 @@ function AddRow({ vm }) {
   const rolesOn = vm.state.settings.allRoles;
   if (!rolesOn) addRole = 'bartender';
   const next = { bartender: 'server', server: 'support', support: 'bartender' };
-  return html`<div class="li flex items-center gap-2 px-4 py-1.5" data-addbox>
-    <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/12 text-accent"><${Icon} name="plus" class="size-[1.125rem]" /></span>
+  return html`<div class="li flex items-center gap-2.5 px-4 py-1.5" data-addbox>
+    <span class="grid size-8 shrink-0 place-items-center rounded-full bg-accent/12 text-accent"><${Icon} name="plus" class="size-[1.125rem]" /></span>
     <input data-addnames class="h-11 min-w-0 flex-1 bg-transparent text-[1.0625rem] font-medium text-ink outline-none placeholder:font-normal placeholder:text-ink-3"
       placeholder="Add a name" aria-label="Add a name" value=${draft} onBlur=${() => { leftField = Date.now(); }}
       autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="next"

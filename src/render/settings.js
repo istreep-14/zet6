@@ -36,7 +36,7 @@ export function dayLabel(iso) {
   return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) }).format(d);
 }
 
-function DateTile({ iso, active }) {
+export function DateTile({ iso, active }) {
   const d = parseISO(iso);
   const wk = d ? new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(d) : '—';
   return html`<span class=${cx('flex size-10 shrink-0 flex-col items-center justify-center rounded-[0.625rem] leading-none',
@@ -48,7 +48,7 @@ function DateTile({ iso, active }) {
 
 // The sessions with the current one's live numbers; unnamed ones sharing a
 // date read "Today", "Today · 2" … (oldest first).
-function rowsOf(vm, sessions, currentId) {
+export function rowsOf(vm, sessions, currentId) {
   const s = vm.state;
   const rows = sessions.map(e => e.id === currentId
     ? { ...e, date: s.meta.date, total: vm.totalCash || 0, people: s.staff.filter(p => p.name.trim()).length }
@@ -61,8 +61,8 @@ function rowsOf(vm, sessions, currentId) {
   });
   return rows;
 }
-const titleOf = e => e.name || dayLabel(e.date) + (e.nth ? ' · ' + e.nth : '');
-const peopleOf = n => (n ? `${n} ${n === 1 ? 'person' : 'people'}` : 'No staff yet');
+export const titleOf = e => e.name || dayLabel(e.date) + (e.nth ? ' · ' + e.nth : '');
+export const peopleOf = n => (n ? `${n} ${n === 1 ? 'person' : 'people'}` : 'No staff yet');
 
 // Kept from the last render (sessions live outside the view model).
 let sessionsNow = [], currentNow = null;
@@ -75,11 +75,11 @@ function AppPrefs({ vm }) {
   const toggle = key => () => App.toggleSetting(key);
   return html`<div class="flex flex-col gap-6">
     <${Section} title="Appearance"><${List}>
-      <${Item} title="Theme" chevron=${false}>
+      <${Item} icon="contrast" title="Theme" chevron=${false}>
         <${Seg} value=${s.settings.theme || 'system'} onChange=${v => App.setTheme(v)}
           items=${[{ value: 'system', label: 'Auto' }, { value: 'light', label: 'Light', icon: 'sun' }, { value: 'dark', label: 'Dark', icon: 'moon' }]} />
       <//>
-      <${Item} title="Display size" chevron=${false}>
+      <${Item} icon="textsize" title="Display size" chevron=${false}>
         <${Seg} value=${s.settings.size || 'm'} onChange=${v => App.setSize(v)}
           items=${[{ value: 's', label: 'S' }, { value: 'm', label: 'M' }, { value: 'l', label: 'L' }, { value: 'xl', label: 'XL' }]} />
       <//>

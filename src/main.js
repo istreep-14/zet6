@@ -23,6 +23,7 @@ import { toast, copyText } from './ui/toast.js';
 import { summaryText } from './textout.js';
 import { renderHome, openPerson as homePerson } from './render/home.js';
 import { renderSettings } from './render/settings.js';
+import { renderMenu, openMenu, closeMenu, menuOpen, menuEdge, initMenu } from './render/menu.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
   renderSheets, openPerson, openBonus, adjustBonus, resetBonuses,
@@ -82,6 +83,7 @@ function render(s) {
     people: s.staff.filter(p => p.name.trim()).length,
   });
   renderSettings(lastVm, sessions.list(), sessions.currentId());
+  renderMenu(lastVm, sessions.list(), sessions.currentId());
   renderPages(lastVm);
   renderChrome(lastVm, sessionName());
   refreshSticky();
@@ -217,6 +219,7 @@ window.App = {
   tab(name, opts = {}) {
     name = normalizeTab(name);
     closeAllSheets();
+    closeMenu();
     if (opts.sub) setSub(name, opts.sub);
     if (name !== currentTab()) showTab(name);
     store.setActiveTab(name);
@@ -230,6 +233,9 @@ window.App = {
   },
   // Back: the subpage on top goes.
   back: () => popPage(),
+  // The menu (render/menu.js): the drawer from the left.
+  openMenu,
+  closeMenu,
   // Repaint what shows the keypad's active cell (no data change).
   repaint() {
     if (previewing) return;
@@ -643,12 +649,15 @@ onNav(() => {
 showTab(state.ui.activeTab);
 render(state);
 
-// Gestures (ui/nav.js): a sideways swipe moves between a page's sub-tabs; a
-// swipe right on a subpage goes back. Tabs change only from the tab bar.
-const calm = () => !document.querySelector('.sheet-backdrop.open')
+// Gestures (ui/nav.js): a sideways swipe moves between a page's sub-tabs
+// (right off the first one: the menu); a swipe right on a subpage goes back.
+// Tabs change only from the tab bar.
+const calm = () => !menuOpen() && !document.querySelector('.sheet-backdrop.open')
   && !document.documentElement.classList.contains('wheel-open')
   && !document.documentElement.classList.contains('keypad-open');
-initNav({ can: calm });
+// A swipe right off a tab's first sub-tab pulls the menu in (menuEdge).
+initNav({ can: calm, subsOn: () => !(currentTab() === 'home' && lastVm.blocked), edge: menuEdge });
+initMenu();
 
 // Reveal once Tailwind has styled the page (it compiles in the browser): a
 // probe with `hidden` turns display:none once the utilities exist.

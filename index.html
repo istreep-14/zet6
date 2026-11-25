@@ -57,9 +57,6 @@
 </head>
 <body>
 
-<!-- Header (render/tabs.js), one row: the page's sub-tabs; on a subpage
-     Back · its title · its actions. -->
-<header class="hdr" id="hdr"></header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
 <!-- The stage: the four tab pages, and the subpages pushed
@@ -67,6 +64,10 @@
      bar; a sideways swipe moves between a page's sub-tabs (the header), and a
      swipe right on a subpage goes back. -->
 <div class="stage">
+  <!-- Header (render/tabs.js): sticky over the page, frosted — the session
+       avatar (the menu) · the title over its figures, then the sub-tabs. The
+       title row slides away on the way down. On a subpage: ‹ · its title. -->
+  <header class="hdr" id="hdr"></header>
   <main class="content" id="mainContent">
     <section class="panel active" id="tab-home"><div id="home-root"></div></section>
     <section class="panel" id="tab-staff"><div id="staff-root"></div></section>
@@ -98,6 +99,11 @@
 
 <!-- Time keypad (src/ui/keypad.js): docks at the bottom while a time cell is active -->
 <div class="keypad" id="keypad" aria-label="Time keypad"></div>
+
+<!-- The menu (render/menu.js): a drawer from the left — the session, the
+     others to switch to, the tools. -->
+<div class="menu-scrim" id="menuScrim" onclick="App.closeMenu()"></div>
+<aside class="menu" id="menu" aria-label="Menu" aria-hidden="true"><div id="menu-root" class="h-full"></div></aside>
 
 <!-- Bottom sheets are mounted here from src/ui/sheet.js -->
 <div id="sheets"></div>
