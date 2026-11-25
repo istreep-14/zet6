@@ -250,12 +250,12 @@ function PayRow({ vm, p, n, tint, before, view, col = {} }) {
     <span class=${cx(TILE, 't-small font-semibold tabular-nums')} style=${hueTile(hueIndex(vm.state, p.id))}
       aria-label=${'#' + n}>${n}</span>
     ${view === 'shift' ? html`<span class=${lineCls(adj)}>
-        <span class="flex min-w-0 items-center gap-1.5">${tint && html`<${RoleDot} role=${p.role} />`}<span data-nw class="t-body min-w-0 truncate font-medium">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span>
+        <span class="flex min-w-0 items-center gap-1.5">${tint && html`<${RoleDot} role=${p.role} />`}<span data-nw class="t-body min-w-0 truncate font-semibold text-ink">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span>
         <${TimeCol}><${StaffTime} vm=${vm} id=${p.id} field="in" cls=${TIME_CELL} tone=${TIME_TONE(p, timeMoved(vm, p.id, 'in'))} mins=${col.inMins} /><//>
         <${TimeCol} arrow><${StaffTime} vm=${vm} id=${p.id} field="out" cls=${TIME_CELL} tone=${TIME_TONE(p, timeMoved(vm, p.id, 'out'))} mins=${col.outMins} /><//>
       </span>`
       : html`<span class="flex min-w-0 flex-col">
-        <span class=${cx(NAME_TEXT, 'gap-1.5 font-medium')}>${tint && html`<${RoleDot} role=${p.role} />`}<span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span>
+        <span class=${cx(NAME_TEXT, 'gap-1.5 font-semibold text-ink')}>${tint && html`<${RoleDot} role=${p.role} />`}<span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span>
         <${PersonTimes} vm=${vm} id=${p.id} sup=${isSup(p)} />
       </span>`}
     <${MoneyCells} adj=${adj} before=${before} now=${p.final} hours=${p.shiftHours ?? p.hours} sup=${isSup(p)} small hdp=${col.hdp} d=${d} />

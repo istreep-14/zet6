@@ -112,8 +112,8 @@
     height: 100dvh;
     display: flex;
     flex-direction: column;
-    max-width: 480px;
-    margin: 0 auto;
+    width: 100%;
+    margin: 0;
     overscroll-behavior: none;
     transition: opacity .15s;
   }
@@ -257,8 +257,6 @@
   .tabbar {
     position: fixed;
     left: 0; right: 0; bottom: 0;
-    max-width: 480px;
-    margin: 0 auto;
     height: var(--dock);
     padding: 0 calc(var(--gutter) + var(--safe-r)) var(--safe-b) calc(var(--gutter) + var(--safe-l));
     display: grid;
@@ -317,7 +315,7 @@
     left: 50%;
     bottom: calc(var(--dock) + 0.625rem);
     transform: translateX(-50%);
-    width: calc(min(100vw, 480px) - 2 * var(--gutter));
+    width: calc(100vw - 2 * var(--gutter));
     min-height: 3.25rem;
     display: flex;
     align-items: center;
@@ -348,7 +346,7 @@
   /* Staff's bulk bar (select mode): docks where the HUD sits, in its place. */
   .bulkbar {
     display: none; position: fixed; left: 50%; bottom: calc(var(--dock) + 0.625rem); transform: translateX(-50%);
-    width: calc(min(100vw, 480px) - 2 * var(--gutter)); max-height: 60dvh; overflow-y: auto;
+    width: calc(100vw - 2 * var(--gutter)); max-height: 60dvh; overflow-y: auto;
     padding: .75rem; border-radius: 1.25rem; background: var(--surface); color: var(--ink);
     box-shadow: var(--shadow), 0 0 0 1px var(--line); z-index: 81;
   }
@@ -373,7 +371,6 @@
   .sheet-backdrop.open { opacity: 1; pointer-events: auto; }
   .sheet {
     width: 100%;
-    max-width: 480px;
     max-height: calc(100dvh - var(--safe-t) - 1rem);
     display: flex;
     flex-direction: column;
@@ -594,6 +591,30 @@
   /* A finger resting on a time / amount box: no text selection anywhere
      (iOS's long-press select-and-highlight), no callout. */
   html.holding, html.holding * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
+
+  /* Staff rows keep the shift as one connected interval. The hour total has
+     its own fixed end column, so every value lands on the same right edge. */
+  .staff-time-range {
+    display: grid;
+    grid-template-columns: auto minmax(1.25rem, 1fr) auto;
+    align-items: center;
+    min-width: 8.75rem;
+    gap: .375rem;
+  }
+  .staff-time-stop { display: inline-flex; align-items: baseline; gap: .25rem; min-width: 0; white-space: nowrap; }
+  .staff-time-label { color: var(--ink-3); font-size: .625rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
+  .staff-time-link { position: relative; height: 1px; min-width: .75rem; background: var(--line); }
+  .staff-time-link::after {
+    content: ''; position: absolute; right: 0; top: 50%; width: .3125rem; height: .3125rem;
+    border-right: 1px solid var(--ink-3); border-top: 1px solid var(--ink-3); transform: translateY(-50%) rotate(45deg);
+  }
+  .staff-hours { width: 3rem; justify-self: end; text-align: right; }
+  @media (max-width: 400px) {
+    .staff-person-card { grid-template-columns: 2rem minmax(0, 1fr) minmax(7.75rem, auto) 2.75rem; column-gap: .5rem; }
+    .staff-time-label { display: none; }
+    .staff-time-range { min-width: 7.75rem; gap: .25rem; }
+    .staff-hours { width: 2.75rem; }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
