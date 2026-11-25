@@ -138,7 +138,6 @@ function ShiftStatus({ vm }) {
   const sh = !vm.blocked && vm.shares;
   const named = vm.state.staff.filter(p => p.name.trim()).length;
   const hours = sh ? shiftHours(sh) : vm.resolved?.staff?.filter(p => p.role !== 'support').reduce((n, p) => n + (p.hours || 0), 0);
-  const bills = smallBillsNeeded(vm);
   const figure = (label, value, key, unit = '', tone = '') => {
     const d = key && figDelta(vm, key);
     return { label, value: html`<span class=${cx(tone, d && 'live-changed')}>${value}<${Delta} d=${d} unit=${unit} /></span>` };
@@ -148,9 +147,6 @@ function ShiftStatus({ vm }) {
     <${Section} title="Shift at a glance"><${Stats} items=${[
       figure('People', named), figure('Hours worked', hours != null ? fmtHrs(hours) + 'h' : '—', 'hours', 'h', 'text-accent'), figure('Average rate', sh ? rate2(sh.rate) + '/h' : '—', 'rate', '$', 'text-money'),
     ]} /><//>
-    <${Section} title="Exact-change floor" footer="Minimum small bills for every envelope to come out exact.">
-      <div class="status-bills">${(bills || [{ d: 10, n: '—' }, { d: 5, n: '—' }, { d: 1, n: '—' }]).map(b => html`<span key=${b.d}><b>$${b.d}</b><strong>${b.n}</strong><small>needed</small></span>`)}</div>
-    <//>
   </div>`;
 }
 

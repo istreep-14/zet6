@@ -71,11 +71,20 @@ function Key({ vm, people }) {
   return items.length ? html`<span class="flex flex-wrap items-center gap-x-3 gap-y-1">${items}</span>` : null;
 }
 
-// The fewest $10 / $5 / $1s that make every payout exact (under Bills).
+// The fewest $10 / $5 / $1s that make every payout exact. This belongs at
+// the top of Bills, where the drawer is being read, rather than behind the
+// shift-status page.
 function SmallBills({ vm }) {
-  const need = (smallBillsNeeded(vm) || []).filter(c => c.n > 0);
-  if (!need.length) return null;
-  return html`<span>Small bills needed: ${need.map((c, i) => html`${i > 0 && ' · '}<span class="bill-col !font-semibold" data-d=${c.d}>${c.n}</span> × $${c.d}`)}</span>`;
+  const need = smallBillsNeeded(vm) || [{ d: 10, n: 0 }, { d: 5, n: 0 }, { d: 1, n: 0 }];
+  return html`<${Card} class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+    <span class="flex min-w-0 flex-col gap-0.5">
+      <span class="t-cap text-ink-3">Exact-change floor</span>
+      <span class="t-small text-ink-2">Small bills needed for every envelope</span>
+    </span>
+    <span class="flex shrink-0 items-center gap-1">
+      ${need.map(c => html`<span key=${c.d} data-d=${c.d} class="inline-flex h-8 items-center gap-1 rounded-lg bg-[color-mix(in_srgb,var(--dc)_14%,transparent)] px-2 text-[0.75rem] tabular-nums" aria-label=${c.n + ' ' + '$' + c.d + ' bills needed'}><strong class="text-ink">${c.n}</strong><span class="text-ink-3">×</span><span class="bill-col">$${c.d}</span></span>`)}
+    </span>
+  <//>`;
 }
 
 // Register over / short (entered on Tips): what it changed.
@@ -241,7 +250,8 @@ function Bills({ vm, pageTab = 'home' }) {
   const ok = vm.dist && !vm.dist.error;
   return html`<div class="flex flex-col gap-3">
     ${!ok && html`<${Alert} tone="warn" action=${{ label: 'Fix bills', onClick: () => App.tab('pay', { sub: 'bills' }) }}>The bills don’t work out yet — use the bill tools above to fix it.<//>`}
-    <${Section} title="Envelopes" footer=${html`<${SmallBills} vm=${vm} />`}>
+    <${SmallBills} vm=${vm} />
+    <${Section} title="Envelopes">
       <${EnvelopeTable} vm=${vm} order=${staffOrder(vm, vm.shares.perPerson)} quiet onRow=${id => openPerson(id, pageTab)}
         byPerson=${ok ? vm.dist.byPerson : {}} remBills=${ok ? vm.dist.remainderBills : {}} />
     <//>

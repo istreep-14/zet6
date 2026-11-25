@@ -87,11 +87,10 @@ export function applyPendingTradeDown() {
   if (currentVm && pendingTradeDown) applyBillCountsToPool(currentVm, pendingTradeDown.pool);
 }
 
-// ── Envelopes table: name · one equal column per bill size in use · pay ─────
-// Chump row, then a Total row with the drawer's bill counts and the grand
-// total. table-fixed so it always fits the card; no sideways scroll.
-
-const BILL_HEAD = 'bill-col inline-block min-w-[1.75rem] rounded-md bg-[color-mix(in_srgb,var(--dc)_14%,transparent)] px-1 py-0.5 normal-case tracking-tight';
+// ── Envelopes table: person · colour-guided bill mix · pay ─────────────────
+// A run of coloured note tags is much easier to scan than six squeezed numeric
+// columns on a phone. It uses the same two-column, value-at-right rhythm as
+// the payout ledger, while retaining every denomination and exact count.
 // The envelope grid on its own (Payout's Envelopes, Summary's Bills view):
 // `order` = the people in row order (default payoutOrder). A person taking
 // bundled stacks (vm.stacks) says so under their name.
@@ -102,9 +101,6 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
   const cols = DENOMS.filter(d => colTotal(d) > 0);
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
-  const n = v => v > 0 ? html`<span>${v}</span>` : html`<span class="text-ink-3/40">–</span>`;
-  // Bill heads / drawer totals: the bill's tint on a faint wash of it (BILL_HEAD).
-  const head = (d, v) => html`<span class=${BILL_HEAD} data-d=${d}>${v}</span>`;
   const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} />${!quiet && html`<${Delta} d=${payDelta(vm, p.id, p.final)} under />`}</span>`;
   const stackNote = id => {
     const st = vm.stacks?.[id];
@@ -112,14 +108,22 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
     const k = Object.values(st).reduce((t, x) => t + x, 0);
     return html`<span class="t-small block font-normal leading-tight text-accent">${k} ${k === 1 ? 'stack' : 'stacks'}</span>`;
   };
-  return html`<${Table} fixed
-    cols=${[{ label: 'Name', w: 'w-[34%]' }, ...cols.map(d => ({ head: head(d, d) })), { label: 'Pay', align: 'right', w: 'w-[22%]' }]}
+  const billRun = bills => {
+    const used = cols.filter(d => (bills[d] || 0) > 0);
+    return used.length
+      ? html`<span class="flex flex-wrap items-center gap-1">${used.map(d => html`<span key=${d} data-d=${d} class="billtag">$${d}${bills[d] > 1 && html`<i>×${bills[d]}</i>`}</span>`)}</span>`
+      : html`<span class="t-small text-ink-3/50">No bills</span>`;
+  };
+  const envelopeName = (p, bills) => html`<span class="flex min-w-0 items-center gap-2.5"><${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} size="sm" /><span class="flex min-w-0 flex-col gap-0.5"><span class="truncate font-semibold">${p.name}</span>${billRun(bills)}${stackNote(p.id)}</span></span>`;
+  const totalName = (label, bills, icon) => html`<span class="flex min-w-0 flex-col gap-0.5"><${RowLabel} icon=${icon}>${label}<//>${billRun(bills)}</span>`;
+  return html`<${Table} fixed firstWide class="envelope-ledger"
+    cols=${[{ label: 'Envelope', w: 'w-[72%]' }, { label: 'Take home', align: 'right', w: 'w-[28%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => onRow(p.id),
-        cells: [html`<span class="flex min-w-0 items-center gap-2.5"><${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} size="sm" /><span class="flex min-w-0 flex-col"><span class="truncate">${p.name}</span>${stackNote(p.id)}</span></span>`, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), pay(p)] })),
-      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, ...cols.map(d => n(rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
+        cells: [envelopeName(p, byPerson[p.id] || {}), pay(p)] })),
+      ...(s.leftover > 0 ? [{ key: 'chump', cells: [totalName('Chump', rem, 'cash'), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
     ]}
-    foot=${[html`<${RowLabel}>Total<//>`, ...cols.map(d => head(d, colTotal(d))), html`<${Money} value=${grand} class="font-semibold text-money" />`]} />`;
+    foot=${[totalName('Total', Object.fromEntries(cols.map(d => [d, colTotal(d)]))), html`<${Money} value=${grand} class="font-semibold text-money" />`]} />`;
 }
 
 
