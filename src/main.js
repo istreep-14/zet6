@@ -109,6 +109,9 @@ function clearChangesLater() {
     renderPayout(lastVm);
     renderStaff(lastVm);
     renderPay(lastVm, sessionName());
+    renderHome(lastVm, sessionName());
+    renderShift(lastVm);
+    renderChrome(lastVm, sessionName());
   }, SHOW + 50);
 }
 
@@ -172,6 +175,7 @@ function preview(apply, focus = null) {
     renderHome(lastVm, sessionName());
     renderPay(lastVm, sessionName());
     renderShift(lastVm);
+    renderChrome(lastVm, sessionName());
     return;
   }
   const base = snapOf(lastVm);
@@ -185,6 +189,7 @@ function preview(apply, focus = null) {
   renderStaff(pv, { preview: true });
   if (currentTab() === 'home') renderHome(pv, sessionName());   // overview table edits live
   if (currentTab() === 'shift') renderShift(pv);
+  renderChrome(pv, sessionName());
   return pv;                                     // the wheel shows its figures
 }
 

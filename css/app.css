@@ -191,7 +191,7 @@
      under the current one. html.hdr-hide slides the title row up out of
      sight (the tabs stay); html.no-tabs = no tab row (Home's checklist).
      Pages pad their top by the header's height (.content / .subpage). ──── */
-  :root { --bar-h: 3.25rem; --tabs-h: 2.75rem; --hdr-top: var(--safe-t); }
+  :root { --bar-h: 3.25rem; --summary-h: 2.375rem; --tabs-h: 2.75rem; --hdr-top: var(--safe-t); }
   html.standalone { --hdr-top: calc(var(--safe-t) + var(--hdr-gap)); }
   html.no-tabs { --tabs-h: 0px; }
   .icon-btn {
@@ -221,6 +221,21 @@
   .hdr-text { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
   .hdr-title { font-size: 1.25rem; font-weight: 600; line-height: 1.2; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hdr-actions { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; }
+  .summary-strip {
+    display: flex; align-items: center; gap: .5rem; height: var(--summary-h);
+    overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
+    padding: 0 var(--gutter); -webkit-overflow-scrolling: touch;
+    border-top: 1px solid var(--line);
+  }
+  .summary-strip::-webkit-scrollbar { display: none; }
+  .summary-figure {
+    display: inline-flex; flex-shrink: 0; align-items: baseline; gap: .25rem;
+    padding: .2rem .35rem; border-radius: .4rem; font-size: .8125rem;
+    white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .summary-figure b { font-weight: 600; color: var(--ink); }
+  .summary-label { color: var(--ink-3); white-space: nowrap; }
+  .summary-bills-label { flex-shrink: 0; font-size: .8125rem; padding-left: .5rem; border-left: 1px solid var(--line); }
   .hdr-tabs { position: relative; display: flex; height: var(--tabs-h); overflow-x: auto; scrollbar-width: none; }
   .hdr-tabs::-webkit-scrollbar { display: none; }
   .hdr-tab {
@@ -285,8 +300,8 @@
     overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain; touch-action: pan-y; pointer-events: auto;
     background: var(--bg);
-    padding: calc(var(--hdr-top) + var(--bar-h) + 1rem) calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 2rem) calc(var(--gutter) + var(--safe-l));
-    scroll-padding-top: calc(var(--hdr-top) + var(--bar-h));
+    padding: calc(var(--hdr-top) + var(--bar-h) + var(--summary-h) + 1rem) calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 2rem) calc(var(--gutter) + var(--safe-l));
+    scroll-padding-top: calc(var(--hdr-top) + var(--bar-h) + var(--summary-h));
     box-shadow: -1px 0 0 var(--line), -1rem 0 2.5rem rgb(0 0 0 / .12);
     transform: translateX(100%);
     transition: transform .28s cubic-bezier(.2, .9, .25, 1);
@@ -304,8 +319,8 @@
     overscroll-behavior: contain;
     touch-action: pan-y;
     /* under the header; clearance for the tab bar (and a toast) */
-    padding: calc(var(--hdr-top) + var(--bar-h) + var(--tabs-h) + 1rem) calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 2rem) calc(var(--gutter) + var(--safe-l));
-    scroll-padding-top: calc(var(--hdr-top) + var(--bar-h) + var(--tabs-h));
+    padding: calc(var(--hdr-top) + var(--bar-h) + var(--summary-h) + var(--tabs-h) + 1rem) calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 2rem) calc(var(--gutter) + var(--safe-l));
+    scroll-padding-top: calc(var(--hdr-top) + var(--bar-h) + var(--summary-h) + var(--tabs-h));
   }
   /* the page's sticky heads stick under the header — under the tab row alone
      once the title row has slid away */
@@ -553,6 +568,7 @@
   .delta { display: inline-block; font-size: .6875rem; font-weight: 600; line-height: 1; letter-spacing: -.01em; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .delta--under { position: absolute; right: 0; top: 100%; margin-top: -.1875rem; }
   .delta--change { animation: delta-in .35s ease-out; }
+  .live-changed { background-color: color-mix(in srgb, var(--accent) 18%, var(--surface)) !important; color: var(--accent) !important; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent); }
   @keyframes delta-in { from { opacity: 0; transform: translateY(-.25rem); } }
   .flash { animation: flash 1.8s ease-out both; }
   @keyframes flash {

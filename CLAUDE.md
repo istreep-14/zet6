@@ -165,6 +165,7 @@ Small-bill requirements (`getSmallBillRequirements`, used by preflight, the Bill
 
 - **Navigation direction:** Home is the at-a-glance page, with the general payout list/table and shift overview. Pay is for distribution details: bills, split calculations, rounding and closer bonuses. Tips is cash entry only. On Pay › Bills, Envelopes already made, Stacks for a manager, and Tidy the drawer open as subpages. Shift links to Pay › Bonus.
 - **Shift and staff defaults (current):** Shift starts with a date row that reveals the calendar on tap, followed by shift type and settings. The former Staff › Shift controls (open / close, role defaults and close-time what-if) live on Shift. Staff has one page and an expandable Default times row beneath the employee list, reusing those controls. Time-cell focus selects a visible cell when controls appear in more than one tab.
+- **Live summary and highlights:** The persistent header strip scrolls horizontally on small screens and shows tips, tipped hours, people, rate and the minimum $1 / $5 / $10 bill counts. It follows live previews, as do the accent highlights on affected time cells, hours and payouts. Changes remain marked briefly after an edit lands. Header and subpage offsets include the strip.
 
 ## CSS / design system
 

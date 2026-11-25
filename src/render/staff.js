@@ -22,6 +22,7 @@ import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose }
 import { DragTime } from '../ui/dragtime.js';
 import { openKeypad, activeKey, bufferAbs } from '../ui/keypad.js';
 import { RoleTimes } from './settings.js';
+import { timeMoved, defaultMoved, hoursMoved } from '../ui/changes.js';
 
 export { DragTime };
 
@@ -220,7 +221,7 @@ export function CloseTime({ vm, cls, tone, mins = false, full = false, bare = fa
     min=${open + 0.25} max=${open + 12}
     onSet=${a => App.reviewed('Close ' + fmtTimeAbs(a), () => App.globalDefault('out', absToOutRaw(a, open), true))}
     onPreview=${a => App.previewDefault('out', a == null ? null : absToOutRaw(a, open))}
-    cls=${cls} tone=${tone} mins=${mins} full=${full} bare=${bare} label="Close time" />`;
+    cls=${cls} tone=${tone} mins=${mins} full=${full} bare=${bare} moved=${defaultMoved(vm, 'out')} label="Close time" />`;
 }
 
 // Hour labels for a time axis (Home's Shift view).
@@ -249,7 +250,7 @@ function TimeBox({ vm, p, field, cls = BOX, mins = false, bare = false, tone = n
   const set = field === 'in' ? t.inSet : t.outSet;
   return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${set} bad=${t.bad} ...${keyCell(p, field)}
     min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub} mins=${mins} bare=${bare}
-    cls=${cls} tone=${tone ? tone(set) : TONE(set)} label=${p.name + ' ' + field + ' time'} />`;
+    cls=${cls} tone=${tone ? tone(set) : TONE(set)} moved=${timeMoved(vm, p.id, field)} label=${p.name + ' ' + field + ' time'} />`;
 }
 // The same keypad / wheel cell for another page (Home › Pay's table): one key
 // per person and field, so the keypad's Next walks the same order.
@@ -283,7 +284,7 @@ function PersonRow({ vm, p, allClose }) {
       </span>
     </button>
     <${TimeBox} vm=${vm} p=${p} field="in" /><span class="text-center text-[0.6875rem] text-ink-3/70">→</span><${TimeBox} vm=${vm} p=${p} field="out" />
-    <span class=${cx('t-body text-right font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) : '?'}</span>
+    <span class=${cx('t-body rounded-md text-right font-semibold tabular-nums', hoursMoved(vm, p.id) && 'live-changed', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) : '?'}</span>
   </div>`;
 }
 
@@ -589,7 +590,7 @@ export function DefaultTime({ vm, field, cls, tone, full, mins, bare }) {
   return html`<${DragTime} abs=${inAbs} set=${true} ...${shiftCell('in')} min=${IN_MIN_ABS} max=${IN_MAX_ABS}
     onSet=${abs => App.reviewed('Default open ' + fmtTimeAbs(abs), () => App.globalDefault('in', absToInRaw(abs), true))}
     onPreview=${abs => App.previewDefault('in', abs == null ? null : absToInRaw(abs))}
-    cls=${cls} tone=${tone} full=${full} mins=${mins} bare=${bare} label="Default open time" />`;
+    cls=${cls} tone=${tone} full=${full} mins=${mins} bare=${bare} moved=${defaultMoved(vm, 'in')} label="Default open time" />`;
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────

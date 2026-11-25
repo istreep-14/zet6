@@ -10,25 +10,34 @@
 //             edits (typing "1200" into the cash) counts from before the
 //             burst; the deltas show for SHOW ms, then main.js clears them.
 
+import { parseTime, inAbsOf, afterAbsOf } from '../time.js';
+
 export const SHOW = 6000;           // how long a landed change stays marked
 const SETTLE = 4000;                // edits closer together than this are one burst
 
 // The figures a change is measured on.
 export function snapOf(vm) {
-  if (!vm?.shares || vm.blocked) return null;
+  if (!vm?.shares || vm.inputError) return null;
   const pay = {};
   vm.shares.perPerson.forEach(p => { pay[p.id] = p.final; });
   // Everyone's resolved In / Out, so a preview can mark the times that move
   // with an edit (a default close drags everyone who inherits it).
   const times = {};
-  (vm.resolved?.staff || []).forEach(p => { times[p.id] = { in: p.inAbs, out: p.outAbs }; });
-  return { pay, times, open: vm.resolved?.anchorAbs, close: vm.resolved?.closeAbs,
-    rate: vm.shares.rate, chump: vm.shares.leftover, total: vm.shares.totalCash };
+  (vm.resolved?.staff || []).forEach(p => { times[p.id] = { in: p.inAbs, out: p.outAbs, hours: p.hours }; });
+  const start = parseTime(vm.state.defaults.global.in), end = parseTime(vm.state.defaults.global.out);
+  const open = start.value == null ? null : inAbsOf(start);
+  const close = end.value == null ? null : afterAbsOf(end, open ?? 17);
+  return { pay, times, open, close,
+    rate: vm.shares.rate, chump: vm.shares.leftover, total: vm.shares.totalCash,
+    hours: vm.shares.perPerson.filter(p => p.role !== 'support').reduce((t, p) => t + (p.shiftHours ?? p.hours), 0),
+    bills1: vm.req?.minOnes, bills5: vm.req && Math.ceil(Math.max(0, vm.req.minOneFiveValue - vm.req.minOnes) / 5),
+    bills10: vm.req && Math.ceil(Math.max(0, vm.req.minOneFiveTenValue - vm.req.minOneFiveValue) / 10) };
 }
 
-const sameSnap = (a, b) => a.rate === b.rate && a.chump === b.chump && a.total === b.total
+const sameSnap = (a, b) => a.rate === b.rate && a.chump === b.chump && a.total === b.total && a.open === b.open && a.close === b.close
   && Object.keys(a.pay).length === Object.keys(b.pay).length
-  && Object.keys(a.pay).every(k => a.pay[k] === b.pay[k]);
+  && Object.keys(a.pay).every(k => a.pay[k] === b.pay[k])
+  && Object.keys(a.times).every(k => a.times[k]?.in === b.times[k]?.in && a.times[k]?.out === b.times[k]?.out);
 
 let last = null, base = null, at = 0, stamp = 0, session = null;
 
@@ -84,7 +93,7 @@ export function payDelta(vm, id, now) {
 export function figDelta(vm, key) {
   const r = ref(vm);
   const cur = snapOf(vm);
-  if (!r?.base || !cur) return null;
+  if (!r?.base || !cur || r.base[key] == null || cur[key] == null) return null;
   const v = Math.round((cur[key] - r.base[key]) * 100) / 100;
   return v ? { v, kind: r.kind, stamp: r.stamp } : null;
 }
@@ -104,7 +113,7 @@ export const isPreview = vm => !!vm?.preview;
 // progress, or an edit waiting for Undo · Apply)? → 'preview' | 'change' | null.
 export function timeMoved(vm, id, field) {
   const r = ref(vm);
-  if (!r?.base?.times || (r.kind === 'change' && !vm.changes?.review)) return null;
+  if (!r?.base?.times) return null;
   const was = r.base.times[id]?.[field];
   const now = (vm.resolved?.staff || []).find(p => p.id === id)?.[field + 'Abs'];
   return was != null && now != null && Math.abs(was - now) > 1e-6 ? r.kind : null;
@@ -112,10 +121,17 @@ export function timeMoved(vm, id, field) {
 // The default open / close (field 'in' | 'out').
 export function defaultMoved(vm, field) {
   const r = ref(vm);
-  if (!r?.base || (r.kind === 'change' && !vm.changes?.review)) return null;
+  if (!r?.base) return null;
   const was = field === 'in' ? r.base.open : r.base.close;
-  const now = field === 'in' ? vm.resolved?.anchorAbs : vm.resolved?.closeAbs;
+  const now = snapOf(vm)?.[field === 'in' ? 'open' : 'close'];
   return was != null && now != null && Math.abs(was - now) > 1e-6 ? r.kind : null;
+}
+
+export function hoursMoved(vm, id) {
+  const r = ref(vm);
+  const was = r?.base?.times?.[id]?.hours;
+  const now = vm.resolved?.staff?.find(p => p.id === id)?.hours;
+  return was != null && now != null && Math.abs(now - was) > 1e-6 ? r.kind : null;
 }
 
 // How many people's pay moved against the reference.

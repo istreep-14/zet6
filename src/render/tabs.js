@@ -10,8 +10,9 @@
 
 import { poolValue, fmtMoney, fmtMoneyShort, fmtHrs } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Meta, Clock } from '../ui/pkit.js';
+import { cx, Icon, Meta, Clock, Delta } from '../ui/pkit.js';
 import { currentTab, currentSub, subsOf, setSub, stackOf, onSwipe, TITLES } from '../ui/nav.js';
+import { figDelta } from '../ui/changes.js';
 
 const $ = id => document.getElementById(id);
 
@@ -114,19 +115,38 @@ function Header({ vm, tab, subs, sessionName }) {
       <button class="hdr-btn" onClick=${() => App.back()} aria-label=${'Back to ' + under}><${Icon} name="chevR" class="size-6 rotate-180" /></button>
       <div class="hdr-text"><h1 class="hdr-title">${top.title}</h1>${top.meta && html`<${Meta} items=${top.meta(vm)} />`}</div>
       <div class="hdr-actions">${top.actions?.(vm)}</div>
-    </div>`;
+    </div><${SummaryStrip} vm=${vm} />`;
   }
   const sub = currentSub(tab);
   return html`<div class="hdr-bar">
       <button class="hdr-btn" onClick=${() => App.openMenu()} aria-label="Menu: sessions and tools" aria-controls="menu">
         <${DayDisc} iso=${vm.state.meta.date} /></button>
       <div class="hdr-text"><h1 class="hdr-title">${TITLES[tab]}</h1><${Meta} items=${metaOf(vm, tab, sessionName)} /></div>
-    </div>
+    </div><${SummaryStrip} vm=${vm} />
     ${subs.length > 0 && html`<div class="hdr-tabs" role="tablist" aria-label=${TITLES[tab]}>
       ${subs.map(s => html`<button key=${tab + s.value} role="tab" class="hdr-tab" aria-selected=${String(s.value === sub)}
         onClick=${() => setSub(tab, s.value)}><span class="hdr-tab-label">${s.label}</span></button>`)}
       <span class="hdr-ink" aria-hidden="true"></span>
     </div>`}`;
+}
+
+function SummaryStrip({ vm }) {
+  const sh = !vm.blocked && vm.shares;
+  const named = vm.state.staff.filter(p => p.name.trim()).length;
+  const hours = sh ? shiftHours(sh) : vm.resolved?.staff?.filter(p => p.role !== 'support').reduce((n, p) => n + (p.hours || 0), 0);
+  const bills = smallBillsNeeded(vm);
+  const figure = (label, value, key, unit = '$') => {
+    const d = key && figDelta(vm, key);
+    return html`<span class=${cx('summary-figure', d && 'live-changed')}><span class="summary-label">${label}</span><b>${value}</b><${Delta} d=${d} unit=${unit} /></span>`;
+  };
+  return html`<div class="summary-strip" role="region" aria-label="Live shift summary" tabindex="0">
+    ${figure('Tips', fmtMoney(vm.totalCash || 0), 'total')}
+    ${figure('Hours', hours != null ? fmtHrs(hours) : '—', 'hours', 'h')}
+    ${figure('People', named)}
+    ${figure('Rate', sh ? rate2(sh.rate) + '/h' : '—', 'rate')}
+    <span class="summary-label summary-bills-label">Bills needed</span>
+    ${[1, 5, 10].map(d => figure('$' + d, bills ? String(bills.find(b => b.d === d).n) : '—', 'bills' + d, ''))}
+  </div>`;
 }
 
 // The underline sits under the current sub-tab's label, `progress` sub-tabs

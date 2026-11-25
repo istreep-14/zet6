@@ -166,7 +166,7 @@ function moved(v, v0) {
 // land on the sheet it just opened. `data-drag` marks it for the sheet
 // swipe; clicks don't bubble (so a box inside a tappable row doesn't also
 // open the row).
-export function DragTime({ abs, min, max, onSet, onTap, tapWheel = false, set, bad, label, cls = CELL, tone, full = false, mins = false, bare = false, alt = null, kcell, active = false, preview = null, onPreview, wheelSub }) {
+export function DragTime({ abs, min, max, onSet, onTap, tapWheel = false, set, bad, label, cls = CELL, tone, full = false, mins = false, bare = false, alt = null, kcell, active = false, preview = null, onPreview, wheelSub, moved: movedKind = null }) {
   const input = useRef(null);                     // keypad cells: the focusable input
   const { held, handlers, consumeClick, openNow } = useHoldWheel({
     value: abs, enabled: abs != null && !bad, onSet, onPreview,
@@ -178,7 +178,7 @@ export function DragTime({ abs, min, max, onSet, onTap, tapWheel = false, set, b
     },
   });
   const shown = preview ?? abs;
-  const look = cx(cls, NO_CALLOUT,
+  const look = cx(cls, NO_CALLOUT, movedKind && 'live-changed',
     held === 'open' ? LOOK_ARMED
       : active ? cx('bg-accent/12 font-semibold ring-2 ring-inset ring-accent', preview != null ? 'text-accent' : 'text-ink')
       : cx(held && 'bg-ink/10', bad ? 'font-semibold text-bad' : (typeof tone === 'function' ? tone(set) : tone) || (set ? 'font-semibold text-ink' : 'text-ink-2')));

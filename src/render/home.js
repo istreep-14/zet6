@@ -146,7 +146,7 @@ const VALUE = 't-body font-semibold tabular-nums';
 function PayValue({ vm, p }) {
   const before = vm.sharesBefore?.perPerson.find(x => x.id === p.id)?.final;
   const ch = before == null ? 0 : p.final - before;
-  return html`<span class="flex shrink-0 flex-col items-end leading-tight">
+  return html`<span class=${cx('flex shrink-0 flex-col items-end rounded-md leading-tight', payDelta(vm, p.id, p.final) && 'live-changed')}>
     <span class="flex items-baseline gap-1.5"><${Delta} d=${markOf(p)} /><span class=${cx(VALUE, isSup(p) ? SUP_TEXT : p.final > 0 ? 'text-ink' : 'text-ink-3')}>${fmtMoney(p.final)}</span></span>
     ${vm.sharesBefore && html`<span class=${cx('t-small tabular-nums', ch < 0 ? 'text-bad' : ch > 0 ? 'text-good' : 'text-ink-3')}>${ch ? signed(ch) : 'same'}</span>`}
   </span>`;
@@ -181,7 +181,7 @@ function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
   const s = vm.shares;
   const raw = id => vm.state.staff.find(x => x.id === id);
   const cell = (p, field) => (raw(p.id) ? html`<${TimeCell} vm=${vm} p=${raw(p.id)} field=${field} cls=${CELL} bare tone=${TIME_TONE} />` : '—');
-  const money = (v, d, cls = '') => html`<span class="inline-flex items-baseline justify-end gap-1"><${Delta} d=${d} /><span class=${cx(VALUE, cls)}>${fmtMoney(v)}</span></span>`;
+  const money = (v, d, cls = '') => html`<span class=${cx('inline-flex items-baseline justify-end gap-1 rounded-md', d && 'live-changed')}><${Delta} d=${d} /><span class=${cx(VALUE, cls)}>${fmtMoney(v)}</span></span>`;
   const onePool = vm.state.pools.length === 1;
   const tipsTotal = onePool
     ? html`<span class="inline-flex items-baseline justify-end gap-1"><${Delta} d=${payDeltaSum(vm, total) || marks?.$total} />
