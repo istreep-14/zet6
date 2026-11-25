@@ -66,7 +66,7 @@ export function initialState() {
     // server/support split; multiPool exposes add-pool / windows / labels.
     // shiftTimes: the default times last used per shift type ({ night, day }).
     // amFrom: bare In readings from this hour to 11:59 read as morning (default 9).
-    settings: { allRoles: false, multiPool: false, clock24: false, size: 'm', theme: 'system', shiftTimes: {}, amFrom: 9, show: { timelines: true, bestBills: true, working: true, payTable: false } },
+    settings: { allRoles: false, multiPool: false, clock24: false, size: 'm', theme: 'system', shiftTimes: {}, amFrom: 9, show: { timelines: true, bestBills: true, working: true, payTable: false, cashDetails: true } },
     ui: { activeTab: 'summary', selectedPool: pool.id },
   };
   return state;
@@ -256,7 +256,7 @@ export function normalizeSettings(state) {
 
 // What each page shows: Staff's timelines, Tips' best bills card, Payout's
 // "How the split works"; payTable = Home › Pay as the one-line table.
-export const SHOW_DEFAULTS = { timelines: true, bestBills: true, working: true, payTable: false };
+export const SHOW_DEFAULTS = { timelines: true, bestBills: true, working: true, payTable: false, cashDetails: true };
 function validShow(v) {
   const out = { ...SHOW_DEFAULTS };
   if (v && typeof v === 'object') Object.keys(out).forEach(k => { if (typeof v[k] === 'boolean') out[k] = v[k]; });

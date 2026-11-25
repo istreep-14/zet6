@@ -10,8 +10,8 @@
 
 import { poolValue, fmtMoney, fmtMoneyShort, fmtHrs } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Meta, Clock, Delta } from '../ui/pkit.js';
-import { currentTab, currentSub, subsOf, setSub, stackOf, onSwipe, TITLES } from '../ui/nav.js';
+import { cx, Icon, Meta, Clock, Delta, Card, Section, Stats } from '../ui/pkit.js';
+import { currentTab, currentSub, subsOf, setSub, stackOf, onSwipe, TITLES, pushPage } from '../ui/nav.js';
 import { figDelta } from '../ui/changes.js';
 
 const $ = id => document.getElementById(id);
@@ -122,6 +122,7 @@ function Header({ vm, tab, subs, sessionName }) {
       <button class="hdr-btn" onClick=${() => App.openMenu()} aria-label="Menu: sessions and tools" aria-controls="menu">
         <${DayDisc} iso=${vm.state.meta.date} /></button>
       <div class="hdr-text"><h1 class="hdr-title">${TITLES[tab]}</h1><${Meta} items=${metaOf(vm, tab, sessionName)} /></div>
+      <button class="hdr-btn" onClick=${openShiftStatus} aria-label="Open shift status"><${Icon} name="calc" class="size-5 text-accent" /></button>
     </div>
     ${subs.length > 0 && html`<div class="hdr-tabs" role="tablist" aria-label=${TITLES[tab]}>
       ${subs.map(s => html`<button key=${tab + s.value} role="tab" class="hdr-tab" aria-selected=${String(s.value === sub)}
@@ -130,28 +131,31 @@ function Header({ vm, tab, subs, sessionName }) {
     </div>`}`;
 }
 
-// Live figures belong with the work, not in the navigation chrome. Keeping
-// this card in the scrollable page gives the figures room to breathe and
-// leaves the header to do one job: orient and switch views.
-export function ShiftContext({ vm, class: cls = '' }) {
+// Shift facts are deliberately on demand rather than repeated above every
+// task. The work pages stay focused; this is the one clear home for the
+// whole shift's numbers.
+function ShiftStatus({ vm }) {
   const sh = !vm.blocked && vm.shares;
   const named = vm.state.staff.filter(p => p.name.trim()).length;
   const hours = sh ? shiftHours(sh) : vm.resolved?.staff?.filter(p => p.role !== 'support').reduce((n, p) => n + (p.hours || 0), 0);
   const bills = smallBillsNeeded(vm);
   const figure = (label, value, key, unit = '', tone = '') => {
     const d = key && figDelta(vm, key);
-    return html`<span class=${cx('context-figure', tone, d && 'live-changed')}><span class="context-label">${label}</span><b>${value}</b><${Delta} d=${d} unit=${unit} /></span>`;
+    return { label, value: html`<span class=${cx(tone, d && 'live-changed')}>${value}<${Delta} d=${d} unit=${unit} /></span>` };
   };
-  const billText = bills ? bills.map(b => '$' + b.d + ' × ' + b.n).join('  ·  ') : '—';
-  return html`<section class=${cx('shift-context', cls)} role="region" aria-label="Live shift summary">
-    <div class="context-main">
-      ${figure('Tips in', fmtMoney(vm.totalCash || 0), 'total', '$', 'context-money')}
-      ${figure('People', named, null)}
-      ${figure('Worked', hours != null ? fmtHrs(hours) + 'h' : '—', 'hours', 'h')}
-      ${figure('Rate', sh ? rate2(sh.rate) + '/h' : '—', 'rate', '$')}
-    </div>
-    <div class="context-note"><span>Exact-change floor</span><b>${billText}</b></div>
-  </section>`;
+  return html`<div class="flex flex-col gap-6">
+    <${Card} class="status-total bg-accent/12"><span class="t-cap text-accent">Tips to split</span><span class="t-display text-money">${fmtMoney(vm.totalCash || 0)}</span><span class="t-small text-ink-3">Cash entered across this shift</span><//>
+    <${Section} title="Shift at a glance"><${Stats} items=${[
+      figure('People', named), figure('Hours worked', hours != null ? fmtHrs(hours) + 'h' : '—', 'hours', 'h', 'text-accent'), figure('Average rate', sh ? rate2(sh.rate) + '/h' : '—', 'rate', '$', 'text-money'),
+    ]} /><//>
+    <${Section} title="Exact-change floor" footer="Minimum small bills for every envelope to come out exact.">
+      <div class="status-bills">${(bills || [{ d: 10, n: '—' }, { d: 5, n: '—' }, { d: 1, n: '—' }]).map(b => html`<span key=${b.d}><b>$${b.d}</b><strong>${b.n}</strong><small>needed</small></span>`)}</div>
+    <//>
+  </div>`;
+}
+
+function openShiftStatus() {
+  pushPage({ key: 'shift-status', title: 'Shift status', meta: vm => [{ v: fmtMoney(vm.totalCash || 0), l: 'in tips' }], body: vm => html`<${ShiftStatus} vm=${vm} />` });
 }
 
 // The underline sits under the current sub-tab's label, `progress` sub-tabs

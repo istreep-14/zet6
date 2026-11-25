@@ -429,9 +429,18 @@ window.App = {
     App.tab('shift', { sub: 'pools' });
     shiftPool(id);
   },
-  poolBill: (id, denom, value) => store.updatePool(id, p => { startBills(p.cash); p.cash.billCounts[denom] = value; }),
+  poolBill: (id, denom, value) => store.updatePool(id, p => {
+    p.cash.billCounts[denom] = value;
+    // Bill counts describe the total; they never replace it as another mode.
+    if (!String(p.cash.netTotal ?? '').trim()) {
+      const total = countedValue(p.cash.billCounts);
+      if (total) p.cash.netTotal = String(total);
+    }
+    p.cash.restMode = 'total';
+    delete p.cash.baseMode;
+  }),
   poolTotal(id, value) {
-    store.updatePool(id, p => { p.cash.netTotal = value; p.cash.restMode = 'total'; p.cash.baseMode = 'total'; });
+    store.updatePool(id, p => { p.cash.netTotal = value; p.cash.restMode = 'total'; delete p.cash.baseMode; });
   },
   poolBaseMode(id, mode) {
     const pool = store.getState().pools.find(p => p.id === id);

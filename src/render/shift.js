@@ -18,7 +18,7 @@ import { currentSub, currentTab, pushPage } from '../ui/nav.js';
 import { SessionDate, sessionInfo, SupportDefault } from './settings.js';
 import { WindowEdge, SharedBy, SupportBox, FormRow, windowSub, openCashSheet } from './tips.js';
 import { ShiftDefaults } from './staff.js';
-import { fmtDay, ShiftContext } from './tabs.js';
+import { fmtDay } from './tabs.js';
 
 const $ = id => document.getElementById(id);
 const POOL_HUES = ['var(--accent)', 'var(--pool-2)', 'var(--pool-3)', 'var(--pool-4)'];
@@ -152,9 +152,7 @@ export function openPool(id) {
 }
 
 function Shift({ vm }) {
-  return html`<div class="flex flex-col gap-5"><${ShiftContext} vm=${vm} />
-    ${currentSub('shift') === 'pools' ? html`<${Pools} vm=${vm} />` : html`<${ShiftInfo} vm=${vm} />`}
-  </div>`;
+  return currentSub('shift') === 'pools' ? html`<${Pools} vm=${vm} />` : html`<${ShiftInfo} vm=${vm} />`;
 }
 
 let lastVm = null;

@@ -209,7 +209,7 @@
     box-shadow: 0 1px 0 var(--line);
     transition: transform .25s cubic-bezier(.2, .8, .3, 1);
   }
-  html.hdr-hide:not(.sub-open) .hdr { transform: translateY(calc(-1 * var(--bar-h))); }
+  html.hdr-hide:not(.sub-open) .hdr { transform: translateY(calc(0px - var(--bar-h) - var(--tabs-h))); }
   .hdr-bar {
     display: flex; align-items: center; gap: .75rem; height: var(--bar-h);
     padding: 0 var(--gutter) 0 calc(var(--gutter) - .25rem);
@@ -221,19 +221,22 @@
   .hdr-text { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
   .hdr-title { font-size: 1.25rem; font-weight: 600; line-height: 1.2; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hdr-actions { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; }
-  /* The shift pulse is deliberately in the page, not squeezed into the
-     header. Its coloured left rail is the one strong visual signature; the
-     rest stays calm enough to scan while cash is being counted. */
-  .shift-context { overflow: clip; border-radius: var(--radius-card, 1rem); background: var(--surface); box-shadow: var(--card-ring, none); }
-  .context-main { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .context-figure { position: relative; display: flex; min-width: 0; flex-direction: column; gap: .15rem; padding: .85rem .75rem .8rem; }
-  .context-figure + .context-figure { box-shadow: inset 1px 0 var(--line); }
-  .context-figure:first-child { box-shadow: inset .25rem 0 var(--accent); padding-left: 1rem; }
-  .context-label { overflow: hidden; color: var(--ink-3); font-size: .6875rem; font-weight: 600; letter-spacing: .06em; text-overflow: ellipsis; text-transform: uppercase; white-space: nowrap; }
-  .context-figure b { overflow: hidden; color: var(--ink); font-size: .95rem; font-weight: 600; letter-spacing: -.02em; text-overflow: ellipsis; white-space: nowrap; }
-  .context-money b { color: var(--money); }
-  .context-note { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; padding: .55rem 1rem; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--surface-2) 58%, var(--surface)); color: var(--ink-3); font-size: .75rem; }
-  .context-note b { overflow: hidden; color: var(--ink-2); font-weight: 600; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+  .status-total { display: flex; flex-direction: column; gap: .35rem; }
+  .status-bills { display: grid; grid-template-columns: repeat(3, 1fr); overflow: clip; border-radius: var(--radius-card, 1rem); background: var(--surface); box-shadow: var(--card-ring, none); }
+  .status-bills > span { display: flex; min-width: 0; flex-direction: column; gap: .1rem; padding: 1rem; }
+  .status-bills > span + span { box-shadow: inset 1px 0 var(--line); }
+  .status-bills b { color: var(--ink-3); font-size: .6875rem; letter-spacing: .07em; }
+  .status-bills strong { color: var(--accent); font-size: 1.35rem; font-weight: 600; }
+  .status-bills small { color: var(--ink-3); font-size: .75rem; }
+  .roster-rail { display: flex; gap: .75rem; overflow-x: auto; overscroll-behavior-x: contain; padding: .25rem var(--gutter) .5rem; margin-inline: calc(-1 * var(--gutter)); scrollbar-width: none; }
+  .roster-rail::-webkit-scrollbar { display: none; }
+  .roster-person { display: flex; width: 4.25rem; flex: 0 0 auto; flex-direction: column; align-items: center; gap: .35rem; color: var(--ink-2); }
+  .roster-person:active { transform: scale(.95); }
+  .roster-name { width: 100%; overflow: hidden; font-size: .75rem; font-weight: 600; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
+  .roster-remove { position: absolute; right: -.25rem; top: -.25rem; display: grid; width: 1.25rem; height: 1.25rem; place-items: center; border-radius: 999px; background: var(--bad); color: var(--bg); box-shadow: 0 0 0 2px var(--bg); }
+  .roster-person--editing { color: var(--bad); }
+  .cash-detail-toggle { display: flex; min-height: 2.5rem; align-items: center; justify-content: space-between; padding: 0 .75rem; border-radius: .75rem; background: var(--surface-2); color: var(--accent); font-size: .8125rem; font-weight: 600; }
+  .cash-detail-toggle > span:first-child { display: inline-flex; align-items: center; gap: .5rem; }
   .hdr-tabs { position: relative; display: flex; height: var(--tabs-h); overflow-x: auto; scrollbar-width: none; }
   .hdr-tabs::-webkit-scrollbar { display: none; }
   .hdr-tab {
@@ -317,7 +320,7 @@
   }
   /* the page's sticky heads stick under the header — under the tab row alone
      once the title row has slid away */
-  html.hdr-hide .panel { --thead-top: calc(-1rem - var(--bar-h)); }
+  html.hdr-hide .panel { --thead-top: calc(-1rem - var(--bar-h) - var(--tabs-h)); }
   body.keyboard-open .content { padding-bottom: 1.5rem; }
 
   /* Sticky table heads sit flush with the top of .content (tucked into its 0.5rem padding). */

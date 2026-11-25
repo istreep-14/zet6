@@ -60,11 +60,11 @@ export const SUBS = {
 // Replace a tab's sub-tabs (Tips: they follow the pools). Keeps the current
 // one when it's still there, else the first.
 export function setSubs(tab, list) {
-  if (!list?.length) return;
+  if (!Array.isArray(list)) return;
   const same = SUBS[tab] && SUBS[tab].length === list.length && SUBS[tab].every((s, i) => s.value === list[i].value && s.label === list[i].label);
   if (same) return;
   SUBS[tab] = list;
-  if (!list.some(s => s.value === sub[tab])) { sub[tab] = list[0].value; applySub(tab); }
+  if (!list.some(s => s.value === sub[tab])) { sub[tab] = list[0]?.value ?? null; applySub(tab); }
 }
 
 // Older saved tab names.

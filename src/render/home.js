@@ -19,7 +19,7 @@ import { cx, Icon, Delta, Alert, Banner, List, Item, Money, Clock, Blocked, Card
 import { fmtBreak, nightSpan, AxisLabels, TimeCell, DefaultTime } from './staff.js';
 import { DragAmount } from '../ui/dragtime.js';
 import { payDelta } from '../ui/changes.js';
-import { smallBillsNeeded, ShiftContext } from './tabs.js';
+import { smallBillsNeeded } from './tabs.js';
 import { EnvelopeTable, Worksheet, DistributionTools } from './payout.js';
 import { BonusPanel } from './sheets.js';
 import { currentSub, currentTab, pushPage } from '../ui/nav.js';
@@ -176,13 +176,13 @@ function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
     rows=${[
       ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id, pageTab),
         cells: [html`<${TableName} vm=${vm} p=${p} />`,
-          html`<span class="flex flex-col items-center gap-0.5"><span class="inline-flex items-center gap-1 text-ink-2">${cell(p, 'in')}<span class="text-ink-3">–</span>${cell(p, 'out')}</span><span class="t-small text-ink-3">${fmtHrs(hoursOf(p))}h worked</span></span>`,
-          html`<span class="flex flex-col items-end gap-0.5">${money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : 'text-money')}<span class="t-small text-ink-3">${rate2(p.final / Math.max(hoursOf(p), 0.01))}/h</span></span>`] })),
+          html`<span class="flex flex-col items-center gap-0.5"><span class="t-head text-accent">${fmtHrs(hoursOf(p))}h</span><span class="inline-flex items-center gap-1 text-ink-3">${cell(p, 'in')}<span>–</span>${cell(p, 'out')}</span></span>`,
+          money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : 'text-money')] })),
       ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, html`<span class="t-small text-ink-3">Left after rounding</span>`, money(s.leftover, null)] }] : []),
     ]}
     foot=${[html`<${RowLabel}>Total<//>`,
-      html`<span class="flex flex-col items-center gap-0.5"><span class="inline-flex items-center gap-1"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-2" bare /><span class="text-ink-3">–</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-2" bare /></span><span class="t-small text-ink-3">${fmtHrs(hours)}h worked</span></span>`,
-      html`<span class="flex flex-col items-end gap-0.5">${tipsTotal}<span class="t-small text-ink-2">${rate2(s.rate)}/h</span></span>`]} />`;
+      html`<span class="flex flex-col items-center gap-0.5"><span class="t-head text-accent">${fmtHrs(hours)}h</span><span class="inline-flex items-center gap-1 text-ink-3"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare /><span>–</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare /></span></span>`,
+      tipsTotal]} />`;
 }
 // The total's change while a preview runs: everyone's pay plus the chump.
 const payDeltaSum = (vm, now) => {
@@ -339,9 +339,8 @@ function Split({ vm, pageTab = 'home' }) {
 
 // ── The page ─────────────────────────────────────────────────────────────────
 function Home({ vm, name }) {
-  if (vm.blocked) return html`<div class="flex flex-col gap-5"><${ShiftContext} vm=${vm} /><${Blocked} vm=${vm} /></div>`;
+  if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   return html`<div class="flex flex-col gap-5">
-    <${ShiftContext} vm=${vm} />
     ${currentSub('home') === 'shift' ? html`<${Shift} vm=${vm} />` : html`<${Pay} vm=${vm} name=${name || 'Payouts'} pageTab="home" />`}
     <${AdjustNote} vm=${vm} />
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map((w, i) => html`<${Alert} key=${i}>${w}<//>`)}
@@ -349,10 +348,9 @@ function Home({ vm, name }) {
 }
 
 function PayPage({ vm, name }) {
-  if (vm.blocked) return html`<div class="flex flex-col gap-5"><${ShiftContext} vm=${vm} /><${Blocked} vm=${vm} /></div>`;
+  if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   const view = currentSub('pay');
   return html`<div class="flex flex-col gap-5">
-    <${ShiftContext} vm=${vm} />
     ${view === 'bills' ? html`<${Bills} vm=${vm} pageTab="pay" /><${DistributionTools} vm=${vm} />`
       : view === 'split' ? html`<${Split} vm=${vm} pageTab="pay" />`
       : html`<${BonusPanel} vm=${vm} />`}

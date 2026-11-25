@@ -19,7 +19,6 @@ import { EDGE_TOKENS } from '../resolve.js';
 import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
 import { KeyTime } from '../ui/keytime.js';
 import { currentSub, currentTab, setSubs, setSub } from '../ui/nav.js';
-import { ShiftContext } from './tabs.js';
 import { html, render, useState } from '../ui/preact.js';
 import { toast } from '../ui/toast.js';
 import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, Table, Money, SwitchRow, INPUT, ROLE_DOT, holdRepeat } from '../ui/pkit.js';
@@ -222,6 +221,7 @@ const curEntry = () => (lastEntries || []).find(e => e.value === currentSub('tip
 // Pull down → the other way of entering this entry.
 function flipEntry(e = curEntry()) {
   if (!e) return;
+  if (!e.batch) { App.toggleShow('cashDetails'); return; }
   const next = modeOf(e) === 'bills' ? 'total' : 'bills';
   if (e.batch) App.updateCashBatch(e.pool.id, e.batch.id, 'mode', next);
   else if (!App.poolBaseMode(e.pool.id, next)) return;
@@ -247,6 +247,7 @@ function Entry({ vm, e }) {
   const several = vm.state.pools.length > 1;
   const ready = !vm.blocked && vm.totalCash > 0;
   const err = vm.inputError && vm.blockedTab === 'tips' ? vm.blocked : '';
+  const showBills = vm.state.settings.show?.cashDetails !== false;
   const newPart = () => {
     const id = App.addCashBatch(pool.id);
     if (id) requestAnimationFrame(() => setSub('tips', 'b:' + pool.id + ':' + id, { dir: 'left' }));
@@ -260,9 +261,15 @@ function Entry({ vm, e }) {
   return html`<div class="flex flex-col gap-5" data-pid=${pool.id}>
     ${err && html`<${Alert}>${err}<//>`}
     ${vm.cashNote && html`<${Alert} tone="warn">${vm.cashNote}<//>`}
-    <${Section} title=${e.label + (mode === 'bills' ? ' · bills' : ' · total')} aside=${html`<span class="font-semibold text-ink">${fmtMoney(total)}</span>`}
+    <${Section} title=${e.label + (batch ? (mode === 'bills' ? ' · bills' : ' · total') : ' · total')} aside=${html`<span class="font-semibold text-money">${fmtMoney(total)}</span>`}
       footer=${poolLine || null}>
-      ${mode === 'bills'
+      ${!batch ? html`<div class="flex flex-col gap-3"><span class="t-cap text-ink-3">Total tips</span><${Amount} pool=${pool} />
+          <button class="cash-detail-toggle" onClick=${() => App.toggleShow('cashDetails')}><span><${Icon} name="cash" class="size-4" />Bill breakdown</span><span>${showBills ? 'Hide' : 'Show'}</span></button>
+          ${showBills && html`<div class="page-table">
+            <div class=${cx(BILL_GRID, 't-cap px-4 pb-1 pt-1 text-ink-3')}><span>Bill</span><span class="text-center">Count</span><span class="text-right">Amount</span></div>
+            ${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} d=${d} />`)}
+          </div>`}
+        </div>` : mode === 'bills'
         ? html`<div class="page-table">
             <div class=${cx(BILL_GRID, 't-cap px-4 pb-1 pt-1 text-ink-3')}><span>Bill</span><span class="text-center">Count</span><span class="text-right">Amount</span></div>
             ${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} batch=${batch} d=${d} />`)}
@@ -273,7 +280,7 @@ function Entry({ vm, e }) {
       <${Icon} name="plus" class="size-5" /><span class="flex flex-col items-start leading-tight"><span class="t-head">New part</span><span class="t-small text-accent/80">Save this count and start another</span></span>
     </button>
     <div class="flex flex-wrap items-center justify-center gap-x-5 gap-y-1">
-      <button class="t-small h-9 font-semibold text-accent active:opacity-60" onClick=${() => flipEntry(e)}>${mode === 'bills' ? 'Type a total instead' : 'Count bills instead'}</button>
+      <button class="t-small h-9 font-semibold text-accent active:opacity-60" onClick=${() => flipEntry(e)}>${batch ? (mode === 'bills' ? 'Type a total instead' : 'Count bills instead') : (showBills ? 'Hide bill breakdown' : 'Show bill breakdown')}</button>
       ${parts.length > 0 && html`<button class="t-small h-9 font-semibold text-accent active:opacity-60" onClick=${() => openCashSheet('ranges', pool.id)}>Bill counts across parts</button>`}
       ${batch && html`<button class="t-small h-9 font-semibold text-bad active:opacity-60" onClick=${() => App.removeCashBatch(pool.id, batch.id)}>Remove this part</button>`}
     </div>
@@ -339,7 +346,7 @@ export function Suggested({ vm }) {
 
 function Tips({ vm }) {
   const e = curEntry() || lastEntries?.[0];
-  return e ? html`<div class="flex flex-col gap-5"><${ShiftContext} vm=${vm} /><${Entry} key=${e.value} vm=${vm} e=${e} /></div>` : null;
+  return e ? html`<${Entry} key=${e.value} vm=${vm} e=${e} />` : null;
 }
 
 // ── Pull down to change the current view ───────────────────────────────────
@@ -352,7 +359,7 @@ function pullAction() {
   if (tab === 'tips') {
     const e = curEntry() || lastEntries?.[0];
     if (!e) return null;
-    const to = modeOf(e) === 'bills' ? 'type a total' : 'count bills';
+    const to = e.batch ? (modeOf(e) === 'bills' ? 'type a total' : 'count bills') : (lastVm?.state.settings.show?.cashDetails === false ? 'show bill breakdown' : 'hide bill breakdown');
     return { idle: 'Pull to ' + to, armed: 'Release to ' + to, run: () => flipEntry(e) };
   }
   if (tab === 'home') {
@@ -422,7 +429,9 @@ let lastVm = null;
 export function renderTips(vm) {
   lastVm = vm;
   lastEntries = entriesOf(vm.state);
-  setSubs('tips', lastEntries.map(e => ({ value: e.value, label: e.label })));
+  // One Night entry is the whole page—showing a one-item tab wastes vertical
+  // room. Tabs return only when there is a second pool or checkpoint.
+  setSubs('tips', lastEntries.length > 1 ? lastEntries.map(e => ({ value: e.value, label: e.label })) : []);
   bindPull();
   const root = $('tips-root');
   if (root) render(html`<${Tips} vm=${vm} />`, root);
