@@ -139,7 +139,6 @@ function Pills({ vm }) {
     : sh ? [
       { icon: 'clock', label: html`Close ${vm.resolved?.closeAbs != null && html`<${Clock} abs=${vm.resolved.closeAbs} />`}`, aria: 'Close-time what-if', onClick: () => App.openCloseTime() },
       { icon: 'gift', label: 'Chump ' + (sh.leftover > 0 ? fmtMoney(sh.leftover) : '—'), aria: 'Closer bonus and chump', onClick: () => App.openBonus() },
-      { icon: 'copy', label: 'Copy', aria: 'Copy as text', onClick: () => App.copySummary() },
     ] : [];
   const pill = 't-small inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-surface-2 px-3 font-semibold text-ink transition active:scale-95';
   return html`<div class="flex min-w-0 items-center gap-1.5">

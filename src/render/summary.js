@@ -2,10 +2,10 @@
 // Tips; until it's done this shows the close-out checklist).
 //   pool warnings, the register banner (an over / short on Tips)
 //   → the figures: Tips · Hours · Rate · $10 · $5 · $1
-//   → the payouts as a list group (PayItems) — a tall row per person: their
-//     number in their colour · name over "5:00 pm → 2:30 am · 9.5 h" (tap a
-//     time to type it, hold for the wheel) · take-home, big · chevron (→ their
-//     payout drawer); the chump; Total (open → close · hours · paid out)
+//   → the payouts as a list group (PayItems) — one line per person: name ·
+//     [In|Out] pill ("4 | close", no a / p; keypad cells) · hours · take-home
+//     · chevron (→ their payout drawer), with their shift as a slim line in
+//     their colour just above the row's hairline; the chump; Total
 //   → pools (several pools; tap → that pool's table in a sheet).
 // The other views (Table — the old Shift grid, Pools, Bills, Math) are picked from the page drawer
 // (SummaryOptions), with a "Back to the list" chip while one is up.
@@ -18,7 +18,7 @@ import { TIME_TEXT, ARROW_BEFORE, DragAmount } from '../ui/dragtime.js';
 import { html, render, useRef, useEffect, useLayoutEffect } from '../ui/preact.js';
 import { payDelta, sumDelta, figDelta, timeMoved, defaultMoved } from '../ui/changes.js';
 import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Delta, Flash, Table, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL, hueTile, hueIndex, hueVar } from '../ui/pkit.js';
-import { StaffTime, DefaultTime } from './staff.js';
+import { StaffTime, DefaultTime, nightSpan, fmtBreak } from './staff.js';
 import { smallBillsNeeded } from './tabs.js';
 import { EnvelopeTable } from './payout.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
@@ -615,49 +615,85 @@ function MathTable({ vm }) {
 }
 
 // ── Payouts as a list (the page) ─────────────────────────────────────────────
-// A List group, one Item per person in Staff order — tall, easy to read:
-// their number in their own colour (no block) · the name (role dot with
-// several roles, a red dot for a closer) over "5:00 pm → 2:30 am · 9.5 h"
-// (each time a keypad cell — tap to type, hold for the wheel) · the
-// take-home, big, with its change under it · a chevron (tap → their payout
-// drawer). Then the chump and the Total (open → close · tipped hours · paid
-// out — hold the amount for its wheel).
-const SUB_TIME = 'relative z-[1] -mx-1 -my-1 rounded-md px-1 py-1 tabular-nums transition [&>span>span]:ml-[0.2em] [&>span>span]:after:content-[\'m\']';
-const ITEM = 'li relative flex min-h-[4.5rem] w-full items-center gap-3 px-4 py-3 text-left';
-const BIG_MONEY = 'text-[1.375rem] font-semibold leading-tight tracking-tight';
+// One iOS list item per person in Staff order, a single line that reads
+// left to right — who, when, how long, what they take home:
+//   Maya    [4|close] 10.5h            $304  ›
+//   ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+// · the name — the loudest text on the left;
+// · their time pill, a step quieter: In on a tint of their own colour, Out
+//   outlined ("close" when they worked to the close — the usual case, so
+//   the early outs are the ones that read). No a / p: the night says which.
+//   Each half is a keypad cell (tap to type, hold for the wheel);
+// · their hours, quiet;
+// · the take-home, big, with its change under it, then a chevron with room
+//   around it (the row opens their payout drawer);
+// · under the line, sitting just above the row's hairline, their shift on
+//   the night's axis in their colour (a placed break is a gap) — the same
+//   colour as their In, so the colour always points at the person.
+// The rows share one grid (subgrid), so every pill starts after the longest
+// name and the 4s, 5s and 6s stack in a column. Then the chump and the Total
+// (open | close · tipped hours · paid out — hold the amount for its wheel).
+const PI_COLS = 'grid grid-cols-[minmax(0,max-content)_auto_auto_minmax(0,1fr)_auto_auto] gap-x-2';
+const PI_ROW = 'li col-span-full grid grid-cols-subgrid items-center gap-y-1.5 px-4 pb-1.5 pt-2.5 text-left';
+const PI_NAME = 'min-w-0 truncate text-[1.0625rem] font-medium leading-snug';
+const PI_MONEY = 'text-[1.125rem] font-semibold leading-tight tracking-tight';
+const PI_TAIL = 'row-span-2 self-center';
+// The pill: two keypad cells joined. Small, medium weight, calmer than the
+// name. In sits on their colour (--hue, set on the row); Out is outlined.
+const TPILL = 'flex h-6 items-center px-1.5 text-[0.75rem] font-medium leading-none tabular-nums tracking-[-0.01em] transition';
+const PILL_IN = cx(TPILL, 'rounded-l-md bg-[color-mix(in_srgb,var(--hue)_16%,transparent)]');
+const PILL_OUT = cx(TPILL, 'rounded-r-md border border-l-0 border-ink/15');
+const IN_TONE = mv => (mv ? 'text-accent' : 'text-[color:color-mix(in_srgb,var(--hue)_72%,var(--ink-2))]');
+const OUT_TONE = (mv, close) => (mv ? 'text-accent' : close ? 'text-ink-3' : 'text-ink-2');
+const HRS_TEXT = 'ml-0.5 whitespace-nowrap text-[0.75rem] font-medium tabular-nums';
+const CHEV = 'row-span-2 ml-1.5 size-4 self-center text-ink-3';
 
-function SubLine({ a, b, rest }) {
-  return html`<span class="t-body flex min-w-0 flex-wrap items-center gap-x-1.5 leading-snug">
-    <span class="inline-flex items-center whitespace-nowrap">${a}<span class="mx-1 text-ink-3" aria-hidden="true">→</span>${b}</span>
-    ${rest && html`<span class="text-ink-3" aria-hidden="true">·</span>${rest}`}
+// Where a time sits along the night (0–100).
+const posOf = (span, v) => Math.max(0, Math.min(100, ((v - span.a) / (span.b - span.a)) * 100));
+const atClose = (vm, abs) => abs != null && vm.resolved?.closeAbs != null && Math.abs(abs - vm.resolved.closeAbs) < 1e-6;
+
+// Their shift on the night's axis: a slim line in their colour over a faint
+// track; a placed break is a gap. Sits just above the row's hairline.
+function ShiftLine({ span, p }) {
+  if (!span || p.inAbs == null || p.outAbs == null) return html`<span class="col-start-1 col-end-5 h-[3px]"></span>`;
+  const a = posOf(span, p.inAbs), b = posOf(span, p.outAbs);
+  const brk = p.brkLen > 0 && p.brkStart != null;
+  return html`<span class="relative col-start-1 col-end-5 h-[3px] rounded-full bg-ink/[.05]" aria-hidden="true">
+    <span class="absolute inset-y-0 rounded-full bg-[var(--hue)] opacity-90" style=${{ left: a + '%', width: Math.max(0, b - a) + '%' }}></span>
+    ${brk && html`<span class="absolute -inset-y-px bg-surface" style=${{ left: posOf(span, p.brkStart) + '%', width: Math.max(0, posOf(span, p.brkStart + p.brkLen) - posOf(span, p.brkStart)) + '%' }}></span>`}
   </span>`;
 }
 
-function PayItem({ vm, p, n, tint, before }) {
+// [In|Out] — the two halves are keypad cells; `close` swaps the Out for
+// "close" (the real time comes back while it's edited or held).
+function TimePill({ a, b }) {
+  return html`<span class="ml-1 inline-flex shrink-0 items-stretch">${a}${b}</span>`;
+}
+
+function PayItem({ vm, p, before, span }) {
   const adj = !!vm.sharesBefore;
   const d = payDelta(vm, p.id, p.final);
   const sup = isSup(p);
-  const hrs = p.shiftHours ?? p.hours;
   const ch = p.final - before;
-  return html`<div role="button" tabindex="0" style=${{ '--inset': '2.75rem' }}
-    class=${cx(ITEM, 'cursor-pointer transition active:bg-surface-2')}
+  const close = atClose(vm, p.outAbs);
+  const brk = p.brkLen > 0 ? ', ' + fmtBreak(p.brkLen) + ' break' : '';
+  return html`<div role="button" tabindex="0" style=${{ '--hue': hueVar(hueIndex(vm.state, p.id)), '--inset': '1rem' }}
+    class=${cx(PI_ROW, 'cursor-pointer transition active:bg-surface-2')}
+    aria-label=${p.name + ', ' + fmtHrs(p.shiftHours ?? p.hours) + ' hours' + brk + ', takes home ' + fmtMoney(p.final)}
     onClick=${() => App.personModal(p.id)} onKeyDown=${e => { if (e.key === 'Enter' && e.target === e.currentTarget) App.personModal(p.id); }}>
-    <span class="w-5 shrink-0 text-center text-[1rem] font-semibold tabular-nums" style=${{ color: hueVar(hueIndex(vm.state, p.id)) }}>${n}</span>
-    <span class="flex min-w-0 flex-1 flex-col gap-1">
-      <span class="flex min-w-0 items-center gap-1.5 text-[1.125rem] font-medium leading-tight">
-        ${tint && html`<${RoleDot} role=${p.role} />`}<span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}
-      </span>
-      <${SubLine}
-        a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" cls=${SUB_TIME} tone=${SUB_TONE(sup, timeMoved(vm, p.id, 'in'))} mins />`}
-        b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" cls=${SUB_TIME} tone=${SUB_TONE(sup, timeMoved(vm, p.id, 'out'))} mins />`}
-        rest=${html`<span class=${cx('whitespace-nowrap font-medium tabular-nums', sup ? 'text-ink-3' : 'text-ink-2')}>${fmtHrs(hrs)} h${p.brkLen > 0 ? html`<span class="font-normal text-ink-3"> (−${Math.round(p.brkLen * 60)}m)</span>` : ''}</span>`} />
-    </span>
-    <span class="flex shrink-0 flex-col items-end gap-0.5">
-      <${Money} value=${p.final} class=${cx(BIG_MONEY, sup ? SUP_TEXT : p.final > 0 ? 'text-money' : 'text-ink-3', d?.kind === 'preview' && '!text-accent')} />
+    <span class=${PI_NAME}>${p.name}</span>
+    <${TimePill}
+      a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" bare cls=${PILL_IN} tone=${IN_TONE(timeMoved(vm, p.id, 'in'))} />`}
+      b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" bare alt=${close ? 'close' : null} cls=${PILL_OUT} tone=${OUT_TONE(timeMoved(vm, p.id, 'out'), close)} />`} />
+    <span class=${cx(HRS_TEXT, sup ? 'text-ink-3/80' : 'text-ink-3')}>${fmtHrs(p.shiftHours ?? p.hours)}h</span>
+    <span></span>
+    <span class=${cx(PI_TAIL, 'row-start-1 col-start-5 flex flex-col items-end gap-0.5 pl-2')}>
+      <${Money} value=${p.final} class=${cx(PI_MONEY, sup ? SUP_TEXT : p.final > 0 ? 'text-money' : 'text-ink-3', d?.kind === 'preview' && '!text-accent')} />
       ${d ? html`<${Delta} d=${d} />`
         : adj && html`<span class=${cx('t-small font-medium tabular-nums', ch < 0 ? 'text-bad' : ch > 0 ? 'text-good' : 'text-ink-3')}>${ch ? signed(ch) : 'same'}</span>`}
     </span>
-    <${Icon} name="chevR" class="-mr-1 size-5 shrink-0 text-ink-3" />
+    <${Icon} name="chevR" class=${cx(CHEV, 'row-start-1 col-start-6')} />
+    <${ShiftLine} span=${span} p=${p} />
     <${Flash} d=${d} />
   </div>`;
 }
@@ -667,47 +703,44 @@ function PayItems({ vm, name }) {
   const adj = !!vm.sharesBefore;
   const ordered = staffOrder(vm, s.perPerson);
   const was = id => vm.sharesBefore?.perPerson.find(x => x.id === id)?.final ?? 0;
-  const { roles, tint } = rolesOf(vm, ordered);
   const hours = ordered.filter(p => !isSup(p)).reduce((t, p) => t + (p.shiftHours ?? p.hours), 0);
   const paidOut = ordered.reduce((t, p) => t + p.final, 0);
   const paidBefore = adj ? vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0) : 0;
+  const span = nightSpan(vm);
   const vmPool = vm.state.pools.length === 1 ? vm.pools[0] : null;
   const total = vmPool && !adj
     ? html`<${DragAmount} value=${paidOut} min=${Math.max(0, paidOut - (vmPool.rest || 0))}
-        cls="-mx-1.5" moneyCls=${cx(BIG_MONEY, 'text-money')} label="Tips total"
+        cls="-mx-1.5" moneyCls=${cx(PI_MONEY, 'text-money')} label="Tips total"
         onSet=${(v, v0) => App.nudgeCash(v - v0)} onPreview=${(v, v0) => App.previewCash(v == null ? null : v - v0)}
         onTap=${() => App.tab('tips')} />`
-    : html`<${Money} value=${paidOut} class=${cx(BIG_MONEY, 'text-money')} />`;
+    : html`<${Money} value=${paidOut} class=${cx(PI_MONEY, 'text-money')} />`;
   const td = sumDelta(vm, paidOut);
-  const tIn = TOTAL_TONE(defaultMoved(vm, 'in')), tOut = TOTAL_TONE(defaultMoved(vm, 'out'));
+  const shiftTone = mv => (mv ? 'text-accent' : 'text-ink-2');
+  const anySup = ordered.some(isSup);
   const footer = html`<span class="flex flex-wrap items-center gap-x-3 gap-y-1">
-    ${tint && roles.map(r => html`<span key=${r} class="inline-flex items-center gap-1.5"><span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_PLURAL[r]}</span>`)}
-    ${ordered.some(p => p.closer) && html`<span class="inline-flex items-center gap-1.5"><span class="size-1.5 rounded-full bg-bad/75"></span>Closer</span>`}
-    <span>Lighter times follow the shift default · tap a time to type it</span>
-    ${tint && roles.includes('support') && html`<span>· support is a tip-out, not counted in hours</span>`}</span>`;
+    <span>Tap a time to type it · hold for the wheel</span>
+    ${anySup && html`<span>Support is a tip-out, not counted in hours</span>`}</span>`;
   return html`<${Section} title=${name || 'Payouts'} aside=${ordered.length + (ordered.length === 1 ? ' person' : ' people')} footer=${footer}>
-    <${List}>
-      ${ordered.map((p, i) => html`<${PayItem} key=${p.id} vm=${vm} p=${p} n=${i + 1} tint=${tint} before=${was(p.id)} />`)}
-      ${s.leftover > 0 && html`<button style=${{ '--inset': '2.75rem' }} class=${cx(ITEM, 'min-h-14 transition active:bg-surface-2')} onClick=${() => App.openBonus()}>
-        <span class="w-5 shrink-0"></span>
-        <span class="flex min-w-0 flex-1 flex-col"><span class="text-[1.0625rem] font-medium text-ink-2">Chump</span><span class="t-small text-ink-3">Stays in the drawer — or give it out</span></span>
-        <span class="text-[1.125rem] font-semibold tabular-nums text-ink-2">${fmtMoney(s.leftover)}</span>
-        <${Icon} name="chevR" class="-mr-1 size-5 shrink-0 text-ink-3" />
+    <${List} class=${PI_COLS}>
+      ${ordered.map(p => html`<${PayItem} key=${p.id} vm=${vm} p=${p} before=${was(p.id)} span=${span} />`)}
+      ${s.leftover > 0 && html`<button style=${{ '--inset': '1rem' }} class=${cx(PI_ROW, 'pb-2.5 transition active:bg-surface-2')} onClick=${() => App.openBonus()}>
+        <span class="text-[1.0625rem] font-medium leading-snug text-ink-2">Chump</span>
+        <span class="t-small col-span-3 truncate pl-1 text-ink-3">stays in the drawer</span>
+        <span class="col-start-5 pl-2 text-right text-[1.0625rem] font-semibold tabular-nums text-ink-2">${fmtMoney(s.leftover)}</span>
+        <${Icon} name="chevR" class="col-start-6 ml-1.5 size-4 text-ink-3" />
       </button>`}
-      <div style=${{ '--inset': '2.75rem' }} class=${cx(ITEM, 'bg-surface-2/60')}>
-        <span class="grid w-5 shrink-0 place-items-center text-ink-2"><${Icon} name="users" class="size-[1.125rem]" /></span>
-        <span class="flex min-w-0 flex-1 flex-col gap-1">
-          <span class="text-[1.125rem] font-semibold leading-tight">Total</span>
-          <${SubLine}
-            a=${html`<${DefaultTime} vm=${vm} field="in" cls=${SUB_TIME} tone=${tIn} mins />`}
-            b=${html`<${DefaultTime} vm=${vm} field="out" cls=${SUB_TIME} tone=${tOut} mins />`}
-            rest=${html`<span class="whitespace-nowrap font-semibold tabular-nums">${fmtHrs(hours)} h</span>`} />
-        </span>
-        <span class="flex shrink-0 flex-col items-end gap-0.5">
+      <div style=${{ '--hue': 'var(--ink-3)', '--inset': '1rem' }} class=${cx(PI_ROW, 'bg-surface-2/60 pb-2.5')}>
+        <span class="text-[1.0625rem] font-semibold leading-snug">Total</span>
+        <${TimePill}
+          a=${html`<${DefaultTime} vm=${vm} field="in" bare cls=${PILL_IN} tone=${shiftTone(defaultMoved(vm, 'in'))} />`}
+          b=${html`<${DefaultTime} vm=${vm} field="out" bare cls=${PILL_OUT} tone=${shiftTone(defaultMoved(vm, 'out'))} />`} />
+        <span class=${cx(HRS_TEXT, 'font-semibold text-ink-2')}>${fmtHrs(hours)}h</span>
+        <span></span>
+        <span class="col-start-5 flex flex-col items-end gap-0.5 pl-2">
           ${total}
           ${td ? html`<${Delta} d=${td} />` : adj && html`<span class="t-small tabular-nums text-ink-3">was ${fmtMoney(paidBefore)}</span>`}
         </span>
-        <span class="w-4 shrink-0"></span>
+        <span class="col-start-6 ml-1.5 w-4"></span>
       </div>
     <//>
   <//>`;

@@ -68,12 +68,14 @@ export function Button({ variant = 'plain', size = 'md', block = false, icon, cl
 // (24-hour: "17:45"). `full`: "5:00 pm" (minutes always, a smaller lowercase am / pm).
 // `mins`: always show the minutes ("5:00p") — a column where some time
 // has minutes shows them on every row.
-export function Clock({ abs, full = false, mins = false }) {
+// `bare`: no a / p at all ("6", "10:45") — for tight spots where the
+// context says which (a shift's bar).
+export function Clock({ abs, full = false, mins = false, bare = false }) {
   const t = timeParts(abs);
   if (full) {
     return html`<span class="whitespace-nowrap">${t.h}:${t.m || '00'}${t.ap && html`<span class="ml-[0.2em] text-[0.85em]">${t.ap === 'a' ? 'am' : 'pm'}</span>`}</span>`;
   }
-  return html`<span class="whitespace-nowrap">${t.h}${t.m ? ':' + t.m : mins ? ':00' : ''}${t.ap && html`<span class="ml-[0.06em] text-[0.8em]">${t.ap}</span>`}</span>`;
+  return html`<span class="whitespace-nowrap">${t.h}${t.m ? ':' + t.m : mins ? ':00' : ''}${t.ap && !bare && html`<span class="ml-[0.06em] text-[0.8em]">${t.ap}</span>`}</span>`;
 }
 
 export function Money({ value, class: cls = '' }) {

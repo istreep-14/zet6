@@ -252,7 +252,7 @@ function Note({ vm }) {
 
 // The shift's close (defaults.global.out): closers and anyone without an Out
 // of their own end then. Tap → the keypad, hold → the wheel; Undo · Apply after.
-export function CloseTime({ vm, cls, tone, mins = false, full = false }) {
+export function CloseTime({ vm, cls, tone, mins = false, full = false, bare = false }) {
   const g = vm.state.defaults.global;
   const gi = parseTime(g.in), go = parseTime(g.out);
   const open = gi.value != null ? inAbsOf(gi) : vm.resolved?.anchorAbs ?? 17;
@@ -261,7 +261,7 @@ export function CloseTime({ vm, cls, tone, mins = false, full = false }) {
     min=${open + 0.25} max=${open + 12}
     onSet=${a => App.reviewed('Close ' + fmtTimeAbs(a), () => App.globalDefault('out', absToOutRaw(a, open), true))}
     onPreview=${a => App.previewDefault('out', a == null ? null : absToOutRaw(a, open))}
-    cls=${cls} tone=${tone} mins=${mins} full=${full} label="Close time" />`;
+    cls=${cls} tone=${tone} mins=${mins} full=${full} bare=${bare} label="Close time" />`;
 }
 
 // ── Person cards ─────────────────────────────────────────────────────────────
@@ -282,7 +282,7 @@ export function Timeline({ span, t, role, hue = null }) {
       left: at(t.brkStart), width: len(t.brkStart, t.brkStart + t.brk),
       backgroundImage: 'repeating-linear-gradient(135deg, var(--surface) 0 2px, transparent 2px 4px)', backgroundColor: 'color-mix(in srgb, var(--surface) 55%, transparent)',
     }}></span>`}
-    ${span.close != null && html`<span class="absolute -inset-y-1 w-0.5 -translate-x-1/2 rounded-full bg-bad/55" style=${{ left: at(span.close) }}></span>`}
+    ${span.close != null && html`<span class="absolute inset-y-0 w-0.5 -translate-x-1/2 rounded-full bg-bad/55" style=${{ left: at(span.close) }}></span>`}
   </div>`;
 }
 
@@ -290,7 +290,7 @@ export function Timeline({ span, t, role, hue = null }) {
 // night), lined up with the timelines.
 export function AxisLabels({ span }) {
   if (!span) return null;
-  const W = span.b - span.a, step = W > 6 ? 2 : 1;
+  const W = span.b - span.a, step = W > 8 ? 3 : W > 5 ? 2 : 1;
   const marks = [];
   for (let h = span.a; h <= span.b; h += step) marks.push(h);
   if (span.b - marks[marks.length - 1] >= step) marks.push(span.b);
@@ -760,25 +760,25 @@ function renderEditor(vm) {
 //    shift's open / close (Summary's Total row) — tap for the keypad, hold
 //    for the wheel. ────────────────────────────────────────────────────────
 
-export function StaffTime({ vm, id, field, cls, tone, full, mins }) {
+export function StaffTime({ vm, id, field, cls, tone, full, mins, bare, alt }) {
   const p = vm.state.staff.find(x => x.id === id);
   if (!p) return null;
   const t = times(vm.state, p, vm);
   const k = pickerFor(vm, p, field);
   return html`<${DragTime} abs=${k.abs} set=${k.isSet} bad=${t.bad} ...${keyCell(p, field)}
-    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub} cls=${cls} tone=${tone} full=${full} mins=${mins}
+    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub} cls=${cls} tone=${tone} full=${full} mins=${mins} bare=${bare} alt=${alt}
     label=${p.name + ' ' + field + ' time'} />`;
 }
 
-export function DefaultTime({ vm, field, cls, tone, full, mins }) {
-  if (field === 'out') return html`<${CloseTime} vm=${vm} cls=${cls} tone=${tone} mins=${mins} full=${full} />`;
+export function DefaultTime({ vm, field, cls, tone, full, mins, bare }) {
+  if (field === 'out') return html`<${CloseTime} vm=${vm} cls=${cls} tone=${tone} mins=${mins} full=${full} bare=${bare} />`;
   const g = vm.state.defaults.global;
   const gi = parseTime(g.in);
   const inAbs = gi.value != null ? inAbsOf(gi) : null;
   return html`<${DragTime} abs=${inAbs} set=${true} ...${shiftCell('in')} min=${IN_MIN_ABS} max=${IN_MAX_ABS}
     onSet=${abs => App.reviewed('Default open ' + fmtTimeAbs(abs), () => App.globalDefault('in', absToInRaw(abs), true))}
     onPreview=${abs => App.previewDefault('in', abs == null ? null : absToInRaw(abs))}
-    cls=${cls} tone=${tone} full=${full} mins=${mins} label="Default open time" />`;
+    cls=${cls} tone=${tone} full=${full} mins=${mins} bare=${bare} label="Default open time" />`;
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────
