@@ -239,6 +239,16 @@
     padding-inline: calc(var(--gutter) + var(--safe-l)) calc(var(--gutter) + var(--safe-r));
   }
   .panel.active { display: block; }
+  /* Page lists and tables extend to the screen edges; sheets and drawers keep
+     their grouped surfaces. Section labels stay visible while a list scrolls. */
+  .panel .lgroup, .panel .page-table {
+    margin-inline: calc(-1 * var(--gutter));
+    border-radius: 0; background: transparent; box-shadow: none; overflow: visible;
+  }
+  .panel .ui-section:has(> .lgroup) > .section-heading {
+    position: sticky; top: var(--thead-top, 0px); z-index: 4;
+    background: var(--bg); padding-block: .4rem; box-shadow: 0 1px 0 var(--line);
+  }
   /* A page stepped to slides in from the side it came from (ui/pages.js). */
   .panel.active.from-right { animation: inRight .24s cubic-bezier(.2, .8, .3, 1); }
   .panel.active.from-left  { animation: inLeft .24s cubic-bezier(.2, .8, .3, 1); }

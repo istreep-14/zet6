@@ -29,7 +29,7 @@ import { fmtHrs, fmtMoney } from '../util.js';
 import { parseTime, fmtTimeAbs, fmtClockShort, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, absToEdgeRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { getRoster } from '../roster.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Clock, Icon, Button, Alert, Seg, SwitchRow, List, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_PLURAL, hueVar, hueIndex, hueTile } from '../ui/pkit.js';
+import { cx, Clock, Icon, Button, Alert, Seg, SwitchRow, List, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_PLURAL, hueVar, hueIndex, hueTile, Sentinel, THEAD } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 import { DragTime } from '../ui/dragtime.js';
 import { openKeypad, activeKey, bufferAbs } from '../ui/keypad.js';
@@ -302,7 +302,7 @@ export function AxisLabels({ span }) {
 }
 function Axis({ span }) {
   if (!span) return null;
-  return html`<div class="grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 px-4 pb-1 pt-2" aria-hidden="true">
+  return html`<div class=${cx(THEAD, 'grid grid-cols-[2rem_minmax(0,1fr)] gap-x-3 bg-bg px-4 pb-1 pt-2')} aria-hidden="true">
     <span></span><${AxisLabels} span=${span} />
   </div>`;
 }
@@ -566,7 +566,7 @@ function Staff({ vm }) {
   return html`<div class="flex flex-col gap-4">
     <${Note} vm=${vm} />
     ${people.length > 0 && html`<${List}>
-      ${lines && html`<${Axis} span=${span} />`}
+      ${lines && span && html`<${Sentinel} /><${Axis} span=${span} />`}
       ${gs.map(g => html`
         ${g.role && gs.length > 1 && html`<div key=${'h-' + g.role} class="li t-cap flex items-center gap-2 px-4 pb-1 pt-2.5 text-ink-3" style=${{ '--inset': '1rem' }}>
           <span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}<span class="text-ink-3/70">${g.people.length}</span></div>`}

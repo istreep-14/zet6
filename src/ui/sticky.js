@@ -21,7 +21,10 @@ function update() {
   const sc = document.getElementById(SCROLLER);
   if (sc) document.documentElement.classList.toggle('scrolled', sc.scrollTop > 2.5 * rem());
   document.querySelectorAll('.thead').forEach(th => {
-    const s = th.previousElementSibling;
+    const table = th.closest('table');
+    const wrap = table?.parentElement;
+    const s = th.previousElementSibling || (wrap?.classList.contains('page-table') ? table.previousElementSibling : null)
+      || (wrap?.parentElement?.classList.contains('page-table') ? wrap.previousElementSibling : null);
     if (!s || !s.classList.contains('thead-sentinel')) return;
     const stuck = s.getBoundingClientRect().top < th.getBoundingClientRect().top - 1;
     if (stuck !== th.hasAttribute('data-stuck')) th.toggleAttribute('data-stuck', stuck);

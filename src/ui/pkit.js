@@ -317,8 +317,8 @@ export function SheetShell({ id, title, tall = false, foot = false }) {
 
 // A captioned group: small uppercase caption (+ optional aside) above its content.
 export function Section({ title, aside, footer, class: cls = '', children }) {
-  return html`<section class=${cx('flex flex-col gap-2', cls)}>
-    ${(title || aside) && html`<div class="flex min-h-5 items-end justify-between gap-3 px-4">
+  return html`<section class=${cx('ui-section flex flex-col gap-2', cls)}>
+    ${(title || aside) && html`<div class="section-heading flex min-h-5 items-end justify-between gap-3 px-4">
       <span class="t-cap flex min-w-0 items-center gap-2 text-ink-3">${title}</span>
       ${aside && html`<span class="t-small shrink-0 text-ink-3">${aside}</span>`}
     </div>`}
@@ -391,7 +391,7 @@ export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, sc
         ${foot.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-[var(--row-lg)]')}>${v}</td>`)}
       </tr></tfoot>`}
     </table>`;
-  return html`<${Card} flush class=${cls} ...${rest}><${Sentinel} />${scroll
+  return html`<${Card} flush class=${cx('page-table', cls)} ...${rest}><${Sentinel} />${scroll
     ? html`<div class="overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">${table}</div>` : table}<//>`;
 }
 
