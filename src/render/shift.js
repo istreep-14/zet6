@@ -92,7 +92,7 @@ function Pools({ vm }) {
     <//>
     <${SupportDefault} vm=${vm} />
     <${List}>
-      <${Item} icon="gift" title="Closer bonus & chump" sub="Who gets the dollars left after rounding" onClick=${() => App.openBonus()} />
+      <${Item} icon="gift" title="Closer bonus & chump" sub="Who gets the dollars left after rounding" onClick=${() => App.tab('pay', { sub: 'bonus' })} />
     <//>
   </div>`;
 }

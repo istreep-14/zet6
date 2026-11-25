@@ -369,7 +369,7 @@
     height: var(--dock);
     padding: 0 calc(var(--gutter) + var(--safe-r)) var(--safe-b) calc(var(--gutter) + var(--safe-l));
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: 0.25rem;
     background: var(--glass);
     -webkit-backdrop-filter: var(--blur);

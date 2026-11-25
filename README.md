@@ -45,7 +45,7 @@ With **Several pools** turned on (Settings), tips can be split by time window �
 
 ### Bills
 
-The app works out which physical bills each person gets, keeping $100s/$50s proportional and spreading small bills evenly. If the drawer can't make exact change, Tips › Drawer shows the fewest swaps that fix it (e.g. "Break 1 × $20 into 2 × $10"), and **Apply** updates the cash counts.
+The app works out which physical bills each person gets, keeping $100s/$50s proportional and spreading small bills evenly. If the drawer can't make exact change, **Pay › Bills** shows the fewest swaps that fix it (e.g. "Break 1 × $20 into 2 × $10"), and **Apply** updates the cash counts.
 
 ### Simple vs detailed
 

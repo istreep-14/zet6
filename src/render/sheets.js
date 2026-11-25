@@ -77,7 +77,7 @@ export function openBonus(vm) {
   renderBonus(vm);
 }
 
-function Bonus({ vm }) {
+export function BonusPanel({ vm }) {
   if (!vm.shares || !vm.totalCash) {
     return html`<div class="py-10 text-center text-ink-2">Enter cash and staff to see the remainder.</div>`;
   }
@@ -112,7 +112,7 @@ function Bonus({ vm }) {
 }
 
 function renderBonus(vm) {
-  if (isOpen('sheet-bonus')) render(html`<${Bonus} vm=${vm} />`, sheetBody('sheet-bonus'));
+  if (isOpen('sheet-bonus')) render(html`<${BonusPanel} vm=${vm} />`, sheetBody('sheet-bonus'));
 }
 
 export function adjustBonus(vm, id, delta) {

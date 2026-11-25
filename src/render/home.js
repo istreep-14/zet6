@@ -1,14 +1,12 @@
-// Home (Preact) — the shift at a glance, for reading only: nothing here
-// edits anything (times, cash and tools live on Staff and Tips). Until the
-// shift is complete it shows the close-out checklist.
+// Home and Pay (Preact). Home is the close-out landing page; Pay owns the
+// finished distribution — payout rows, envelopes, the split and bonuses.
 //
-//   sub-tabs   Pay    one row per person: name over "5p – 2a · 9.5h", their
-//                     take-home; the chump; Total (hours · rate · paid out)
-//              Shift  everyone's shift on one time axis
-//              Bills  the envelopes, bill by bill; the small bills needed
-//              Split  how it was worked out: hours × rate, the rounding,
-//                     each pool
-//   subpages   a person (take-home, hours, pools, envelope), a pool
+//   Pay tabs    Payouts  one row per person and the total
+//               Bills    envelopes, exact-change status and drawer tools
+//               Split    the worksheet, pool allocation and math table
+//               Bonus    closer bonuses and the chump
+//   subpages    a person (take-home, hours, pools, envelope), a pool, and
+//               the drawer-maintenance tools
 //
 // Support staff are paid a tip-out off the top, so their hours never count
 // in hours totals and their pay shows in the support colour.
@@ -21,7 +19,8 @@ import { fmtBreak, nightSpan, AxisLabels, TimeCell, DefaultTime } from './staff.
 import { DragAmount } from '../ui/dragtime.js';
 import { payDelta } from '../ui/changes.js';
 import { smallBillsNeeded } from './tabs.js';
-import { EnvelopeTable, Worksheet } from './payout.js';
+import { EnvelopeTable, Worksheet, DistributionTools } from './payout.js';
+import { BonusPanel } from './sheets.js';
 import { currentSub, currentTab, pushPage } from '../ui/nav.js';
 
 const $ = id => document.getElementById(id);
@@ -102,7 +101,7 @@ function snapPay(vm) {
   return m;
 }
 function trackMarks(vm) {
-  const here = currentTab() === 'home';
+  const here = currentTab() === 'pay';
   if (vm.blocked || !vm.shares) { if (!here) onHome = false; return; }
   const now = snapPay(vm);
   if (!here) {
@@ -177,7 +176,7 @@ const CELL = 'h-8 w-full rounded-md text-[1rem] tabular-nums transition';
 const TIME_TONE = () => 'text-ink-3';
 // The name alone (no avatar — the table is for scanning across), the closer's dot after it.
 const TableName = ({ vm, p }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-1.5"><span class="truncate">${p.name}</span>${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}</span>`;
-function PayTable({ vm, people, total, hours }) {
+function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
   const s = vm.shares;
   const raw = id => vm.state.staff.find(x => x.id === id);
   const cell = (p, field) => (raw(p.id) ? html`<${TimeCell} vm=${vm} p=${raw(p.id)} field=${field} cls=${CELL} bare tone=${TIME_TONE} />` : '—');
@@ -192,7 +191,7 @@ function PayTable({ vm, people, total, hours }) {
   return html`<${Table} fixed
     cols=${[{ label: 'Name', w: 'w-[36%]' }, { label: 'In', w: 'w-[15%]' }, { label: 'Out', w: 'w-[15%]' }, { label: 'Hrs', w: 'w-[12%]' }, { label: 'Tips', align: 'right', w: 'w-[22%]' }]}
     rows=${[
-      ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id),
+      ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id, pageTab),
         cells: [html`<${TableName} vm=${vm} p=${p} />`, cell(p, 'in'), cell(p, 'out'),
           html`<span class=${isSup(p) ? 'text-ink-3' : ''}>${fmtHrs(hoursOf(p))}</span>`,
           money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : '')] })),
@@ -212,7 +211,7 @@ const payDeltaSum = (vm, now) => {
   return v ? { v, kind: 'preview', stamp: 0 } : null;
 };
 
-function Pay({ vm, name }) {
+function Pay({ vm, name, pageTab = 'home' }) {
   const s = vm.shares;
   const people = staffOrder(vm, s.perPerson);
   const { tint } = rolesOf(vm, people);
@@ -225,12 +224,12 @@ function Pay({ vm, name }) {
   const span = nightSpan(vm);
   if (payTable(vm)) return html`<${Section} title=${name || 'Payouts'} aside=${html`<${ViewSwitch} vm=${vm} count=${count} />`}
     footer=${html`<${Key} vm=${vm} people=${people} />`}>
-    <${PayTable} vm=${vm} people=${people} total=${total} hours=${hours} />
+    <${PayTable} vm=${vm} people=${people} total=${total} hours=${hours} pageTab=${pageTab} />
   <//>`;
   return html`<${Section} title=${name || 'Payouts'} aside=${html`<${ViewSwitch} vm=${vm} count=${count} />`}
     footer=${html`<${Key} vm=${vm} people=${people} />`}>
     <${List}>
-      ${people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id)} lead=${html`<${PersonAv} vm=${vm} p=${p} />`}
+      ${people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id, pageTab)} lead=${html`<${PersonAv} vm=${vm} p=${p} />`}
         title=${html`${tint && html`<${RoleDot} role=${p.role} />`}<span class="truncate">${p.name}</span>`}
         sub=${html`<span class="tabular-nums"><${Times} a=${p.inAbs} b=${p.outAbs} /> · ${fmtHrs(hoursOf(p))}h</span>`}
         trail=${html`<${PayValue} vm=${vm} p=${p} />`}>
@@ -280,19 +279,19 @@ function Shift({ vm }) {
 }
 
 // ── Bills: the envelopes ─────────────────────────────────────────────────────
-function Bills({ vm }) {
+function Bills({ vm, pageTab = 'home' }) {
   const ok = vm.dist && !vm.dist.error;
   return html`<div class="flex flex-col gap-3">
-    ${!ok && html`<${Alert} tone="warn" action=${{ label: 'Drawer', onClick: () => App.tab('tips', { sub: 'drawer' }) }}>The bills don’t work out yet — Tips › Drawer has the fix.<//>`}
+    ${!ok && html`<${Alert} tone="warn" action=${{ label: 'Fix bills', onClick: () => App.tab('pay', { sub: 'bills' }) }}>The bills don’t work out yet — use the bill tools above to fix it.<//>`}
     <${Section} title="Envelopes" footer=${html`<${SmallBills} vm=${vm} />`}>
-      <${EnvelopeTable} vm=${vm} order=${staffOrder(vm, vm.shares.perPerson)} quiet onRow=${id => openPerson(id)}
+      <${EnvelopeTable} vm=${vm} order=${staffOrder(vm, vm.shares.perPerson)} quiet onRow=${id => openPerson(id, pageTab)}
         byPerson=${ok ? vm.dist.byPerson : {}} remBills=${ok ? vm.dist.remainderBills : {}} />
     <//>
   </div>`;
 }
 
 // ── Split: hours × rate, the rounding, the pools ────────────────────────────
-function MathTable({ vm }) {
+function MathTable({ vm, pageTab = 'home' }) {
   const s = vm.shares;
   const people = staffOrder(vm, s.perPerson);
   const dash = html`<span class="text-ink-3/50">—</span>`;
@@ -305,7 +304,7 @@ function MathTable({ vm }) {
   return html`<${Section} title="Each person" footer=${'Hours × rate = the exact share, rounded down to whole dollars; + is a closer bonus' + (s.perPool.length > 1 ? '. With several pools the rate is the blend.' : '.')}>
     <${Table} scroll stickyFirst
       cols=${[{ label: 'Name' }, { label: 'Hrs' }, { label: 'Rate' }, { label: 'Exact', align: 'right' }, { label: 'Round', align: 'right' }, { label: 'Tips', align: 'right' }]}
-      rows=${people.map(p => ({ key: p.id, onClick: () => openPerson(p.id), tone: isSup(p) ? 'muted' : '',
+      rows=${people.map(p => ({ key: p.id, onClick: () => openPerson(p.id, pageTab), tone: isSup(p) ? 'muted' : '',
         cells: [html`<${NameCell} vm=${vm} p=${p} />`,
           fmtHrs(p.hours), p.hours > 0 ? r2(p.exact / p.hours) : dash, r2(p.exact), round(p),
           html`<${Money} value=${p.final} class=${cx('font-semibold', isSup(p) && SUP_TEXT)} />`] }))}
@@ -315,7 +314,7 @@ function MathTable({ vm }) {
 
 // Several pools: what each pool paid each person (scrolls sideways, names
 // pinned). Blank = their role isn't in that pool; — = didn't work its window.
-function PoolGrid({ vm }) {
+function PoolGrid({ vm, pageTab = 'home' }) {
   const s = vm.shares;
   const pools = s.perPool;
   const people = staffOrder(vm, s.perPerson.filter(p => p.final > 0 || Object.values(p.perPool || {}).some(x => x.hours > 0)));
@@ -343,7 +342,7 @@ function PoolGrid({ vm }) {
           <th class=${cx(TH, SEP, 'pr-4 text-right align-bottom')}><span class="t-small font-semibold text-ink">Total</span></th>
         </tr></thead>
         <tbody>
-          ${people.map((p, i) => html`<tr key=${p.id} class=${cx(zebra(i), 'cursor-pointer active:brightness-95')} onClick=${() => openPerson(p.id)}>
+          ${people.map((p, i) => html`<tr key=${p.id} class=${cx(zebra(i), 'cursor-pointer active:brightness-95')} onClick=${() => openPerson(p.id, pageTab)}>
             <td class=${cx(NAME, 'py-2 align-middle')}><span class="flex max-w-[10rem]"><${NameCell} vm=${vm} p=${p} /></span></td>
             ${pools.map(pl => {
               const x = p.perPool?.[pl.id];
@@ -363,31 +362,43 @@ function PoolGrid({ vm }) {
   <//>`;
 }
 
-function PoolRows({ vm }) {
+function PoolRows({ vm, pageTab = 'home' }) {
   const pools = vm.shares.perPool;
   return html`<${Section} title="Pools"><${List}>${pools.map((pl, i) => html`<${Item} key=${pl.id}
     lead=${html`<${PoolTile} i=${i} label=${pl.label} />`}
     title=${pl.label} sub=${html`<span class="tabular-nums"><${Times} a=${pl.startAbs} b=${pl.endAbs} /> · ${fmtHrs(pl.tippedHours)}h · ${rate2(pl.rate)}/h</span>`}
-    value=${fmtMoney(pl.total)} onClick=${() => openPool(pl.id)} />`)}<//><//>`;
+    value=${fmtMoney(pl.total)} onClick=${() => openPool(pl.id, pageTab)} />`)}<//><//>`;
 }
 
-function Split({ vm }) {
+function Split({ vm, pageTab = 'home' }) {
   const several = vm.shares.perPool.length > 1;
   return html`<div class="flex flex-col gap-5">
-    ${several ? html`<${PoolRows} vm=${vm} /><${PoolGrid} vm=${vm} />` : html`<${Worksheet} vm=${vm} />`}
-    <${MathTable} vm=${vm} />
+    ${several ? html`<${PoolRows} vm=${vm} pageTab=${pageTab} /><${PoolGrid} vm=${vm} pageTab=${pageTab} />` : html`<${Worksheet} vm=${vm} />`}
+    <${MathTable} vm=${vm} pageTab=${pageTab} />
   </div>`;
 }
 
 // ── The page ─────────────────────────────────────────────────────────────────
 function Home({ vm, name }) {
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
-  const view = currentSub('home');
   return html`<div class="flex flex-col gap-5">
-    ${view === 'shift' ? html`<${Shift} vm=${vm} />`
-      : view === 'bills' ? html`<${Bills} vm=${vm} />`
-      : view === 'split' ? html`<${Split} vm=${vm} />`
-      : html`<${Pay} vm=${vm} name=${name} />`}
+    <${Section} title=${name || 'This shift'}>
+      <${List}><${Item} icon="cash" title="Ready to distribute" sub=${vm.shares.perPerson.length + (vm.shares.perPerson.length === 1 ? ' person is ready to be paid' : ' people are ready to be paid')}
+        value=${fmtMoney(vm.shares.perPerson.reduce((t, p) => t + p.final, 0) + vm.shares.leftover)} onClick=${() => App.tab('pay')} /><//>
+    <//>
+    <${AdjustNote} vm=${vm} />
+    ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map((w, i) => html`<${Alert} key=${i}>${w}<//>`)}
+  </div>`;
+}
+
+function PayPage({ vm, name }) {
+  if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
+  const view = currentSub('pay');
+  return html`<div class="flex flex-col gap-5">
+    ${view === 'bills' ? html`<${DistributionTools} vm=${vm} /><${Bills} vm=${vm} pageTab="pay" />`
+      : view === 'split' ? html`<${Split} vm=${vm} pageTab="pay" />`
+      : view === 'bonus' ? html`<${BonusPanel} vm=${vm} />`
+      : html`<${Pay} vm=${vm} name=${name || 'Payouts'} pageTab="pay" />`}
     <${AdjustNote} vm=${vm} />
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map((w, i) => html`<${Alert} key=${i}>${w}<//>`)}
   </div>`;
@@ -401,6 +412,13 @@ export function renderHome(vm, sessionName = lastName) {
   trackMarks(vm);
   const root = $('home-root');
   if (root) render(html`<${Home} vm=${vm} name=${sessionName} />`, root);
+}
+
+export function renderPay(vm, sessionName = lastName) {
+  lastName = sessionName;
+  lastVmRef = vm;
+  const root = $('pay-root');
+  if (root) render(html`<${PayPage} vm=${vm} name=${sessionName} />`, root);
 }
 
 // ── Subpages ─────────────────────────────────────────────────────────────────
@@ -468,7 +486,7 @@ function PoolView({ vm, id }) {
   </div>`;
 }
 
-export function openPerson(id) {
+export function openPerson(id, tab = 'home') {
   pushPage({
     key: 'person:' + id,
     title: lastVmName(id),
@@ -477,9 +495,9 @@ export function openPerson(id) {
       return p ? [{ v: fmtMoney(p.final), l: 'takes home' }, { v: fmtHrs(hoursOf(p)), l: 'h', tight: true }] : [];
     },
     body: vm => html`<${PersonView} vm=${vm} id=${id} />`,
-  }, 'home');
+  }, tab);
 }
-export function openPool(id) {
+export function openPool(id, tab = 'home') {
   pushPage({
     key: 'pool:' + id,
     title: lastPoolName(id),
@@ -488,7 +506,7 @@ export function openPool(id) {
       return pl ? [{ v: fmtMoney(pl.total), l: 'in tips' }, { v: fmtHrs(pl.tippedHours), l: 'h', tight: true }, { v: rate2(pl.rate), l: '/h', tight: true }] : [];
     },
     body: vm => html`<${PoolView} vm=${vm} id=${id} />`,
-  }, 'home');
+  }, tab);
 }
 
 // Titles from the latest view model (the page body keeps itself current).

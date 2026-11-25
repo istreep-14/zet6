@@ -14,7 +14,7 @@ const el = (id, extra = {}) => ({
 const nodes = {
   mainContent: el('mainContent'),
   subpages: el('subpages'),
-  'tab-home': el('tab-home'), 'tab-staff': el('tab-staff'), 'tab-tips': el('tab-tips'), 'tab-shift': el('tab-shift'),
+  'tab-home': el('tab-home'), 'tab-staff': el('tab-staff'), 'tab-tips': el('tab-tips'), 'tab-pay': el('tab-pay'), 'tab-shift': el('tab-shift'),
 };
 const rootClasses = el('root').classList;
 globalThis.window = { innerWidth: 400 };
@@ -24,7 +24,7 @@ globalThis.document = {
   body: { classList: el('body').classList },
   activeElement: null,
   getElementById: id => nodes[id] || null,
-  querySelectorAll: sel => (sel === '#mainContent > .panel' ? ['tab-home', 'tab-staff', 'tab-tips', 'tab-shift'].map(k => nodes[k]) : []),
+  querySelectorAll: sel => (sel === '#mainContent > .panel' ? ['tab-home', 'tab-staff', 'tab-tips', 'tab-pay', 'tab-shift'].map(k => nodes[k]) : []),
   createElement: () => el('page'),
   addEventListener() {}, removeEventListener() {},
 };
@@ -48,27 +48,27 @@ function swipe(on, fromX, toX, endType = 'touchend') {
 }
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-nav.showTab('home');
-assert.equal(nav.currentTab(), 'home');
-assert.equal(nav.currentSub(), 'pay');
+nav.showTab('pay');
+assert.equal(nav.currentTab(), 'pay');
+assert.equal(nav.currentSub(), 'payouts');
 
-// A left swipe on Home steps to the next sub-tab; never to another tab.
+// A left swipe on Pay steps to the next sub-tab; never to another tab.
 swipe('mainContent', 300, 100);
 await wait(200);
-assert.equal(nav.currentSub('home'), 'shift');
-assert.equal(nav.currentTab(), 'home');
+assert.equal(nav.currentSub('pay'), 'bills');
+assert.equal(nav.currentTab(), 'pay');
 
 // An interrupted swipe does nothing.
 swipe('mainContent', 300, 100, 'touchcancel');
 await wait(200);
-assert.equal(nav.currentSub('home'), 'shift', 'an interrupted gesture must not navigate');
+assert.equal(nav.currentSub('pay'), 'bills', 'an interrupted gesture must not navigate');
 
 // Past the last sub-tab: nothing (no tab change, no panel).
-nav.setSub('home', 'split');
+nav.setSub('pay', 'bonus');
 swipe('mainContent', 300, 100);
 await wait(200);
-assert.equal(nav.currentSub('home'), 'split');
-assert.equal(nav.currentTab(), 'home', 'tabs only change from the tab bar');
+assert.equal(nav.currentSub('pay'), 'bonus');
+assert.equal(nav.currentTab(), 'pay', 'tabs only change from the tab bar');
 
 // Every tab has sub-tabs; a swipe on Staff steps them, never the tab.
 nav.showTab('staff');
@@ -77,20 +77,20 @@ swipe('mainContent', 300, 100);
 await wait(200);
 assert.equal(nav.currentTab(), 'staff');
 assert.equal(nav.currentSub(), 'shift');
-for (const t of nav.TABS) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs');
+for (const t of ['staff', 'pay', 'shift']) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs');
 
 // Old saved tab names.
 assert.equal(nav.normalizeTab('summary'), 'home');
-assert.equal(nav.normalizeTab('payout'), 'tips');
+assert.equal(nav.normalizeTab('payout'), 'pay');
 assert.equal(nav.normalizeTab('settings'), 'shift', 'Settings is a page now; its old tab opens Shift');
 
 // Tips' sub-tabs follow the pools: replaced in place, the current one kept
 // while it's still there, else the first.
-nav.setSubs('tips', [{ value: 'p:1', label: 'Night' }, { value: 'drawer', label: 'Drawer' }]);
+nav.setSubs('tips', [{ value: 'p:1', label: 'Night' }, { value: 'b:1:2', label: 'Part 2' }]);
 assert.equal(nav.currentSub('tips'), 'p:1');
-nav.setSub('tips', 'drawer');
-nav.setSubs('tips', [{ value: 'p:1', label: 'Night' }, { value: 'b:1:2', label: 'Part 2' }, { value: 'drawer', label: 'Drawer' }]);
-assert.equal(nav.currentSub('tips'), 'drawer', 'still there → kept');
+nav.setSub('tips', 'b:1:2');
+nav.setSubs('tips', [{ value: 'p:1', label: 'Night' }, { value: 'b:1:2', label: 'Part 2' }]);
+assert.equal(nav.currentSub('tips'), 'b:1:2', 'still there → kept');
 nav.setSubs('tips', [{ value: 'p:9', label: 'Day' }]);
 assert.equal(nav.currentSub('tips'), 'p:9', 'gone → the first');
 

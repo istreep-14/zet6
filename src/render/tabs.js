@@ -86,6 +86,9 @@ function metaOf(vm, tab, sessionName) {
     s.pools.length > 1 && { v: s.pools.length, l: 'pools' },
     vm.adjust ? { v: fmtMoney(Math.abs(vm.adjust)), l: vm.adjust < 0 ? 'short' : 'over', tone: 'text-warn' } : null,
   ];
+  if (tab === 'pay') return sh
+    ? [{ v: fmtMoney(sh.perPerson.reduce((t, p) => t + p.final, 0)), l: 'paid' }, people(sh.perPerson.length), { v: rate2(sh.rate), l: '/h', tight: true }]
+    : [{ v: 'No split yet', tone: 'text-ink-3' }];
   // Shift: the type, the pools, the day.
   return [{ v: (s.meta.shiftType === 'day' ? 'Day' : 'Night') + ' shift' }, { v: s.pools.length, l: s.pools.length === 1 ? 'pool' : 'pools' },
     { v: sessionName || fmtDay(s.meta.date), tone: 'text-ink-3' }];
@@ -169,8 +172,9 @@ function renderBadges(vm) {
   const badges = {
     staff: { text: named > 0 ? String(named) : '', tone: named > 0 && errOn('staff') ? 'warn' : '' },
     tips: { text: errOn('tips') || short ? '!' : total > 0 ? fmtMoneyShort(total) : '', tone: errOn('tips') || short ? 'warn' : total > 0 ? 'ok' : '' },
+    pay: { text: short ? '!' : '', tone: short ? 'warn' : '' },
   };
-  ['home', 'staff', 'tips', 'shift'].forEach(t => {
+  ['home', 'staff', 'tips', 'pay', 'shift'].forEach(t => {
     const el = $('tab-sub-' + t), b = badges[t] || { text: '', tone: '' };
     if (!el) return;
     el.textContent = b.text;

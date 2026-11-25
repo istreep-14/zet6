@@ -16,19 +16,19 @@ import { initNav, onNav, showTab, setSub, currentTab, popPage, popAll, topPage, 
 import { renderStaff, openStaffEditor } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderTips } from './render/tips.js';
-import { renderPayout, openPayoutSheet } from './render/payout.js';
+import { renderPayout, openPayoutPage } from './render/payout.js';
 import { refreshSticky } from './ui/sticky.js';
 import { trackChanges, resetChanges, snapOf, SHOW } from './ui/changes.js';
 import { toast, copyText } from './ui/toast.js';
 import { summaryText } from './textout.js';
-import { renderHome, openPerson as homePerson, resetHomeMarks } from './render/home.js';
+import { renderHome, renderPay, openPerson as homePerson, resetHomeMarks } from './render/home.js';
 import { renderSettings, SettingsPage } from './render/settings.js';
 import { renderShift, openPool as shiftPool } from './render/shift.js';
 import { html } from './ui/preact.js';
 import { renderMenu, openMenu, closeMenu, menuOpen, menuEdge, initMenu } from './render/menu.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
-  renderSheets, openPerson, openBonus, adjustBonus, resetBonuses,
+  renderSheets, openPerson, adjustBonus, resetBonuses,
 } from './render/sheets.js';
 
 const $ = id => document.getElementById(id);
@@ -78,6 +78,7 @@ function render(s) {
   renderTips(lastVm);
   renderPayout(lastVm);
   renderHome(lastVm, sessionName());
+  renderPay(lastVm, sessionName());
   renderCloseTime(lastVm);
   renderSheets(lastVm);
   sessions.saveCurrent(s, {
@@ -96,8 +97,8 @@ function render(s) {
 // A landed edit marks the figures it moved (vm.changes) for SHOW ms, then
 // they're repainted plain. An edit in progress (a dragged or typed time)
 // re-runs the split on a copy of the state and paints Staff with the
-// would-be numbers (vm.preview); nothing is written until it lands. Home
-// never previews — it only shows what's been written.
+// would-be numbers (vm.preview); nothing is written until it lands. Pay's
+// payout table follows a live preview when it is visible.
 // Returns the preview view model (the wheel picker shows its figures).
 let clearTimer = 0;
 function clearChangesLater() {
@@ -107,6 +108,7 @@ function clearChangesLater() {
     lastVm.changes = null;
     renderPayout(lastVm);
     renderStaff(lastVm);
+    renderPay(lastVm, sessionName());
   }, SHOW + 50);
 }
 
@@ -168,6 +170,7 @@ function preview(apply, focus = null) {
     previewing = false;
     renderStaff(lastVm);
     renderHome(lastVm, sessionName());
+    renderPay(lastVm, sessionName());
     return;
   }
   const base = snapOf(lastVm);
@@ -179,7 +182,7 @@ function preview(apply, focus = null) {
   pv.preview = { base, focus };
   previewing = true;
   renderStaff(pv, { preview: true });
-  if (currentTab() === 'home') renderHome(pv, sessionName());   // Pay's table edits live
+  if (currentTab() === 'pay') renderPay(pv, sessionName());     // payout table edits live
   return pv;                                     // the wheel shows its figures
 }
 
@@ -241,8 +244,7 @@ store.subscribe(render);
 const rolesOn = () => store.getState().settings.allRoles;
 
 window.App = {
-  // Tabs: Home · Staff · Tips · Settings (opts.sub: a sub-tab to show —
-  // App.tab('tips', { sub: 'drawer' })). Old names map over (normalizeTab).
+  // Tabs: Home · Staff · Tips · Pay · Shift (opts.sub selects a header tab).
   tab(name, opts = {}) {
     name = normalizeTab(name);
     closeAllSheets();
@@ -268,6 +270,7 @@ window.App = {
     if (previewing) return;
     renderStaff(lastVm);
     renderHome(lastVm, sessionName());
+    renderPay(lastVm, sessionName());
     renderSheets(lastVm);
     renderShift(lastVm);
     renderPages(lastVm);
@@ -280,14 +283,14 @@ window.App = {
 
   // sheets and subpages
   closeSheet,
-  openBonus: () => openBonus(lastVm),
+  openBonus: () => App.tab('pay', { sub: 'bonus' }),
   openCloseTime: () => openCloseTime(lastVm),
   renameCurrent(name) {
     sessions.rename(sessions.currentId(), name);
     render(store.getState());
   },
-  // A person: on Home their read-only page, elsewhere the payout sheet.
-  personModal: id => (currentTab() === 'home' ? homePerson(id) : openPerson(lastVm, id)),
+  // A person: Pay keeps a read-only payout page; Staff and Tips use its sheet.
+  personModal: id => (currentTab() === 'pay' ? homePerson(id, 'pay') : currentTab() === 'home' ? homePerson(id) : openPerson(lastVm, id)),
 
   // settings
   setSize: size => store.setSize(size),
@@ -328,7 +331,7 @@ window.App = {
     if (p) p[field] = raw;
   }, id),
   previewDefault: (field, raw) => preview(raw == null ? null : s => { s.defaults.global[field] = String(raw).trim(); }),
-  // The tips total by a nudge (Home › Pay's table, one pool): the wheel
+  // The tips total by a nudge (Pay › Payouts' table, one pool): the wheel
   // previews it, a landed nudge gets Undo.
   previewCash: delta => preview(!delta ? null : s => nudgeCash(s, delta)),
   nudgeCash(delta) {
@@ -336,9 +339,9 @@ window.App = {
     withReview('Tips ' + (delta > 0 ? '+$' : '−$') + Math.abs(delta).toLocaleString('en-US'),
       () => store.mutate(s => nudgeCash(s, delta), { immediate: true }));
   },
-  // Tips › Drawer's tools, each a small drawer: 'fix' · 'stacks' · 'tidy'.
-  openPayoutSheet,
-  // Stacks of small bills for managers (Tips › Drawer).
+  // Pay › Bills tools, each a back-navigable subpage.
+  openPayoutPage,
+  // Stacks of small bills for managers (Pay › Bills).
   toggleStackTo: id => store.toggleStackTo(id),
   setStackSize: (d, v) => store.setStackSize(d, v),
   // A drag / keypad edit with Undo · Apply in the totals strip (see withReview).
@@ -684,6 +687,7 @@ onNav(() => {
   renderStaff(lastVm);
   renderTips(lastVm);
   renderPayout(lastVm);
+  renderPay(lastVm, sessionName());
   renderShift(lastVm);
   renderChrome(lastVm, sessionName());
   requestAnimationFrame(refreshSticky);
@@ -698,7 +702,7 @@ const calm = () => !menuOpen() && !document.querySelector('.sheet-backdrop.open'
   && !document.documentElement.classList.contains('wheel-open')
   && !document.documentElement.classList.contains('keypad-open');
 // A swipe right off a tab's first sub-tab pulls the menu in (menuEdge).
-initNav({ can: calm, subsOn: () => !(currentTab() === 'home' && lastVm.blocked), edge: menuEdge });
+initNav({ can: calm, subsOn: () => !(currentTab() === 'pay' && lastVm.blocked), edge: menuEdge });
 initMenu();
 
 // Reveal once Tailwind has styled the page (it compiles in the browser): a

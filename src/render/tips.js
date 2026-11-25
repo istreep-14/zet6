@@ -1,8 +1,7 @@
 // Tips (Preact) — only for entering the cash. The sub-tabs (the header) are
 // the shift's cash entries, set from the pools (nav setSubs):
 //   one per pool ("Night"), and one per extra part of a pool — a later count
-//   of the same pool ("Part 2", or "Day 2" with several pools); then Drawer
-//   (render/payout.js).
+//   of the same pool ("Part 2", or "Day 2" with several pools).
 // An entry counts bills by default; pull the page down (like refreshing a
 // feed) to type a total instead, and back. Under it a big "New part" saves
 // this count and starts another. What the pools are (names, windows, who
@@ -339,7 +338,6 @@ export function Suggested({ vm }) {
 }
 
 function Tips({ vm }) {
-  if (currentSub('tips') === 'drawer') return null;     // Tips › Drawer is render/payout.js
   const e = curEntry() || lastEntries?.[0];
   return e ? html`<${Entry} key=${e.value} vm=${vm} e=${e} />` : null;
 }
@@ -365,7 +363,7 @@ function bindPull() {
     && !document.querySelector('.sheet-backdrop.open') && !document.documentElement.classList.contains('menu-open');
   m.addEventListener('touchstart', ev => {
     pull = null;
-    if (currentTab() !== 'tips' || currentSub('tips') === 'drawer' || ev.touches.length !== 1 || m.scrollTop > 0 || !calm()) return;
+    if (currentTab() !== 'tips' || ev.touches.length !== 1 || m.scrollTop > 0 || !calm()) return;
     pull = { x0: ev.touches[0].clientX, y0: ev.touches[0].clientY, on: false, d: 0 };
   }, { passive: true });
   m.addEventListener('touchmove', ev => {
@@ -397,7 +395,7 @@ let lastVm = null;
 export function renderTips(vm) {
   lastVm = vm;
   lastEntries = entriesOf(vm.state);
-  setSubs('tips', [...lastEntries.map(e => ({ value: e.value, label: e.label })), { value: 'drawer', label: 'Drawer' }]);
+  setSubs('tips', lastEntries.map(e => ({ value: e.value, label: e.label })));
   bindPull();
   const root = $('tips-root');
   if (root) render(html`<${Tips} vm=${vm} />`, root);

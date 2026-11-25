@@ -1,8 +1,8 @@
-// Tips › Drawer (Preact) — the cash side of the payout, where the drawer is
-// fixed up (Home only reads the result):
+// Pay › Bills (Preact) — the cash side of the distribution, where the drawer
+// is fixed up alongside the envelope table.
 //   status (exact change ✓ / the fix card with Apply) → the best bills for
 //   the uncounted cash → tools,
-//   each a small drawer (sheet) of its own: envelopes already made (with a
+//   each as a back-navigable Pay subpage: envelopes already made (with a
 //   register over / short), stacks for a manager, tidy the drawer.
 // Worksheet ("How the split works") and EnvelopeTable (the envelopes) are
 // Home's.
@@ -13,14 +13,11 @@ import { planMakeChange, computeTradeUp, distribute, drawerBills } from '../engi
 import { envelopeFixes, shortFixes } from '../fixups.js';
 import { STACK_BILLS, STACK_DEFAULTS } from '../stacks.js';
 import { updatePool } from '../store.js';
-import { html, render } from '../ui/preact.js';
+import { html } from '../ui/preact.js';
 import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra, Delta, SwitchRow, hueVar, hueIndex, Avatar, RowLabel } from '../ui/pkit.js';
-import { openSheet, isOpen, sheetBody } from '../ui/sheet.js';
 import { payDelta } from '../ui/changes.js';
-import { currentSub } from '../ui/nav.js';
+import { pushPage } from '../ui/nav.js';
 import { Suggested } from './tips.js';
-
-const $ = id => document.getElementById(id);
 
 let currentVm = null;
 let pendingTradeUp = null;
@@ -344,19 +341,20 @@ function TidyBody({ vm, plan }) {
   if (!plan) return html`<div class="t-body py-8 text-center text-ink-3">The drawer is already tidy.</div>`;
   return html`<p class="t-small px-1 text-ink-3">Swap the extra small bills for ${plan.new20s} × $20 — everyone still gets exact change.</p>
     <${SwapTable} now=${vm.bills} deltas=${plan.delta} after=${plan.newPool} />
-    <${Button} variant="primary" block onClick=${() => { applyPendingTradeUp(); App.closeSheet('sheet-tidy'); }}>Apply to the cash count<//>`;
+    <${Button} variant="primary" block onClick=${() => { applyPendingTradeUp(); App.back(); }}>Apply to the cash count<//>`;
 }
 
-// The three extras open as small drawers of their own (sheets), from rows.
-export function openPayoutSheet(which) {
-  openSheet('sheet-' + which);
-  if (currentVm) renderPayoutSheets(currentVm);
-}
-function renderPayoutSheets(vm) {
-  if (vm.blocked) return;
-  if (isOpen('sheet-fix')) render(html`<${FixBody} vm=${vm} />`, sheetBody('sheet-fix'));
-  if (isOpen('sheet-stacks')) render(html`<${StacksBody} vm=${vm} />`, sheetBody('sheet-stacks'));
-  if (isOpen('sheet-tidy')) render(html`<${TidyBody} vm=${vm} plan=${pendingTradeUp} />`, sheetBody('sheet-tidy'));
+// The distribution extras are full Pay subpages, so they keep their place in
+// the navigation stack and have a proper back affordance.
+export function openPayoutPage(which) {
+  if (!currentVm || currentVm.blocked) return;
+  const pages = {
+    fix: { title: 'Envelopes already made', body: vm => html`<${FixBody} vm=${vm} />` },
+    stacks: { title: 'Stacks for a manager', body: vm => html`<${StacksBody} vm=${vm} />` },
+    tidy: { title: 'Tidy the drawer', body: vm => html`<${TidyBody} vm=${vm} plan=${pendingTradeUp} />` },
+  };
+  const page = pages[which];
+  if (page) pushPage({ key: 'pay:' + which, ...page }, 'pay');
 }
 
 function Extras({ vm, tradeUp }) {
@@ -366,9 +364,9 @@ function Extras({ vm, tradeUp }) {
   return html`<${List}>
     ${fx && (fx.rows?.length || fx.moves?.length) && html`<${Item} icon="envelope" title="Envelopes already made?"
       sub=${'Register ' + (a < 0 ? 'short ' : 'over ') + fmtMoney(Math.abs(a)) + (a < 0 ? ' — square up from the envelopes' : ' — top up from the register')}
-      onClick=${() => App.openPayoutSheet('fix')} />`}
-    <${Item} icon="cash" title="Stacks for a manager" sub=${stacksSub(vm)} tone=${given ? 'active' : ''} onClick=${() => App.openPayoutSheet('stacks')} />
-    ${tradeUp && html`<${Item} icon="swap" title="Tidy the drawer" sub=${'Swap extra small bills for ' + tradeUp.new20s + ' × $20'} onClick=${() => App.openPayoutSheet('tidy')} />`}
+      onClick=${() => App.openPayoutPage('fix')} />`}
+    <${Item} icon="cash" title="Stacks for a manager" sub=${stacksSub(vm)} tone=${given ? 'active' : ''} onClick=${() => App.openPayoutPage('stacks')} />
+    ${tradeUp && html`<${Item} icon="swap" title="Tidy the drawer" sub=${'Swap extra small bills for ' + tradeUp.new20s + ' × $20'} onClick=${() => App.openPayoutPage('tidy')} />`}
   <//>`;
 }
 
@@ -383,10 +381,8 @@ function Payout({ vm, errMsg, tradeDown, tradeUp }) {
   </div>`;
 }
 
-export function renderPayout(vm) {
+function prepare(vm) {
   currentVm = vm;
-  const root = $('payout-root');
-  if (!root) return;
   let errMsg = '';
   pendingTradeUp = pendingTradeDown = null;
   if (!vm.blocked) {
@@ -395,7 +391,16 @@ export function renderPayout(vm) {
     pendingTradeDown = errMsg && canTrade ? breakPlan(vm) : null;
     pendingTradeUp = !errMsg && canTrade ? safeTradeUp(vm) : null;
   }
-  render(currentSub('tips') === 'drawer' ? html`<${Payout} vm=${vm} errMsg=${errMsg}
-    tradeDown=${pendingTradeDown} tradeUp=${pendingTradeUp} />` : null, root);
-  renderPayoutSheets(vm);
+  return { errMsg, tradeDown: pendingTradeDown, tradeUp: pendingTradeUp };
+}
+
+export function DistributionTools({ vm }) {
+  const { errMsg, tradeDown, tradeUp } = prepare(vm);
+  return html`<${Payout} vm=${vm} errMsg=${errMsg} tradeDown=${tradeDown} tradeUp=${tradeUp} />`;
+}
+
+// Kept as a render-loop hook: it refreshes the plans used by an open Pay
+// subpage even while the Bills tab itself is not visible.
+export function renderPayout(vm) {
+  prepare(vm);
 }

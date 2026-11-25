@@ -1,10 +1,10 @@
-// Navigation: four tabs — Home · Staff · Tips · Shift — changed only by
+// Navigation: five tabs — Home · Staff · Tips · Pay · Shift — changed only by
 // tapping the tab bar (Settings is a page opened from the menu). Inside a tab:
 //
 //   sub-tabs   every tab has them, as the tab row under the header's title
-//              (Home: Pay · Shift · Bills · Split; Staff: People · Shift;
-//              Tips: Cash · Pools · Drawer; Settings: Shift · Sessions ·
-//              App). A sideways swipe on the page moves between them; the
+//              (Staff: People · Shift; Tips: one cash entry per pool / part;
+//              Pay: Payouts · Bills · Split · Bonus; Shift: Shift · Pools).
+//              A sideways swipe on the page moves between them; the
 //              page and the row's underline follow the finger (onSwipe),
 //              past the last one it rubber-bands. A swipe right on the
 //              first one pulls the menu in from the left (the `edge`
@@ -33,15 +33,10 @@ import { render } from './preact.js';
 const $ = id => document.getElementById(id);
 const root = () => document.documentElement;
 
-export const TABS = ['home', 'staff', 'tips', 'shift'];
-export const TITLES = { home: 'Home', staff: 'Staff', tips: 'Tips', shift: 'Shift' };
+export const TABS = ['home', 'staff', 'tips', 'pay', 'shift'];
+export const TITLES = { home: 'Home', staff: 'Staff', tips: 'Tips', pay: 'Pay', shift: 'Shift' };
 export const SUBS = {
-  home: [
-    { value: 'pay', label: 'Pay' },
-    { value: 'shift', label: 'Shift' },
-    { value: 'bills', label: 'Bills' },
-    { value: 'split', label: 'Split' },
-  ],
+  home: [],
   staff: [
     { value: 'people', label: 'People' },
     { value: 'shift', label: 'Shift' },
@@ -50,7 +45,12 @@ export const SUBS = {
   // (render/tips.js sets them with setSubs), then the Drawer.
   tips: [
     { value: 'cash', label: 'Tips' },
-    { value: 'drawer', label: 'Drawer' },
+  ],
+  pay: [
+    { value: 'payouts', label: 'Payouts' },
+    { value: 'bills', label: 'Bills' },
+    { value: 'split', label: 'Split' },
+    { value: 'bonus', label: 'Bonus' },
   ],
   shift: [
     { value: 'shift', label: 'Shift' },
@@ -70,12 +70,12 @@ export function setSubs(tab, list) {
 
 // Older saved tab names.
 export function normalizeTab(name) {
-  const legacy = { summary: 'home', payout: 'tips', bills: 'tips', more: 'tips', cash: 'tips', settings: 'shift' };
+  const legacy = { summary: 'home', payout: 'pay', bills: 'pay', more: 'pay', drawer: 'pay', cash: 'tips', settings: 'shift' };
   return legacy[name] || (TABS.includes(name) ? name : 'home');
 }
 
 let cur = 'home';
-const sub = Object.fromEntries(Object.entries(SUBS).map(([t, l]) => [t, l[0].value]));
+const sub = Object.fromEntries(Object.entries(SUBS).map(([t, l]) => [t, l[0]?.value ?? null]));
 const stacks = Object.fromEntries(TABS.map(t => [t, []]));
 const scrollOf = {};
 const listeners = [];

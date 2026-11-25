@@ -12,9 +12,6 @@ export const SHEETS = {
   'sheet-bonus': { title: 'Closer bonus & chump' },
   'sheet-close': { title: 'Close-time what-if' },
   'sheet-pool': { title: 'Pool', tall: true },
-  'sheet-fix': { title: 'Envelopes already made' },
-  'sheet-stacks': { title: 'Stacks for a manager' },
-  'sheet-tidy': { title: 'Tidy the drawer' },
   'sheet-bill-ranges': { title: 'Bill counts by checkpoint' },
   'sheet-adjust': { title: 'Register over / short' },
 };

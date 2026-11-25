@@ -166,7 +166,7 @@ export function Empty({ icon = 'dollar', logo = false, title, body, action }) {
   </div>`;
 }
 
-// Blocked / pristine state shared by the result pages (Home, Tips › Drawer): the
+// Blocked / pristine state shared by the result pages (Home, Pay): the
 // close-out steps as a checklist — Staff → Tips → the payout — each tappable,
 // with what's missing (or the error to fix) under it.
 export function Blocked({ vm }) {
