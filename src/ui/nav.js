@@ -41,10 +41,7 @@ export const SUBS = {
     { value: 'overview', label: 'Overview' },
     { value: 'shift', label: 'Shift' },
   ],
-  staff: [
-    { value: 'people', label: 'People' },
-    { value: 'shift', label: 'Shift' },
-  ],
+  staff: [],
   // Tips' sub-tabs follow the shift: one per pool and per part of a pool.
   tips: [
     { value: 'cash', label: 'Tips' },

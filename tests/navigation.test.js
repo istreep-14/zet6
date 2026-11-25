@@ -70,14 +70,14 @@ await wait(200);
 assert.equal(nav.currentSub('pay'), 'bonus');
 assert.equal(nav.currentTab(), 'pay', 'tabs only change from the tab bar');
 
-// Every tab has sub-tabs; a swipe on Staff steps them, never the tab.
+// Staff has one page; a swipe never changes the bottom tab.
 nav.showTab('staff');
-assert.equal(nav.currentSub(), 'people');
+assert.equal(nav.currentSub(), null);
 swipe('mainContent', 300, 100);
 await wait(200);
 assert.equal(nav.currentTab(), 'staff');
-assert.equal(nav.currentSub(), 'shift');
-for (const t of ['staff', 'pay', 'shift']) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs');
+assert.equal(nav.currentSub(), null);
+for (const t of ['home', 'pay', 'shift']) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs');
 
 // Old saved tab names.
 assert.equal(nav.normalizeTab('summary'), 'home');

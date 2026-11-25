@@ -110,7 +110,7 @@ function go(dir) {
 // Focus a cell by its key: keypad cells focus their input (which opens the
 // keypad there); text cells (names) just take focus.
 export function focusCell(key) {
-  const el = document.querySelector(`[data-kcell="${key}"]`);
+  const el = [...document.querySelectorAll(`[data-kcell="${key}"]`)].find(node => node.offsetParent);
   if (!el) return false;
   const input = el.matches('input') ? el : el.querySelector('[data-kinput]');
   if (input) {

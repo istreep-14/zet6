@@ -12,11 +12,13 @@
 
 import { fmtMoney } from '../util.js';
 import { SHIFT_TYPES, SHIFT_LABEL, PRESETS, PRESET_LABEL, PRESET_HINT } from '../shifts.js';
-import { html, render } from '../ui/preact.js';
+import { html, render, useState } from '../ui/preact.js';
 import { cx, Icon, Field, Section, List, Item, SwitchRow, Button, RoundIcon } from '../ui/pkit.js';
-import { currentSub, pushPage } from '../ui/nav.js';
+import { currentSub, currentTab, pushPage } from '../ui/nav.js';
 import { SessionDate, sessionInfo, SupportDefault } from './settings.js';
 import { WindowEdge, SharedBy, SupportBox, FormRow, windowSub, openCashSheet } from './tips.js';
+import { ShiftDefaults } from './staff.js';
+import { fmtDay } from './tabs.js';
 
 const $ = id => document.getElementById(id);
 const POOL_HUES = ['var(--accent)', 'var(--pool-2)', 'var(--pool-3)', 'var(--pool-4)'];
@@ -49,22 +51,27 @@ const sharedBy = pool => [pool.roles.bartender && 'Bar', pool.roles.server && 'S
 
 // ── Shift ────────────────────────────────────────────────────────────────────
 function ShiftInfo({ vm }) {
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const s = vm.state;
   const { sessions, currentId } = sessionInfo();
   const entry = sessions.find(e => e.id === currentId) || {};
   const type = s.meta.shiftType || 'night';
   return html`<div class="flex flex-col gap-6">
+    <${Section} title="Date">
+      <${List}><${Item} icon="calendar" title=${fmtDay(s.meta.date)} sub="Shift date" aria-expanded=${String(calendarOpen)} onClick=${() => setCalendarOpen(!calendarOpen)} /><//>
+      ${calendarOpen && html`<${SessionDate} vm=${vm} />`}
+    <//>
     <${Section} title="Shift type" footer="Lays out the pools: Night is one pool for the whole shift; Day is Day (bar + servers until the servers are out) then Mid (the bar’s). Change a pool on Pools.">
       <${Choice} value=${type} onPick=${t => App.setShiftType(t)}
         items=${SHIFT_TYPES.map(t => ({ value: t, label: SHIFT_LABEL[t], icon: TYPE_ICON[t], hint: TYPE_HINT[t] }))} />
     <//>
-    <${Section} title="Who works"><${List}>
+    <${Section} title="Settings"><${List}>
       <${SwitchRow} icon="users" on=${s.settings.allRoles} onClick=${() => App.toggleSetting('allRoles')} label="Servers & support"
         hint=${s.settings.allRoles ? 'Role sections on Staff, who shares each pool, the support tip-out' : 'Everyone’s a bartender (a night’s usual)'} />
     <//><//>
     <${Field} page label="Session name" value=${entry.name || ''} placeholder="e.g. Brunch, Private party" maxlength="40" enterkeyhint="done"
       onChange=${e => App.renameCurrent(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} />
-    <${Section} title="Date"><${SessionDate} vm=${vm} /><//>
+    ${currentTab() === 'shift' && html`<${ShiftDefaults} vm=${vm} />`}
     <${Section} title="This session"><${List}>
       <${Item} icon="download" title="Export JSON" chevron=${false} onClick=${() => App.exportSession()} />
       <${Item} icon="trash" tone="danger" title="Delete session" chevron=${false} onClick=${() => App.deleteSession(currentId)} />

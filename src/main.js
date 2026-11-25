@@ -171,6 +171,7 @@ function preview(apply, focus = null) {
     renderStaff(lastVm);
     renderHome(lastVm, sessionName());
     renderPay(lastVm, sessionName());
+    renderShift(lastVm);
     return;
   }
   const base = snapOf(lastVm);
@@ -183,6 +184,7 @@ function preview(apply, focus = null) {
   previewing = true;
   renderStaff(pv, { preview: true });
   if (currentTab() === 'home') renderHome(pv, sessionName());   // overview table edits live
+  if (currentTab() === 'shift') renderShift(pv);
   return pv;                                     // the wheel shows its figures
 }
 

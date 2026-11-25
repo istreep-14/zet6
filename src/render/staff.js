@@ -16,12 +16,11 @@ import { ROLES } from '../store.js';
 import { fmtHrs, fmtMoney } from '../util.js';
 import { parseTime, fmtTimeAbs, fmtClockShort, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, absToEdgeRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { getRoster } from '../roster.js';
-import { html, render } from '../ui/preact.js';
+import { html, render, useState } from '../ui/preact.js';
 import { cx, Icon, Button, Alert, Seg, SwitchRow, List, Item, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_TINT, ROLE_PLURAL, Sentinel, THEAD, Avatar, hueIndex } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 import { DragTime } from '../ui/dragtime.js';
 import { openKeypad, activeKey, bufferAbs } from '../ui/keypad.js';
-import { currentSub } from '../ui/nav.js';
 import { RoleTimes } from './settings.js';
 
 export { DragTime };
@@ -195,8 +194,6 @@ function shiftCell(field) {
   const active = activeKey() === key;
   return { kcell: key, active, preview: active ? bufferAbs() : null, onTap: () => openShiftCell(field) };
 }
-
-const view = () => currentSub('staff') || 'people';
 
 // ── Warnings (only when something needs a look) ─────────────────────────────
 function Note({ vm }) {
@@ -404,6 +401,7 @@ function People({ vm }) {
         ${g.people.map(p => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} allClose=${allClose} />`)}`)}
       <${AddRow} vm=${vm} />
     <//>
+    <${StaffDefaults} vm=${vm} />
     <${SavedNames} vm=${vm} />
     ${done && (vm.totalCash > 0 && !vm.blocked
       ? html`<${NextStep} tab="home" label="See who gets what" sub=${fmtMoney(vm.totalCash) + ' over ' + fmtHrs(hours) + ' hours'} />`
@@ -426,7 +424,7 @@ function ShiftTimes({ vm }) {
   <//>`;
 }
 
-function Shift({ vm }) {
+export function ShiftDefaults({ vm }) {
   return html`<div class="flex flex-col gap-5">
     <${Section} title="Shift" footer="Anyone without a time of their own starts at the open. Closers, and anyone without an Out, leave at the close.">
       <${ShiftTimes} vm=${vm} />
@@ -439,8 +437,23 @@ function Shift({ vm }) {
   </div>`;
 }
 
+function StaffDefaults({ vm }) {
+  const [open, setOpen] = useState(false);
+  const time = abs => abs == null ? '—' : fmtTimeAbs(abs);
+  const g = vm.state.defaults.global;
+  const start = parseTime(g.in), end = parseTime(g.out);
+  const startAbs = start.value == null ? null : inAbsOf(start);
+  const endAbs = end.value == null ? null : afterAbsOf(end, startAbs ?? 17);
+  return html`<div class="flex flex-col gap-3">
+    <${List}><${Item} icon="clock" title="Default times" sub="Used when a person has no time of their own"
+      value=${time(startAbs) + ' – ' + time(endAbs)} valueTone="text-ink-3" aria-expanded=${String(open)}
+      onClick=${() => setOpen(!open)} /><//>
+    ${open && html`<${ShiftDefaults} vm=${vm} />`}
+  </div>`;
+}
+
 function Staff({ vm }) {
-  return view() === 'shift' ? html`<${Shift} vm=${vm} />` : html`<${People} vm=${vm} />`;
+  return html`<${People} vm=${vm} />`;
 }
 
 // ── A person's drawer ────────────────────────────────────────────────────────
