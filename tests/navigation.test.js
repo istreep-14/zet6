@@ -50,18 +50,18 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
 nav.showTab('pay');
 assert.equal(nav.currentTab(), 'pay');
-assert.equal(nav.currentSub(), 'payouts');
+assert.equal(nav.currentSub(), 'bills');
 
 // A left swipe on Pay steps to the next sub-tab; never to another tab.
 swipe('mainContent', 300, 100);
 await wait(200);
-assert.equal(nav.currentSub('pay'), 'bills');
+assert.equal(nav.currentSub('pay'), 'split');
 assert.equal(nav.currentTab(), 'pay');
 
 // An interrupted swipe does nothing.
 swipe('mainContent', 300, 100, 'touchcancel');
 await wait(200);
-assert.equal(nav.currentSub('pay'), 'bills', 'an interrupted gesture must not navigate');
+assert.equal(nav.currentSub('pay'), 'split', 'an interrupted gesture must not navigate');
 
 // Past the last sub-tab: nothing (no tab change, no panel).
 nav.setSub('pay', 'bonus');

@@ -1,8 +1,9 @@
-// Home and Pay (Preact). Home is the close-out landing page; Pay owns the
-// finished distribution — payout rows, envelopes, the split and bonuses.
+// Home and Pay (Preact). Home shows the payout overview and shift timeline;
+// Pay holds the detailed distribution, split and bonuses.
 //
-//   Pay tabs    Payouts  one row per person and the total
-//               Bills    envelopes, exact-change status and drawer tools
+//   Home tabs   Overview  one row per person and the total
+//               Shift     everyone's shift on one time axis
+//   Pay tabs    Bills    envelopes, exact-change status and drawer tools
 //               Split    the worksheet, pool allocation and math table
 //               Bonus    closer bonuses and the chump
 //   subpages    a person (take-home, hours, pools, envelope), a pool, and
@@ -101,7 +102,7 @@ function snapPay(vm) {
   return m;
 }
 function trackMarks(vm) {
-  const here = currentTab() === 'pay';
+  const here = currentTab() === 'home';
   if (vm.blocked || !vm.shares) { if (!here) onHome = false; return; }
   const now = snapPay(vm);
   if (!here) {
@@ -382,10 +383,7 @@ function Split({ vm, pageTab = 'home' }) {
 function Home({ vm, name }) {
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   return html`<div class="flex flex-col gap-5">
-    <${Section} title=${name || 'This shift'}>
-      <${List}><${Item} icon="cash" title="Ready to distribute" sub=${vm.shares.perPerson.length + (vm.shares.perPerson.length === 1 ? ' person is ready to be paid' : ' people are ready to be paid')}
-        value=${fmtMoney(vm.shares.perPerson.reduce((t, p) => t + p.final, 0) + vm.shares.leftover)} onClick=${() => App.tab('pay')} /><//>
-    <//>
+    ${currentSub('home') === 'shift' ? html`<${Shift} vm=${vm} />` : html`<${Pay} vm=${vm} name=${name || 'Payouts'} pageTab="home" />`}
     <${AdjustNote} vm=${vm} />
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map((w, i) => html`<${Alert} key=${i}>${w}<//>`)}
   </div>`;
@@ -397,8 +395,7 @@ function PayPage({ vm, name }) {
   return html`<div class="flex flex-col gap-5">
     ${view === 'bills' ? html`<${DistributionTools} vm=${vm} /><${Bills} vm=${vm} pageTab="pay" />`
       : view === 'split' ? html`<${Split} vm=${vm} pageTab="pay" />`
-      : view === 'bonus' ? html`<${BonusPanel} vm=${vm} />`
-      : html`<${Pay} vm=${vm} name=${name || 'Payouts'} pageTab="pay" />`}
+      : html`<${BonusPanel} vm=${vm} />`}
     <${AdjustNote} vm=${vm} />
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map((w, i) => html`<${Alert} key=${i}>${w}<//>`)}
   </div>`;
@@ -462,7 +459,7 @@ function PersonView({ vm, id }) {
   </div>`;
 }
 
-function PoolView({ vm, id }) {
+function PoolView({ vm, id, tab }) {
   const s = !vm.blocked && vm.shares;
   const i = s ? s.perPool.findIndex(p => p.id === id) : -1;
   const pool = i >= 0 ? s.perPool[i] : null;
@@ -477,7 +474,7 @@ function PoolView({ vm, id }) {
     <${Section} title=${html`<${PoolDot} i=${i} />${pool.label}`}
       aside=${html`<span class="tabular-nums"><${Times} a=${pool.startAbs} b=${pool.endAbs} /></span>`}
       footer=${pool.support?.cut > 0 ? 'Support’s tip-out (' + fmtMoney(pool.support.cut) + ') comes off the top; the rest is shared by hours. Shares are exact, before rounding.' : 'Shares are exact, before rounding.'}>
-      <${List}>${people.length ? people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id)} lead=${html`<${PersonAv} vm=${vm} p=${p} />`}
+      <${List}>${people.length ? people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id, tab)} lead=${html`<${PersonAv} vm=${vm} p=${p} />`}
         title=${html`<span class="truncate">${p.name}</span>`}
         sub=${fmtHrs(p.perPool[pool.id].hours) + 'h in this pool'}
         value=${'$' + r2(p.perPool[pool.id].raw)} valueTone=${isSup(p) ? SUP_TEXT : ''} />`)
@@ -505,7 +502,7 @@ export function openPool(id, tab = 'home') {
       const pl = !vm.blocked && vm.shares?.perPool.find(x => x.id === id);
       return pl ? [{ v: fmtMoney(pl.total), l: 'in tips' }, { v: fmtHrs(pl.tippedHours), l: 'h', tight: true }, { v: rate2(pl.rate), l: '/h', tight: true }] : [];
     },
-    body: vm => html`<${PoolView} vm=${vm} id=${id} />`,
+    body: vm => html`<${PoolView} vm=${vm} id=${id} tab=${tab} />`,
   }, tab);
 }
 

@@ -56,7 +56,7 @@ export function renderChrome(vm = last?.vm, sessionName = last?.sessionName || '
   });
   renderBadges(vm);
   // Home's views mean nothing until there's a split (it shows the checklist).
-  const subs = tab === 'home' && vm.blocked ? [] : subsOf(tab);
+  const subs = ['home', 'pay'].includes(tab) && vm.blocked ? [] : subsOf(tab);
   document.documentElement.classList.toggle('no-tabs', !subs.length);
   const hdr = $('hdr');
   if (hdr) render(html`<${Header} vm=${vm} tab=${tab} subs=${subs} sessionName=${sessionName} />`, hdr);

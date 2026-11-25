@@ -97,8 +97,8 @@ function render(s) {
 // A landed edit marks the figures it moved (vm.changes) for SHOW ms, then
 // they're repainted plain. An edit in progress (a dragged or typed time)
 // re-runs the split on a copy of the state and paints Staff with the
-// would-be numbers (vm.preview); nothing is written until it lands. Pay's
-// payout table follows a live preview when it is visible.
+// would-be numbers (vm.preview); nothing is written until it lands. Home's
+// overview table follows a live preview when it is visible.
 // Returns the preview view model (the wheel picker shows its figures).
 let clearTimer = 0;
 function clearChangesLater() {
@@ -182,7 +182,7 @@ function preview(apply, focus = null) {
   pv.preview = { base, focus };
   previewing = true;
   renderStaff(pv, { preview: true });
-  if (currentTab() === 'pay') renderPay(pv, sessionName());     // payout table edits live
+  if (currentTab() === 'home') renderHome(pv, sessionName());   // overview table edits live
   return pv;                                     // the wheel shows its figures
 }
 
@@ -331,7 +331,7 @@ window.App = {
     if (p) p[field] = raw;
   }, id),
   previewDefault: (field, raw) => preview(raw == null ? null : s => { s.defaults.global[field] = String(raw).trim(); }),
-  // The tips total by a nudge (Pay › Payouts' table, one pool): the wheel
+  // The tips total by a nudge (Home › Overview's table, one pool): the wheel
   // previews it, a landed nudge gets Undo.
   previewCash: delta => preview(!delta ? null : s => nudgeCash(s, delta)),
   nudgeCash(delta) {
@@ -702,7 +702,7 @@ const calm = () => !menuOpen() && !document.querySelector('.sheet-backdrop.open'
   && !document.documentElement.classList.contains('wheel-open')
   && !document.documentElement.classList.contains('keypad-open');
 // A swipe right off a tab's first sub-tab pulls the menu in (menuEdge).
-initNav({ can: calm, subsOn: () => !(currentTab() === 'pay' && lastVm.blocked), edge: menuEdge });
+initNav({ can: calm, subsOn: () => !(['home', 'pay'].includes(currentTab()) && lastVm.blocked), edge: menuEdge });
 initMenu();
 
 // Reveal once Tailwind has styled the page (it compiles in the browser): a

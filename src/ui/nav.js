@@ -3,7 +3,8 @@
 //
 //   sub-tabs   every tab has them, as the tab row under the header's title
 //              (Staff: People · Shift; Tips: one cash entry per pool / part;
-//              Pay: Payouts · Bills · Split · Bonus; Shift: Shift · Pools).
+//              Home: Overview · Shift; Pay: Bills · Split · Bonus;
+//              Shift: Shift · Pools).
 //              A sideways swipe on the page moves between them; the
 //              page and the row's underline follow the finger (onSwipe),
 //              past the last one it rubber-bands. A swipe right on the
@@ -36,18 +37,19 @@ const root = () => document.documentElement;
 export const TABS = ['home', 'staff', 'tips', 'pay', 'shift'];
 export const TITLES = { home: 'Home', staff: 'Staff', tips: 'Tips', pay: 'Pay', shift: 'Shift' };
 export const SUBS = {
-  home: [],
+  home: [
+    { value: 'overview', label: 'Overview' },
+    { value: 'shift', label: 'Shift' },
+  ],
   staff: [
     { value: 'people', label: 'People' },
     { value: 'shift', label: 'Shift' },
   ],
-  // Tips' sub-tabs follow the shift: one per pool and per part of a pool
-  // (render/tips.js sets them with setSubs), then the Drawer.
+  // Tips' sub-tabs follow the shift: one per pool and per part of a pool.
   tips: [
     { value: 'cash', label: 'Tips' },
   ],
   pay: [
-    { value: 'payouts', label: 'Payouts' },
     { value: 'bills', label: 'Bills' },
     { value: 'split', label: 'Split' },
     { value: 'bonus', label: 'Bonus' },
