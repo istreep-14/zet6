@@ -432,7 +432,7 @@ export const T_HEAD = 't-cap text-ink-3';
 // column stays solid while the table scrolls sideways).
 export const TOTAL_FILL = 'bg-[color-mix(in_srgb,var(--surface-2)_60%,var(--zbase))]';
 // `lines`: hairlines between columns too (a grid — envelopes, math).
-export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, scroll = false, lines = false, class: cls = '', ...rest }) {
+export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, firstWide = false, scroll = false, lines = false, class: cls = '', ...rest }) {
   const align = c => ({ left: 'text-left', right: 'text-right' }[c.align] || 'text-center');
   const first = cx('pl-4 pr-2 text-left', stickyFirst && 'sticky left-0 z-[1] bg-inherit');
   const cell = (c, i) => cx('px-1.5 tabular-nums', i === 0 ? first : align(c), i === cols.length - 1 && i > 0 && 'pr-4', c.hl && 'bg-accent/12');
@@ -445,7 +445,7 @@ export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, sc
       <tbody>${rows.map((r, n) => r.section
         ? html`<tr key=${'s' + n} class="bg-[var(--zbase)]"><td colspan=${cols.length} class="t-cap px-4 pb-1 pt-3 text-ink-3">${r.section}</td></tr>`
         : html`<tr key=${r.key ?? n} class=${cx(zebra(n), r.onClick && 'cursor-pointer transition active:bg-surface-2', r.tone === 'muted' && 'text-ink-2')} onClick=${r.onClick}>
-            ${r.cells.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-12', i === 0 && 'max-w-[9rem] truncate')}>${v}</td>`)}
+            ${r.cells.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-12', i === 0 && !firstWide && 'max-w-[9rem] truncate')}>${v}</td>`)}
           </tr>`)}</tbody>
       ${foot && html`<tfoot><tr class=${TOTAL_FILL}>
         ${foot.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-14')}>${v}</td>`)}

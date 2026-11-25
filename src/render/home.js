@@ -158,7 +158,7 @@ function PayValue({ vm, p }) {
 const CELL = 'h-8 min-w-[1.5rem] rounded-md text-[1rem] tabular-nums transition';
 // Every time reads the same quiet grey, typed or following the default.
 const TIME_TONE = () => 'text-ink-3';
-const TableName = ({ vm, p }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-2"><${PersonAv} vm=${vm} p=${p} size="sm" /><span class="flex min-w-0 flex-col"><span class="truncate font-semibold">${p.name}</span><span class=${cx('t-small inline-flex items-center gap-1.5 text-ink-3', isSup(p) && SUP_TEXT)}>${p.role}${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}</span></span></span>`;
+const TableName = ({ vm, p, sub }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-2"><${PersonAv} vm=${vm} p=${p} size="sm" /><span class="flex min-w-0 flex-col gap-1"><span class="inline-flex items-center gap-1.5 truncate font-semibold">${p.name}${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}</span>${sub}</span></span>`;
 function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
   const s = vm.shares;
   const raw = id => vm.state.staff.find(x => x.id === id);
@@ -171,18 +171,15 @@ function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
           onSet=${v => App.nudgeCash(v - total)} onPreview=${v => App.previewCash(v == null ? null : v - total)}
           onTap=${() => App.tab('tips')} /></span>`
     : money(total, marks?.$total);
-  return html`<${Table} fixed class="payout-ledger"
-    cols=${[{ label: 'Person', w: 'w-[46%]' }, { label: 'Shift', w: 'w-[30%]' }, { label: 'Take home', align: 'right', w: 'w-[24%]' }]}
+  return html`<${Table} fixed firstWide class="payout-ledger"
+    cols=${[{ label: 'Person', w: 'w-[76%]' }, { label: 'Take home', align: 'right', w: 'w-[24%]' }]}
     rows=${[
       ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id, pageTab),
-        cells: [html`<${TableName} vm=${vm} p=${p} />`,
-          html`<span class="flex flex-col items-center gap-0.5"><span class="t-head text-accent">${fmtHrs(hoursOf(p))}h</span><span class="inline-flex items-center gap-1 text-ink-3">${cell(p, 'in')}<span>–</span>${cell(p, 'out')}</span></span>`,
+        cells: [html`<${TableName} vm=${vm} p=${p} sub=${html`<span class="inline-flex items-center gap-1.5 text-ink-3"><span class="inline-flex items-center gap-1">${cell(p, 'in')}<span>→</span>${cell(p, 'out')}</span><${Badge} tone="gold">${fmtHrs(hoursOf(p))}h<//></span>`} />`,
           money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : 'text-money')] })),
-      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, html`<span class="t-small text-ink-3">Left after rounding</span>`, money(s.leftover, null)] }] : []),
+      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, money(s.leftover, null)] }] : []),
     ]}
-    foot=${[html`<${RowLabel}>Total<//>`,
-      html`<span class="flex flex-col items-center gap-0.5"><span class="t-head text-accent">${fmtHrs(hours)}h</span><span class="inline-flex items-center gap-1 text-ink-3"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare /><span>–</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare /></span></span>`,
-      tipsTotal]} />`;
+    foot=${[html`<${RowLabel}>Total<//><span class="ml-2 inline-flex items-center gap-1.5 text-ink-3"><span class="inline-flex items-center gap-1"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare /><span>→</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare /></span><${Badge} tone="gold">${fmtHrs(hours)}h<//></span>`, tipsTotal]} />`;
 }
 // The total's change while a preview runs: everyone's pay plus the chump.
 const payDeltaSum = (vm, now) => {
