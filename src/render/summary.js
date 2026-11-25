@@ -634,7 +634,7 @@ function MathTable({ vm }) {
 // name and the 4s, 5s and 6s stack in a column. Then the chump and the Total
 // (open | close · tipped hours · paid out — hold the amount for its wheel).
 const PI_COLS = 'grid grid-cols-[minmax(0,max-content)_auto_auto_minmax(0,1fr)_auto_auto] gap-x-2';
-const PI_ROW = 'li col-span-full grid grid-cols-subgrid items-center gap-y-1.5 px-4 pb-1.5 pt-2.5 text-left';
+const PI_ROW = 'relative col-span-full grid grid-cols-subgrid items-center gap-y-1.5 border-b border-line px-4 pb-1.5 pt-2.5 text-left';
 const PI_NAME = 'min-w-0 truncate text-[1.0625rem] font-medium leading-snug';
 const PI_MONEY = 'text-[1.125rem] font-semibold leading-tight tracking-tight';
 const PI_TAIL = 'row-span-2 self-center';
@@ -660,7 +660,7 @@ function ShiftLine({ span, p }) {
   const brk = p.brkLen > 0 && p.brkStart != null;
   return html`<span class="relative col-start-1 col-end-5 h-[3px] rounded-full bg-ink/[.05]" aria-hidden="true">
     <span class="absolute inset-y-0 rounded-full bg-[var(--hue)] opacity-90" style=${{ left: a + '%', width: Math.max(0, b - a) + '%' }}></span>
-    ${brk && html`<span class="absolute -inset-y-px bg-surface" style=${{ left: posOf(span, p.brkStart) + '%', width: Math.max(0, posOf(span, p.brkStart + p.brkLen) - posOf(span, p.brkStart)) + '%' }}></span>`}
+    ${brk && html`<span class="absolute -inset-y-px bg-bg" style=${{ left: posOf(span, p.brkStart) + '%', width: Math.max(0, posOf(span, p.brkStart + p.brkLen) - posOf(span, p.brkStart)) + '%' }}></span>`}
   </span>`;
 }
 
@@ -721,7 +721,7 @@ function PayItems({ vm, name }) {
     <span>Tap a time to type it · hold for the wheel</span>
     ${anySup && html`<span>Support is a tip-out, not counted in hours</span>`}</span>`;
   return html`<${Section} title=${name || 'Payouts'} aside=${ordered.length + (ordered.length === 1 ? ' person' : ' people')} footer=${footer}>
-    <${List} class=${PI_COLS}>
+    <div class=${PI_COLS}>
       ${ordered.map(p => html`<${PayItem} key=${p.id} vm=${vm} p=${p} before=${was(p.id)} span=${span} />`)}
       ${s.leftover > 0 && html`<button style=${{ '--inset': '1rem' }} class=${cx(PI_ROW, 'pb-2.5 transition active:bg-surface-2')} onClick=${() => App.openBonus()}>
         <span class="text-[1.0625rem] font-medium leading-snug text-ink-2">Chump</span>
@@ -729,7 +729,7 @@ function PayItems({ vm, name }) {
         <span class="col-start-5 pl-2 text-right text-[1.0625rem] font-semibold tabular-nums text-ink-2">${fmtMoney(s.leftover)}</span>
         <${Icon} name="chevR" class="col-start-6 ml-1.5 size-4 text-ink-3" />
       </button>`}
-      <div style=${{ '--hue': 'var(--ink-3)', '--inset': '1rem' }} class=${cx(PI_ROW, 'bg-surface-2/60 pb-2.5')}>
+      <div style=${{ '--hue': 'var(--ink-3)', '--inset': '1rem' }} class=${cx(PI_ROW, 'border-b-0 pb-2.5')}>
         <span class="text-[1.0625rem] font-semibold leading-snug">Total</span>
         <${TimePill}
           a=${html`<${DefaultTime} vm=${vm} field="in" bare cls=${PILL_IN} tone=${shiftTone(defaultMoved(vm, 'in'))} />`}
@@ -742,7 +742,7 @@ function PayItems({ vm, name }) {
         </span>
         <span class="col-start-6 ml-1.5 w-4"></span>
       </div>
-    <//>
+    </div>
   <//>`;
 }
 
