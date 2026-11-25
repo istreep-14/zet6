@@ -21,7 +21,7 @@ import { refreshSticky } from './ui/sticky.js';
 import { trackChanges, resetChanges, snapOf, SHOW } from './ui/changes.js';
 import { toast, copyText } from './ui/toast.js';
 import { summaryText } from './textout.js';
-import { renderHome, openPerson as homePerson } from './render/home.js';
+import { renderHome, openPerson as homePerson, resetHomeMarks } from './render/home.js';
 import { renderSettings } from './render/settings.js';
 import { renderMenu, openMenu, closeMenu, menuOpen, menuEdge, initMenu } from './render/menu.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
@@ -185,6 +185,7 @@ function activate(next) {
   next.ui.activeTab = landingTab(next);
   closeAllSheets();
   resetNav();
+  resetHomeMarks();                 // another session's pay isn't a change
   store.replaceState(next);
   next.staff.forEach(p => rememberName(p.name, p.role));
   showTab(next.ui.activeTab);

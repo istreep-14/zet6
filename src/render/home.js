@@ -15,12 +15,12 @@
 
 import { DENOMS, fmtHrs, fmtMoney } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Table, Denom, Badge, Avatar, RoundIcon, RowLabel,
+import { cx, Icon, Delta, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Table, Denom, Badge, Avatar, RoundIcon, RowLabel,
   THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL, hueIndex, hueVar } from '../ui/pkit.js';
 import { fmtBreak, nightSpan, AxisLabels } from './staff.js';
 import { smallBillsNeeded } from './tabs.js';
 import { EnvelopeTable, Worksheet } from './payout.js';
-import { currentSub, pushPage } from '../ui/nav.js';
+import { currentSub, currentTab, pushPage } from '../ui/nav.js';
 
 const $ = id => document.getElementById(id);
 
@@ -85,14 +85,99 @@ function AdjustNote({ vm }) {
     sub=${'Tips re-split on ' + fmtMoney(vm.totalCash) + ' (was ' + fmtMoney(vm.totalBefore) + ')'} />`;
 }
 
+// ── What changed since you last looked ──────────────────────────────────────
+// Home is read-only, so its pay only moves while you're on Staff or Tips.
+// Coming back to Home, each amount that moved since Home last showed it
+// carries a "+$4" / "−$3" mark (pkit Delta) for MARKS_MS; leaving Home (or
+// the marks fading) makes the current amounts the new baseline.
+const MARKS_MS = 8000;
+let seen = null, marks = null, marksTimer = 0, onHome = false;
+const keyOf = p => p.id + ':' + p.name;
+function snapPay(vm) {
+  const m = {};
+  vm.shares.perPerson.forEach(p => { m[keyOf(p)] = p.final; });
+  m.$total = vm.shares.perPerson.reduce((t, p) => t + p.final, 0) + vm.shares.leftover;
+  return m;
+}
+function trackMarks(vm) {
+  const here = currentTab() === 'home';
+  if (vm.blocked || !vm.shares) { if (!here) onHome = false; return; }
+  const now = snapPay(vm);
+  if (!here) {
+    if (onHome) { onHome = false; marks = null; clearTimeout(marksTimer); seen = now; }
+    return;
+  }
+  if (onHome) { seen = now; return; }
+  onHome = true;
+  marks = null;
+  if (seen) {
+    const stamp = Date.now(), d = {};
+    Object.keys(now).forEach(k => { if (k in seen && now[k] !== seen[k]) d[k] = { v: now[k] - seen[k], kind: 'change', stamp }; });
+    if (Object.keys(d).length) marks = d;
+  }
+  seen = now;
+  clearTimeout(marksTimer);
+  if (marks) marksTimer = setTimeout(() => { marks = null; if (lastVmRef) renderHome(lastVmRef); }, MARKS_MS);
+}
+export function resetHomeMarks() { seen = null; marks = null; onHome = false; clearTimeout(marksTimer); }
+const markOf = p => marks?.[keyOf(p)] || null;
+
+// Their shift as a thin bar on the night's axis, under their row (read-only:
+// the same picture as Home › Shift, small). A placed break is a gap.
+function ShiftBar({ vm, p, span }) {
+  if (!span || p.inAbs == null || p.outAbs == null || p.outAbs <= p.inAbs) return null;
+  const at = t => Math.max(0, Math.min(100, (t - span.a) / (span.b - span.a) * 100));
+  const a = at(p.inAbs), b = at(p.outAbs);
+  const b0 = p.brkStart == null ? null : at(p.brkStart);
+  const b1 = b0 == null ? null : at(p.brkStart + p.brkLen);
+  return html`<span aria-hidden="true" class="relative block h-1 w-full rounded-full bg-ink/[.07]">
+    <span class="absolute inset-y-0 rounded-full" style=${{ left: a + '%', width: (b - a) + '%', background: hueVar(hueIndex(vm.state, p.id)) }}></span>
+    ${b0 != null && b1 > b0 && html`<span class="absolute inset-y-0 bg-[var(--zbase)]" style=${{ left: b0 + '%', width: (b1 - b0) + '%' }}></span>`}
+  </span>`;
+}
+
 // ── Pay: one row per person ──────────────────────────────────────────────────
+// The amount reads like the pool page's: plain "$168" in the row's value
+// style (body, semibold, ink; support in its colour) — no small "$", no
+// green. A register over / short adds the change under it.
+const VALUE = 't-body font-semibold tabular-nums';
 function PayValue({ vm, p }) {
   const before = vm.sharesBefore?.perPerson.find(x => x.id === p.id)?.final;
   const ch = before == null ? 0 : p.final - before;
   return html`<span class="flex shrink-0 flex-col items-end leading-tight">
-    <${Money} value=${p.final} class=${cx('text-[1rem] font-semibold tracking-tight', isSup(p) ? SUP_TEXT : p.final > 0 ? 'text-money' : 'text-ink-3')} />
+    <span class="flex items-baseline gap-1.5"><${Delta} d=${markOf(p)} /><span class=${cx(VALUE, isSup(p) ? SUP_TEXT : p.final > 0 ? 'text-ink' : 'text-ink-3')}>${fmtMoney(p.final)}</span></span>
     ${vm.sharesBefore && html`<span class=${cx('t-small tabular-nums', ch < 0 ? 'text-bad' : ch > 0 ? 'text-good' : 'text-ink-3')}>${ch ? signed(ch) : 'same'}</span>`}
   </span>`;
+}
+
+// Pay as a list (default) or the one-line table — the switch sits in the
+// caption band (settings.show.payTable, remembered for every session).
+const payTable = vm => !!vm.state.settings.show?.payTable;
+function ViewSwitch({ vm, count }) {
+  const t = payTable(vm);
+  return html`<span class="flex items-center gap-2">${count}
+    <button class="-my-2 -mr-2 grid size-9 place-items-center rounded-full text-accent active:bg-surface-2" onClick=${() => App.toggleShow('payTable')}
+      aria-label=${t ? 'Show as a list' : 'Show as a table'}><${Icon} name=${t ? 'list' : 'table'} class="size-5" /></button></span>`;
+}
+
+// The one-line table: Name · In · Out · Hrs · Tips, every part in its own
+// column so the times, hours and amounts line up down the page.
+function PayTable({ vm, people, total, hours }) {
+  const s = vm.shares, R = vm.resolved;
+  const fr = t => t != null && Math.abs(t - Math.round(t)) > 0.01;
+  const mins = people.some(p => fr(p.inAbs) || fr(p.outAbs)) || fr(R?.anchorAbs) || fr(R?.closeAbs);
+  const T = t => (t == null ? '—' : html`<${Clock} abs=${t} mins=${mins} />`);
+  const money = (v, d, cls = '') => html`<span class="inline-flex items-baseline justify-end gap-1.5"><${Delta} d=${d} /><span class=${cx(VALUE, cls)}>${fmtMoney(v)}</span></span>`;
+  return html`<${Table} fixed
+    cols=${[{ label: 'Name', w: 'w-[40%]' }, { label: 'In', w: 'w-[15%]' }, { label: 'Out', w: 'w-[15%]' }, { label: 'Hrs', w: 'w-[11%]' }, { label: 'Tips', align: 'right', w: 'w-[19%]' }]}
+    rows=${[
+      ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id),
+        cells: [html`<${NameCell} vm=${vm} p=${p} />`, T(p.inAbs), T(p.outAbs),
+          html`<span class=${isSup(p) ? 'text-ink-3' : ''}>${fmtHrs(hoursOf(p))}</span>`,
+          money(p.final, markOf(p), isSup(p) ? SUP_TEXT : '')] })),
+      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, '', '', '', money(s.leftover, null)] }] : []),
+    ]}
+    foot=${[html`<${RowLabel}>Total<//>`, T(R?.anchorAbs), T(R?.closeAbs), fmtHrs(hours), money(total, marks?.$total)]} />`;
 }
 
 function Pay({ vm, name }) {
@@ -104,19 +189,27 @@ function Pay({ vm, name }) {
   const total = people.reduce((t, p) => t + p.final, 0) + s.leftover;
   const before = vm.sharesBefore && vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0) + vm.sharesBefore.leftover;
   const R = vm.resolved;
-  return html`<${Section} title=${name || 'Payouts'} aside=${people.length + (people.length === 1 ? ' person' : ' people')}
+  const count = people.length + (people.length === 1 ? ' person' : ' people');
+  const span = nightSpan(vm);
+  if (payTable(vm)) return html`<${Section} title=${name || 'Payouts'} aside=${html`<${ViewSwitch} vm=${vm} count=${count} />`}
+    footer=${html`<${Key} vm=${vm} people=${people} />`}>
+    <${PayTable} vm=${vm} people=${people} total=${total} hours=${hours} />
+  <//>`;
+  return html`<${Section} title=${name || 'Payouts'} aside=${html`<${ViewSwitch} vm=${vm} count=${count} />`}
     footer=${html`<${Key} vm=${vm} people=${people} />`}>
     <${List}>
       ${people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id)} lead=${html`<${PersonAv} vm=${vm} p=${p} />`}
         title=${html`${tint && html`<${RoleDot} role=${p.role} />`}<span class="truncate">${p.name}</span>`}
         sub=${html`<span class="tabular-nums"><${Times} a=${p.inAbs} b=${p.outAbs} /> · ${fmtHrs(hoursOf(p))}h</span>`}
-        trail=${html`<${PayValue} vm=${vm} p=${p} />`} />`)}
+        trail=${html`<${PayValue} vm=${vm} p=${p} />`}>
+        <div class="-mt-1 pl-[3.25rem]"><${ShiftBar} vm=${vm} p=${p} span=${span} /></div>
+      <//>`)}
       ${s.leftover > 0 && html`<${Item} lead=${html`<${RoundIcon} name="cash" />`} title="Chump" sub="Left after rounding · stays in the drawer"
         value=${fmtMoney(s.leftover)} />`}
       <${Item} class=${TOTAL_FILL} lead=${html`<${RoundIcon} name="sigma" />`} title="Total"
         sub=${html`<span class="tabular-nums"><${Times} a=${R?.anchorAbs} b=${R?.closeAbs} /> · ${fmtHrs(hours)}h · ${rate2(s.rate)}/h</span>`}
         trail=${html`<span class="flex shrink-0 flex-col items-end leading-tight">
-          <${Money} value=${total} class="text-[1rem] font-semibold tracking-tight text-money" />
+          <span class="flex items-baseline gap-1.5"><${Delta} d=${marks?.$total} /><span class=${VALUE}>${fmtMoney(total)}</span></span>
           ${before != null && html`<span class="t-small tabular-nums text-ink-3">was ${fmtMoney(before)}</span>`}
         </span>`} />
     <//>
@@ -273,6 +366,7 @@ let lastVmRef = null;
 export function renderHome(vm, sessionName = lastName) {
   lastName = sessionName;
   lastVmRef = vm;
+  trackMarks(vm);
   const root = $('home-root');
   if (root) render(html`<${Home} vm=${vm} name=${sessionName} />`, root);
 }
