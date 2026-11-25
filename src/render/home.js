@@ -170,15 +170,15 @@ function ViewSwitch({ vm, count }) {
 // with one pool the Total's tips are a tap-or-hold amount ($1 a row on the
 // wheel). While a cell or the wheel is moving, the tips preview the change
 // (payDelta); otherwise they carry the marks from your last visit.
-const CELL = 'h-8 w-full rounded-md bg-surface-2 text-[0.8125rem] tabular-nums transition';
+// Times as plain text — "5", "2", "11:30" (no a / p, no :00 on the hour) —
+// in the name's weight; the box only shows while it's being edited / held.
+const CELL = 'h-8 w-full rounded-md text-[1rem] tabular-nums transition';
+const TIME_TONE = set => (set ? 'text-ink' : 'text-ink-3');
 function PayTable({ vm, people, total, hours }) {
   const s = vm.shares;
-  const fr = t => t != null && Math.abs(t - Math.round(t)) > 0.01;
-  const mins = people.some(p => fr(p.inAbs) || fr(p.outAbs));
   const raw = id => vm.state.staff.find(x => x.id === id);
-  const cell = (p, field) => (raw(p.id) ? html`<${TimeCell} vm=${vm} p=${raw(p.id)} field=${field} cls=${CELL} mins=${mins} />` : '—');
+  const cell = (p, field) => (raw(p.id) ? html`<${TimeCell} vm=${vm} p=${raw(p.id)} field=${field} cls=${CELL} bare tone=${TIME_TONE} />` : '—');
   const money = (v, d, cls = '') => html`<span class="inline-flex items-baseline justify-end gap-1"><${Delta} d=${d} /><span class=${cx(VALUE, cls)}>${fmtMoney(v)}</span></span>`;
-  const shiftCls = cx(CELL, 'bg-ink/[.06]');
   const onePool = vm.state.pools.length === 1;
   const tipsTotal = onePool
     ? html`<span class="inline-flex items-baseline justify-end gap-1"><${Delta} d=${payDeltaSum(vm, total) || marks?.$total} />
@@ -196,8 +196,8 @@ function PayTable({ vm, people, total, hours }) {
       ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, '', '', '', money(s.leftover, null)] }] : []),
     ]}
     foot=${[html`<${RowLabel}>Total<//>`,
-      html`<${DefaultTime} vm=${vm} field="in" cls=${shiftCls} mins=${mins} />`,
-      html`<${DefaultTime} vm=${vm} field="out" cls=${shiftCls} mins=${mins} />`,
+      html`<${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink" bare />`,
+      html`<${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink" bare />`,
       fmtHrs(hours), tipsTotal]} />`;
 }
 // The total's change while a preview runs: everyone's pay plus the chump.

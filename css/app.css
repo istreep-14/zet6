@@ -165,15 +165,19 @@
   /* ── One row style for every list and table ──────────────────────────────
      Lists (.lgroup > .li, pkit List / Item) and tables (.page-table, pkit
      Table and the custom grids) look the same: full width on a page (a
-     rounded surface group in a sheet), rows alternating with a faint tint
-     (zebra — no hairlines between rows), a surface band for the sticky head,
+     rounded surface group in a sheet), plain rows with a hairline between
+     them (inset to the text in a list), a surface band for the sticky head,
      the total row on a surface-2 band. --zbase is what the rows sit on: the
      page on a page, the card in a sheet. */
   :root { --zbase: var(--surface); }
   .panel, .subpage { --zbase: var(--bg); }
   .lgroup, .page-table { background: var(--zbase); border-radius: var(--radius-card, 1rem); overflow: clip; box-shadow: var(--card-ring, none); }
   .lgroup > .li { position: relative; }
-  .lgroup > .li:nth-child(even of .li:not(.thead)) { background-color: color-mix(in srgb, var(--ink) 4%, var(--zbase)); }
+  .lgroup > .li + .li::before {
+    content: ""; position: absolute; top: 0; right: 0; left: var(--inset, 1rem);
+    height: 1px; background: var(--line);
+  }
+  .lgroup > .thead + .li::before, .lgroup > .li.thead::before { display: none; }
   button.li { transition: background .12s; }
   .lgroup > button.li.li:active:not(:disabled), button.li:active:not(:disabled) { background: var(--surface-2); }
 

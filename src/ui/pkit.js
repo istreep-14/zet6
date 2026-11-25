@@ -499,7 +499,8 @@ export const TABLE_HEAD = 't-cap text-center text-ink-3';
 // ui/sticky.js — it shrinks while stuck via data-[stuck]: / group-data-[stuck]:).
 // Card flush uses overflow-clip (not hidden) so sticky still works inside it.
 // --zbase is what the rows sit on: the page (on a page) or the card (in a sheet).
-export const ZEBRA = 'bg-[color-mix(in_srgb,var(--ink)_4%,var(--zbase))]';
-export const zebra = i => (i % 2 ? ZEBRA : 'bg-[var(--zbase)]');
+// No alternating tint (dropped): every row on the base, a hairline under it.
+export const ZEBRA = 'bg-[var(--zbase)]';
+export const zebra = () => 'bg-[var(--zbase)] [&>td]:border-b [&>td]:border-line';
 export const THEAD = 'thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--line)] transition-[top,height,padding] duration-200';
 export const Sentinel = ({ cls = '' }) => html`<div class=${cx('thead-sentinel h-0', cls)} aria-hidden="true"></div>`;
