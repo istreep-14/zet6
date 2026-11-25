@@ -616,10 +616,10 @@ function MathTable({ vm }) {
 // ── Payouts as a list (the page) ─────────────────────────────────────────────
 // Shared columns keep payouts aligned as names and amounts vary.
 const PI_COLS = '-mx-[var(--gutter)] grid grid-cols-[minmax(0,1fr)_auto_3rem] gap-x-2';
-const PI_ROW = 'relative col-span-full grid w-full grid-cols-subgrid items-center border-b border-line pl-4 pr-2 py-2 text-left';
+const PI_ROW = 'relative col-span-full grid w-full grid-cols-subgrid items-center border-b border-line pl-4 pr-2 py-1 text-left';
 const PI_NAME = 'min-w-0 truncate text-[1.0625rem] font-medium leading-snug text-ink';
 const PI_MONEY = 'text-[1.125rem] font-medium leading-tight tracking-tight';
-const TPILL = 'flex h-6 items-center justify-center rounded-md px-1 text-[0.8125rem] font-medium leading-none tabular-nums transition';
+const TPILL = 'flex h-5 items-center justify-center rounded-md px-1 text-[0.8125rem] font-medium leading-none tabular-nums transition';
 const PILL_IN = TPILL;
 const PILL_OUT = TPILL;
 const IN_TONE = mv => mv ? 'text-accent' : 'text-ink-3';
@@ -731,9 +731,9 @@ const VIEWS = [
 // The view: Shift is the page (name · In · Out · Hrs · Tips, one line each).
 // The others — List, Pools, Bills, Math — are kept, picked from the page
 // drawer (SummaryOptions); module state, so the drawer can switch it.
-let pick = 'list';
+let pick = 'shift';
 const setView = v => { pick = v; if (lastVm) renderSummary(lastVm, lastName); };
-const viewOf = vm => (pick === 'pools' && !(!vm.blocked && vm.shares.perPool.length > 1) ? 'list' : pick);
+const viewOf = vm => (pick === 'pools' && !(!vm.blocked && vm.shares.perPool.length > 1) ? 'shift' : pick);
 
 // The figures: Tips · Hours · Rate · the small bills ($10 · $5 · $1 — the
 // fewest that make every payout exact), each with its change after an edit.
@@ -776,8 +776,8 @@ function Summary({ vm, name }) {
     <${AdjustBanner} vm=${vm} />
     <${Figures} vm=${vm} />
     <div class="flex flex-col gap-3">
-      ${view !== 'list' && html`<button class="t-small flex h-9 items-center gap-1.5 self-start rounded-full bg-surface px-3 font-semibold text-ink-2 active:scale-95" onClick=${() => setView('list')}>
-        ${label} view<span class="text-accent">· Back to the list</span></button>`}
+      ${view !== 'shift' && html`<button class="t-small flex h-9 items-center gap-1.5 self-start rounded-full bg-surface px-3 font-semibold text-ink-2 active:scale-95" onClick=${() => setView('shift')}>
+        ${label} view<span class="text-accent">· Back to the table</span></button>`}
       ${billsOff && html`<${Alert} tone="warn" action=${{ label: 'Payout', onClick: () => App.tab('payout') }}>The bills don’t work out yet — Payout has the swap.<//>`}
       ${view === 'pools' ? html`<${PoolGrid} vm=${vm} />`
         : view === 'bills' ? html`<${BillsTable} vm=${vm} />`
