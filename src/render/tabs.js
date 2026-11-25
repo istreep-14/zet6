@@ -14,6 +14,7 @@ import { html, render } from '../ui/preact.js';
 import { cx, Icon, Seg, Delta } from '../ui/pkit.js';
 import { figDelta, isPreview, movedCount, payDelta } from '../ui/changes.js';
 import { currentTab, currentSub, subsOf, setSub, stackOf, TITLES } from '../ui/nav.js';
+import { staffMode, toggleSelect } from './staff.js';
 
 const $ = id => document.getElementById(id);
 
@@ -60,7 +61,8 @@ export function renderChrome(vm = last?.vm, sessionName = last?.sessionName || '
   const hdr = $('hdr');
   if (hdr) render(html`<${Header} vm=${vm} tab=${tab} sessionName=${sessionName} />`, hdr);
   const st = $('subtabs');
-  const subs = subsOf(tab);
+  // Home's views mean nothing until there's a split (it shows the checklist).
+  const subs = tab === 'home' && vm.blocked ? [] : subsOf(tab);
   if (st) render(subs.length ? html`<${Seg} size="md" value=${currentSub(tab)} items=${subs}
     onChange=${v => setSub(tab, v)} />` : null, st);
   renderStrip(vm);
@@ -79,14 +81,20 @@ function Header({ vm, tab, sessionName }) {
       <div class="hdr-actions">${top.actions?.(vm)}</div>`;
   }
   const s = vm.state;
+  // Home's title is the shift itself: its name, else its date.
   const type = (s.meta.shiftType || 'night') === 'day' ? 'Day shift' : 'Night shift';
-  const line = tab === 'home' ? [sessionName, fmtDay(s.meta.date), type].filter(Boolean).join(' · ') : '';
+  const named = s.staff.filter(p => p.name.trim()).length;
+  const title = tab === 'home' ? sessionName || fmtDay(s.meta.date) : TITLES[tab];
+  const line = tab === 'home' ? [sessionName && fmtDay(s.meta.date), type, named && named + (named === 1 ? ' person' : ' people')].filter(Boolean).join(' · ') : '';
+  const selecting = tab === 'staff' && staffMode() === 'select';
+  const text = 't-body h-[var(--tap)] rounded-full px-4 font-semibold transition active:scale-95';
   return html`<div class="hdr-main">
-      <h1 class="hdr-big truncate">${TITLES[tab]}</h1>
+      <h1 class="hdr-big truncate">${title}</h1>
       ${line && html`<span class="hdr-line truncate">${line}</span>`}
     </div>
     <div class="hdr-actions">
       ${tab === 'home' && !vm.blocked && html`<button class="icon-btn" onClick=${() => App.copySummary()} aria-label="Copy as text"><${Icon} name="copy" class="size-[1.125rem]" /></button>`}
+      ${tab === 'staff' && named > 0 && html`<button class=${cx(text, selecting ? 'bg-accent text-on-accent' : 'bg-surface text-accent')} onClick=${toggleSelect}>${selecting ? 'Done' : 'Select'}</button>`}
     </div>`;
 }
 

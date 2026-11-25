@@ -1,6 +1,7 @@
 // Settings tab (Preact) — what used to be the two side panels.
-//   This shift   the current session (→ its own page: name, shift type, the
-//                calendar, default times, support tip-out, export / delete),
+//   This shift   the current session (→ its own page: name, the calendar,
+//                default times, support tip-out, export / delete; the shift
+//                type is set on Tips),
 //                New session, All sessions (→ the list: tap to switch, Edit
 //                to rename / delete)
 //   Appearance   theme, display size
@@ -15,7 +16,7 @@ import { cx, Icon, Card, Field, Section, Seg, SwitchRow, List, Item, ROLE_TEXT }
 import { KeyTime } from '../ui/keytime.js';
 import { parseTime, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { focusCell } from '../ui/keypad.js';
-import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
+import { SHIFT_LABEL } from '../shifts.js';
 import { todayISO } from '../sessions.js';
 import { pushPage, refreshPages } from '../ui/nav.js';
 
@@ -273,12 +274,6 @@ function Shift({ vm }) {
   return html`<div class="flex flex-col gap-6">
     <${Field} page label="Session name" value=${entry.name || ''} placeholder="e.g. Brunch, Private party" maxlength="40" enterkeyhint="done"
       onChange=${e => App.renameCurrent(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} />
-
-    <${Section} title="Shift type" footer=${type === 'day'
-      ? 'Day: bar + servers share the floor until the servers are out, then Mid is the bar’s. Add parties on the Tips tab.'
-      : 'Night: one pool for the whole shift. Add parties on the Tips tab.'}>
-      <${Seg} value=${type} onChange=${t => App.setShiftType(t)} items=${SHIFT_TYPES.map(t => ({ value: t, label: SHIFT_LABEL[t] }))} />
-    <//>
 
     <${Section} title="Date"><${Calendar} selected=${s.meta.date} sessionDates=${sessionDates} /><//>
 
