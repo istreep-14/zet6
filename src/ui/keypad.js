@@ -222,5 +222,12 @@ function paint() {
   if (!host) return;
   render(html`<${Pad} />`, host);
   host.classList.toggle('open', !!cfg);
-  document.documentElement.style.setProperty('--kp-h', cfg ? host.offsetHeight + 'px' : '0px');
+  const measure = () => document.documentElement.style.setProperty('--kp-h', cfg ? host.offsetHeight + 'px' : '0px');
+  measure();
+  // Its height settles once Tailwind has styled the keys (the first open can
+  // measure the bare markup): keep --kp-h true so the HUD rides right on it.
+  if (!host._kpObserved && typeof ResizeObserver !== 'undefined') {
+    host._kpObserved = true;
+    new ResizeObserver(measure).observe(host);
+  }
 }

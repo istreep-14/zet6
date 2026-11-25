@@ -37,10 +37,7 @@ const root = () => document.documentElement;
 export const TABS = ['home', 'staff', 'tips', 'pay', 'shift'];
 export const TITLES = { home: 'Home', staff: 'Staff', tips: 'Tips', pay: 'Pay', shift: 'Shift' };
 export const SUBS = {
-  home: [
-    { value: 'overview', label: 'Overview' },
-    { value: 'shift', label: 'Shift' },
-  ],
+  home: [],   // one page: the overview (each row carries its shift line)
   staff: [],
   // Tips' sub-tabs follow the shift: one per pool and per part of a pool.
   tips: [

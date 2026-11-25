@@ -362,10 +362,6 @@ function pullAction() {
     const to = e.batch ? (modeOf(e) === 'bills' ? 'type a total' : 'count bills') : (lastVm?.state.settings.show?.cashDetails === false ? 'show bill breakdown' : 'hide bill breakdown');
     return { idle: 'Pull to ' + to, armed: 'Release to ' + to, run: () => flipEntry(e) };
   }
-  if (tab === 'home') {
-    const toShift = currentSub('home') !== 'shift';
-    return { idle: 'Pull to show ' + (toShift ? 'timeline' : 'payouts'), armed: 'Release to show ' + (toShift ? 'timeline' : 'payouts'), run: () => setSub('home', toShift ? 'shift' : 'overview') };
-  }
   if (tab === 'shift') {
     const toPools = currentSub('shift') !== 'pools';
     return { idle: 'Pull to show ' + (toPools ? 'pools' : 'shift setup'), armed: 'Release to show ' + (toPools ? 'pools' : 'shift setup'), run: () => setSub('shift', toPools ? 'pools' : 'shift') };

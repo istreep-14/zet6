@@ -1,8 +1,7 @@
-// Home and Pay (Preact). Home shows the payout overview and shift timeline;
+// Home and Pay (Preact). Home is one page, no sub-tabs: the overview —
+// Name · In · Out · Hrs · Tips, each row with a thin shift line under it.
 // Pay holds the detailed distribution, split and bonuses.
 //
-//   Home tabs   Overview  one row per person and the total
-//               Shift     everyone's shift on one time axis
 //   Pay tabs    Bills    envelopes, exact-change status and drawer tools
 //               Split    the worksheet, pool allocation and math table
 //               Bonus    closer bonuses and the chump
@@ -68,7 +67,7 @@ function Key({ vm, people }) {
     people.some(p => p.closer) && !allClose(vm) && html`<span key="c" class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full bg-bad"></span>Closer</span>`,
     people.some(isSup) && html`<span key="s">Support is a tip-out, not counted in hours</span>`,
   ].filter(Boolean);
-  return items.length ? html`<span class="flex flex-wrap items-center gap-x-3 gap-y-1">${items}</span>` : null;
+  return items.length ? html`<div class="section-foot t-small flex flex-wrap items-center gap-x-3 gap-y-1 text-ink-3">${items}</div>` : null;
 }
 
 // The fewest $10 / $5 / $1s that make every payout exact. This belongs at
@@ -76,7 +75,7 @@ function Key({ vm, people }) {
 // shift-status page.
 function SmallBills({ vm }) {
   const need = smallBillsNeeded(vm) || [{ d: 10, n: 0 }, { d: 5, n: 0 }, { d: 1, n: 0 }];
-  return html`<${Card} class="cash-floor flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+  return html`<${Card} class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
     <span class="flex min-w-0 flex-col gap-0.5">
       <span class="t-cap text-ink-3">Exact-change floor</span>
       <span class="t-small text-ink-2">Small bills needed for every envelope</span>
@@ -133,49 +132,84 @@ function trackMarks(vm) {
 export function resetHomeMarks() { seen = null; marks = null; onHome = false; clearTimeout(marksTimer); }
 const markOf = p => marks?.[keyOf(p)] || null;
 
-// Their shift as a thin bar on the night's axis, under their row (read-only:
-// the same picture as Home › Shift, small). A placed break is a gap.
+// Their shift as a thin line on the night's axis, under their row's columns
+// (read-only). A placed break is a gap.
 function ShiftBar({ vm, p, span }) {
   if (!span || p.inAbs == null || p.outAbs == null || p.outAbs <= p.inAbs) return null;
   const at = t => Math.max(0, Math.min(100, (t - span.a) / (span.b - span.a) * 100));
   const a = at(p.inAbs), b = at(p.outAbs);
   const b0 = p.brkStart == null ? null : at(p.brkStart);
   const b1 = b0 == null ? null : at(p.brkStart + p.brkLen);
-  return html`<span aria-hidden="true" class="relative block h-1 w-full rounded-full bg-ink/[.07]">
-    <span class="absolute inset-y-0 rounded-full" style=${{ left: a + '%', width: (b - a) + '%', background: hueVar(hueIndex(vm.state, p.id)) }}></span>
+  return html`<span aria-hidden="true" class="ov-track">
+    <span class="ov-fill" style=${{ left: a + '%', width: (b - a) + '%', background: hueVar(hueIndex(vm.state, p.id)) }}></span>
     ${b0 != null && b1 > b0 && html`<span class="absolute inset-y-0 bg-[var(--zbase)]" style=${{ left: b0 + '%', width: (b1 - b0) + '%' }}></span>`}
   </span>`;
 }
 
-// ── Pay: one row per person ──────────────────────────────────────────────────
-// Home uses the same direct list rhythm as a pool: person and shift at left,
-// then the take-home as a nearby coloured pill instead of a distant table cell.
-// On the ledger, time is an inline control rather than a field. It keeps the
-// same tap/hold behaviour, but does not reserve a box-height under the name.
-const CELL = 'inline-flex h-auto min-w-0 items-center p-0 text-[0.8125rem] leading-tight tabular-nums transition';
+// ── Overview: Name · In · Out · Hrs · Tips ───────────────────────────────────
+// Plain columns. The name and the take-home are what you scan for (semibold
+// ink, the take-home a size up); times and hours are quiet (small, ink-3).
+// A thin shift line runs under every row's columns on the night's axis, so
+// the timeline needs no page of its own. Chump and Total use the same
+// columns, so every amount lines up. Each In / Out is Staff's own keypad
+// cell (tap → keypad, hold → wheel); with one pool the total is a $1 wheel.
+const OV_GRID = 'ov-grid';
+const CELL = 'inline-flex h-7 min-w-0 items-center justify-center rounded-md px-1 text-[0.8125rem] tabular-nums transition';
 // Every time reads the same quiet grey, typed or following the default.
 const TIME_TONE = () => 'text-ink-3';
-const PAY_VALUE = 't-body font-semibold tabular-nums';
-const PayoutValue = ({ value, d, tone = '' }) => html`<span class=${cx('inline-flex shrink-0 items-center gap-1', d && 'live-changed')}><${Delta} d=${d} /><span class=${cx(PAY_VALUE, tone)}>${fmtMoney(value)}</span></span>`;
-function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
+const NAME = 't-head truncate';
+const TIPS = 'text-[1.25rem] font-semibold leading-tight tabular-nums';
+const PayoutValue = ({ value, d, tone = '' }) => html`<span class="relative inline-flex justify-end"><span class=${cx(TIPS, tone, d && 'text-accent')}>${fmtMoney(value)}</span><${Delta} d=${d} under /></span>`;
+const Hrs = ({ h, dim }) => html`<span class=${cx('t-small text-right tabular-nums', dim ? 'text-ink-3/70' : 'text-ink-3')}>${fmtHrs(h)}</span>`;
+const press = fn => ({ role: 'button', tabIndex: 0, onClick: fn, onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } } });
+
+function Overview({ vm, people, total, hours }) {
   const s = vm.shares;
+  const span = nightSpan(vm);
   const raw = id => vm.state.staff.find(x => x.id === id);
-  const cell = (p, field) => (raw(p.id) ? html`<${TimeCell} vm=${vm} p=${raw(p.id)} field=${field} cls=${CELL} bare tone=${TIME_TONE} />` : '—');
-  const timeSub = p => html`<span class="inline-flex items-center gap-1"><span class="inline-flex items-center gap-1">${cell(p, 'in')}<span>→</span>${cell(p, 'out')}</span><span>· ${fmtHrs(hoursOf(p))}h</span></span>`;
+  const cell = (p, field) => (raw(p.id) ? html`<${TimeCell} vm=${vm} p=${raw(p.id)} field=${field} cls=${CELL} bare tone=${TIME_TONE} />` : html`<span class="text-center text-ink-3">—</span>`);
   const onePool = vm.state.pools.length === 1;
   const tipsTotal = onePool
-    ? html`<span class="inline-flex items-center gap-1"><${Delta} d=${payDeltaSum(vm, total) || marks?.$total} />
-        <${DragAmount} plain value=${total} min=${0} label="Tips total" cls="px-0 py-0 text-ink" moneyCls=${PAY_VALUE}
+    ? html`<span class="relative inline-flex justify-end">
+        <${DragAmount} plain value=${total} min=${0} label="Tips total" cls="-mr-1.5 px-1.5 py-0" moneyCls=${TIPS}
           onSet=${v => App.nudgeCash(v - total)} onPreview=${v => App.previewCash(v == null ? null : v - total)}
-          onTap=${() => App.tab('tips')} /></span>`
+          onTap=${() => App.tab('tips')} /><${Delta} d=${payDeltaSum(vm, total) || marks?.$total} under /></span>`
     : html`<${PayoutValue} value=${total} d=${marks?.$total} />`;
-  const totalSub = html`<span class="inline-flex items-center gap-1"><span class="inline-flex items-center gap-1"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare /><span>→</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare /></span><span>· ${fmtHrs(hours)}h</span></span>`;
-  return html`<${List} class="payout-list">
-    ${people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id, pageTab)}
-      lead=${html`<${PersonAv} vm=${vm} p=${p} size="sm" />`} title=${p.name} sub=${timeSub(p)}
-      trail=${html`<${PayoutValue} value=${p.final} d=${payDelta(vm, p.id, p.final) || markOf(p)} tone=${isSup(p) ? SUP_TEXT : ''} />`} />`)}
-    ${s.leftover > 0 && html`<${Item} class="payout-chump" lead=${html`<${RoundIcon} name="cash" small />`} title="Chump" trail=${html`<${PayoutValue} value=${s.leftover} tone="text-ink-2" />`} chevron=${false} />`}
-    <${Item} class="payout-total" lead=${html`<${RoundIcon} name="sigma" small />`} title="Total" sub=${totalSub} trail=${tipsTotal} chevron=${false} />
+  const count = people.length + (people.length === 1 ? ' person' : ' people');
+  return html`<${List} class="ov">
+    <${Sentinel} />
+    <div class=${cx(THEAD, 'li px-4 py-2')} style=${{ '--inset': '0' }}>
+      <div class=${cx(OV_GRID, 't-cap text-ink-3')}>
+        <span class="truncate">${count}</span><span class="text-center">In</span><span class="text-center">Out</span>
+        <span class="text-right">Hrs</span><span class="text-right">Tips</span>
+      </div>
+    </div>
+    ${people.map(p => html`<div key=${p.id} class="li ov-row" style=${{ '--inset': '0' }} ...${press(() => openPerson(p.id))}>
+      <div class=${OV_GRID}>
+        <span class="flex min-w-0 items-center gap-2.5"><${PersonAv} vm=${vm} p=${p} size="sm" /><span class=${NAME}>${p.name}</span></span>
+        ${cell(p, 'in')}${cell(p, 'out')}
+        <${Hrs} h=${hoursOf(p)} dim=${isSup(p)} />
+        <${PayoutValue} value=${p.final} d=${payDelta(vm, p.id, p.final) || markOf(p)} tone=${isSup(p) ? SUP_TEXT : 'text-ink'} />
+      </div>
+      <${ShiftBar} vm=${vm} p=${p} span=${span} />
+    </div>`)}
+    ${s.leftover > 0 && html`<div class="li ov-row" style=${{ '--inset': '0' }} ...${press(() => App.tab('pay', { sub: 'bonus' }))}>
+      <div class=${OV_GRID}>
+        <span class="flex min-w-0 items-center gap-2.5"><${RoundIcon} name="cash" small /><span class=${cx(NAME, 'text-ink-2')}>Chump</span></span>
+        <span></span><span></span><span></span>
+        <${PayoutValue} value=${s.leftover} tone="text-ink-2" />
+      </div>
+    </div>`}
+    <div class="li ov-row ov-total" style=${{ '--inset': '0' }}>
+      <div class=${OV_GRID}>
+        <span class="flex min-w-0 items-center gap-2.5"><${RoundIcon} name="sigma" small /><span class=${NAME}>Total</span></span>
+        <${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare />
+        <${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare />
+        <${Hrs} h=${hours} />
+        ${tipsTotal}
+      </div>
+      ${span && html`<${AxisLabels} span=${span} />`}
+    </div>
   <//>`;
 }
 // The total's change while a preview runs: everyone's pay plus the chump.
@@ -187,48 +221,16 @@ const payDeltaSum = (vm, now) => {
   return v ? { v, kind: 'preview', stamp: 0 } : null;
 };
 
-function Pay({ vm, name, pageTab = 'home' }) {
+function Pay({ vm }) {
   const s = vm.shares;
   const people = staffOrder(vm, s.perPerson);
   const hours = people.filter(p => !isSup(p)).reduce((t, p) => t + hoursOf(p), 0);
   // The total is all the cash: everyone's take-home plus the chump.
   const total = people.reduce((t, p) => t + p.final, 0) + s.leftover;
-  const count = people.length + (people.length === 1 ? ' person' : ' people');
-  return html`<${Section} title=${name || 'Payouts'} aside=${count}
-    footer=${html`<${Key} vm=${vm} people=${people} />`}>
-    <${PayTable} vm=${vm} people=${people} total=${total} hours=${hours} pageTab=${pageTab} />
-  <//>`;
-}
-
-// ── Shift: everyone on one time axis ─────────────────────────────────────────
-function Shift({ vm }) {
-  const span = nightSpan(vm);
-  const people = staffOrder(vm, vm.shares.perPerson);
-  if (!span) return html`<${Alert} tone="info">Set valid shift times to see the timeline.<//>`;
-  const at = t => Math.max(0, Math.min(100, (t - span.a) / (span.b - span.a) * 100));
-  return html`<${Section} title="Shift" footer="The red mark is the close. A striped gap is a break with a start time; one without counts in the hours only.">
-    <div class="-mx-[var(--gutter)]">
-      <${Sentinel} />
-      <div class=${cx(THEAD, 'px-4 py-2')}><${AxisLabels} span=${span} /></div>
-      ${people.map(p => {
-        const start = p.inAbs == null ? null : at(p.inAbs), end = p.outAbs == null ? null : at(p.outAbs);
-        const b0 = p.brkStart == null ? null : at(p.brkStart);
-        const b1 = b0 == null ? null : at(p.brkStart + p.brkLen);
-        return html`<button key=${p.id} class="flex w-full flex-col gap-2 border-b border-line px-4 py-2.5 text-left transition active:bg-surface-2" onClick=${() => openPerson(p.id)}>
-          <span class="flex w-full items-center gap-2.5">
-            <${PersonAv} vm=${vm} p=${p} size="sm" />
-            <span class="t-body flex min-w-0 flex-1 items-center gap-1.5"><span class="truncate">${p.name}</span></span>
-            <span class="t-small shrink-0 tabular-nums text-ink-3"><${Times} a=${p.inAbs} b=${p.outAbs} /> · ${fmtHrs(hoursOf(p))}h</span>
-          </span>
-          <span aria-hidden="true" class="relative block h-3 w-full rounded-full bg-ink/[.07]">
-            ${start != null && end != null && end > start && html`<span class="absolute inset-y-0 rounded-full" style=${{ left: start + '%', width: (end - start) + '%', background: hueVar(hueIndex(vm.state, p.id)) }}></span>`}
-            ${b0 != null && b1 > b0 && html`<span class="absolute inset-y-0" style=${{ left: b0 + '%', width: (b1 - b0) + '%', backgroundImage: 'repeating-linear-gradient(135deg, var(--bg) 0 2px, transparent 2px 4px)', backgroundColor: 'color-mix(in srgb, var(--bg) 60%, transparent)' }}></span>`}
-            ${span.close != null && html`<span class="absolute -inset-y-0.5 w-0.5 -translate-x-1/2 rounded-full bg-bad/70" style=${{ left: at(span.close) + '%' }}></span>`}
-          </span>
-        </button>`;
-      })}
-    </div>
-  <//>`;
+  return html`<section class="flex flex-col gap-2">
+    <${Overview} vm=${vm} people=${people} total=${total} hours=${hours} />
+    <${Key} vm=${vm} people=${people} />
+  </section>`;
 }
 
 // ── Bills: the envelopes ─────────────────────────────────────────────────────
@@ -333,10 +335,10 @@ function Split({ vm, pageTab = 'home' }) {
 }
 
 // ── The page ─────────────────────────────────────────────────────────────────
-function Home({ vm, name }) {
+function Home({ vm }) {
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   return html`<div class="flex flex-col gap-5">
-    ${currentSub('home') === 'shift' ? html`<${Shift} vm=${vm} />` : html`<${Pay} vm=${vm} name=${name || 'Payouts'} pageTab="home" />`}
+    <${Pay} vm=${vm} />
     <${AdjustNote} vm=${vm} />
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map((w, i) => html`<${Alert} key=${i}>${w}<//>`)}
   </div>`;
@@ -361,7 +363,7 @@ export function renderHome(vm, sessionName = lastName) {
   lastVmRef = vm;
   trackMarks(vm);
   const root = $('home-root');
-  if (root) render(html`<${Home} vm=${vm} name=${sessionName} />`, root);
+  if (root) render(html`<${Home} vm=${vm} />`, root);
 }
 
 export function renderPay(vm, sessionName = lastName) {

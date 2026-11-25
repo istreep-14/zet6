@@ -81,7 +81,8 @@ assert.equal(nav.currentTab(), 'tips');
 swipe('mainContent', 100, 300);
 await wait(200);
 assert.equal(nav.currentTab(), 'staff');
-for (const t of ['home', 'pay', 'shift']) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs');
+for (const t of ['pay', 'shift']) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs');
+assert.equal(nav.SUBS.home.length, 0, 'Home is one page: no sub-tabs');
 
 // Old saved tab names.
 assert.equal(nav.normalizeTab('summary'), 'home');

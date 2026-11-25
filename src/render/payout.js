@@ -87,10 +87,10 @@ export function applyPendingTradeDown() {
   if (currentVm && pendingTradeDown) applyBillCountsToPool(currentVm, pendingTradeDown.pool);
 }
 
-// ── Envelopes table: person · denomination count grid · pay ────────────────
-// Every denomination has a compact column, so the entire drawer is visible at
-// once without a horizontal scroller competing with the sticky head.
-// The envelope grid on its own (Payout's Envelopes, Summary's Bills view):
+// ── Envelopes table: person · a column per bill size used · take-home ──────
+// Only the bill sizes that are actually handed out get a column, so the
+// names keep the room they need and nothing scrolls sideways. Names, Chump
+// and Total read at the same size (body); counts in their bill's tint.
 // `order` = the people in row order (default payoutOrder). A person taking
 // bundled stacks (vm.stacks) says so under their name.
 export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App.personModal(id), quiet = false }) {
@@ -98,28 +98,33 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
   const ordered = order || payoutOrder(s.perPerson);
   const rem = s.leftover > 0 ? (remBills || {}) : {};
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
-  const cols = DENOMS;
+  const used = DENOMS.filter(d => colTotal(d) > 0);
+  const cols = used.length ? used : DENOMS;
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
   const count = (d, v) => v > 0
-    ? html`<span data-d=${d} class="bill-col font-semibold">${v}</span>`
-    : html`<span class="text-ink-3/45">–</span>`;
-  const head = d => html`<span data-d=${d} class="bill-col text-[0.625rem] tracking-[-.04em]" aria-label=${'$' + d}>$${d}</span>`;
-  const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('t-small font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} />${!quiet && html`<${Delta} d=${payDelta(vm, p.id, p.final)} under />`}</span>`;
+    ? html`<span data-d=${d} class="bill-col">${v}</span>`
+    : html`<span class="text-ink-3/40">–</span>`;
+  const head = d => html`<span data-d=${d} class="bill-col tracking-normal" aria-label=${'$' + d}>$${d}</span>`;
+  const pay = (v, tone, d) => html`<span class="relative inline-block"><${Money} value=${v} class=${cx('font-semibold', tone)} />${d && html`<${Delta} d=${d} under />`}</span>`;
   const stackNote = id => {
     const st = vm.stacks?.[id];
     if (!st) return '';
     const k = Object.values(st).reduce((t, x) => t + x, 0);
-    return html`<span class="t-small block font-normal leading-tight text-accent">${k} ${k === 1 ? 'stack' : 'stacks'}</span>`;
+    return html`<span class="t-small block leading-tight text-accent">${k} ${k === 1 ? 'stack' : 'stacks'}</span>`;
   };
-  const envelopeName = p => html`<span class="flex min-w-0 items-center gap-2"><${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} size="sm" /><span class="flex min-w-0 flex-col"><span class="t-small truncate">${p.name}</span>${stackNote(p.id)}</span></span>`;
-  return html`<${Table} fixed firstWide class="envelope-grid"
-    cols=${[{ label: 'Envelope', w: 'w-[27%]' }, ...cols.map(d => ({ head: head(d), w: 'w-[8.833%]' })), { label: 'Take home', align: 'right', w: 'w-[20%]' }]}
+  // A person's colour as a dot (not an avatar): the name gets the room.
+  const label = (dot, text, sub = '') => html`<span class="flex min-w-0 items-center gap-2">${dot}<span class="flex min-w-0 flex-col"><span class="truncate">${text}</span>${sub}</span></span>`;
+  const hue = p => html`<span class="size-2.5 shrink-0 rounded-full" style=${{ background: hueVar(hueIndex(vm.state, p.id)) }}></span>`;
+  const blank = html`<span class="size-2.5 shrink-0 rounded-full bg-ink-3/30"></span>`;
+  return html`<${Table} fixed firstWide
+    cols=${[{ label: 'Envelope', w: 'w-[35%]' }, ...cols.map(d => ({ head: head(d) })), { label: 'Pay', align: 'right', w: 'w-[20%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => onRow(p.id),
-        cells: [envelopeName(p), ...cols.map(d => count(d, (byPerson[p.id] || {})[d] || 0)), pay(p)] })),
-      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, ...cols.map(d => count(d, rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
+        cells: [label(hue(p), p.name, stackNote(p.id)), ...cols.map(d => count(d, (byPerson[p.id] || {})[d] || 0)),
+          pay(p.final, p.final > 0 ? 'text-ink' : 'text-ink-3', !quiet && payDelta(vm, p.id, p.final))] })),
+      ...(s.leftover > 0 ? [{ key: 'chump', tone: 'muted', cells: [label(blank, 'Chump'), ...cols.map(d => count(d, rem[d] || 0)), pay(s.leftover, 'text-ink-2')] }] : []),
     ]}
-    foot=${[html`<${RowLabel}>Total<//>`, ...cols.map(d => count(d, colTotal(d))), html`<${Money} value=${grand} class="t-small font-semibold text-money" />`]} />`;
+    foot=${[label(html`<span class="size-2.5 shrink-0"></span>`, html`<span class="font-semibold">Total</span>`), ...cols.map(d => count(d, colTotal(d))), pay(grand, 'text-ink')]} />`;
 }
 
 

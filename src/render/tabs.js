@@ -2,15 +2,19 @@
 // bar's active tab and badges.
 //
 //   header     sticky over the page, frosted. A root page: the session
-//              avatar (opens the menu) · the tab's title over its derived
-//              figures (Meta) — then the sub-tabs as a text tab row with an
-//              accent underline that follows a swipe. Scrolling down slides
-//              the title row away (the tabs stay); scrolling up brings it
-//              back. A subpage: ‹ · its title over its figures · actions.
+//              avatar (opens the menu) · the tab's title — then the sub-tabs
+//              as a text tab row with an accent underline that follows a
+//              swipe. Scrolling down slides the title row away (the tabs
+//              stay); scrolling up brings it back. A subpage: ‹ · its title
+//              over its figures · actions.
+//   HUD        the shift's figures (tips · people · hours · rate · the small
+//              bills) on a bar floating over the tab bar, on every page. It
+//              follows a live preview (a turning wheel, a key typed).
 
 import { poolValue, fmtMoney, fmtMoneyShort, fmtHrs } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Meta, Clock } from '../ui/pkit.js';
+import { cx, Icon, Meta, Delta } from '../ui/pkit.js';
+import { figDelta, isPreview } from '../ui/changes.js';
 import { currentTab, currentSub, subsOf, setSub, stackOf, onSwipe, TITLES } from '../ui/nav.js';
 
 const $ = id => document.getElementById(id);
@@ -59,46 +63,18 @@ export function renderChrome(vm = last?.vm, sessionName = last?.sessionName || '
   const subs = ['home', 'pay'].includes(tab) && vm.blocked ? [] : subsOf(tab);
   document.documentElement.classList.toggle('no-tabs', !subs.length);
   const hdr = $('hdr');
-  if (hdr) render(html`<${Header} vm=${vm} tab=${tab} subs=${subs} sessionName=${sessionName} />`, hdr);
+  if (hdr) render(html`<${Header} vm=${vm} tab=${tab} subs=${subs} />`, hdr);
+  const hud = $('hud');
+  if (hud) {
+    hud.classList.toggle('is-preview', isPreview(vm));
+    render(html`<${Hud} vm=${vm} />`, hud);
+  }
   requestAnimationFrame(() => placeInk(0, false));
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
 
 const rate2 = r => '$' + (Math.round(r * 100) / 100).toFixed(2);
-const people = n => ({ v: n, l: n === 1 ? 'person' : 'people' });
-
-// The figures under a tab's title: what that tab adds up to, at a glance.
-function metaOf(vm, tab, sessionName) {
-  const s = vm.state;
-  const named = s.staff.filter(p => p.name.trim()).length;
-  const sh = !vm.blocked && vm.shares;
-  const R = vm.resolved;
-  const span = R?.anchorAbs != null && R?.closeAbs != null
-    && { v: html`<${Clock} abs=${R.anchorAbs} /> – <${Clock} abs=${R.closeAbs} />` };
-  const hours = sh && { v: fmtHrs(shiftHours(sh)), l: 'h', tight: true };
-  // The shift's working facts live in every root header, not behind a
-  // calculator page. Small type keeps all four figures visible together.
-  if (sh) return [
-    { v: fmtMoney(vm.totalCash || 0), l: 'tips' }, people(sh.perPerson.length), hours,
-    { v: rate2(sh.rate), l: '/h', tight: true },
-  ];
-  if (tab === 'home') return sh
-    ? [{ v: fmtMoney(sh.perPerson.reduce((t, p) => t + p.final, 0)), l: 'paid' }, people(sh.perPerson.length), { v: rate2(sh.rate), l: '/h', tight: true }]
-    : [{ v: fmtDay(s.meta.date) }, named ? people(named) : { v: 'Nobody yet', tone: 'text-ink-3' }];
-  if (tab === 'staff') return [people(named), hours, span];
-  if (tab === 'tips') return [
-    { v: fmtMoney(vm.totalCash || 0), l: 'in tips' },
-    s.pools.length > 1 && { v: s.pools.length, l: 'pools' },
-    vm.adjust ? { v: fmtMoney(Math.abs(vm.adjust)), l: vm.adjust < 0 ? 'short' : 'over', tone: 'text-warn' } : null,
-  ];
-  if (tab === 'pay') return sh
-    ? [{ v: fmtMoney(sh.perPerson.reduce((t, p) => t + p.final, 0)), l: 'paid' }, people(sh.perPerson.length), { v: rate2(sh.rate), l: '/h', tight: true }]
-    : [{ v: 'No split yet', tone: 'text-ink-3' }];
-  // Shift: the type, the pools, the day.
-  return [{ v: (s.meta.shiftType === 'day' ? 'Day' : 'Night') + ' shift' }, { v: s.pools.length, l: s.pools.length === 1 ? 'pool' : 'pools' },
-    { v: sessionName || fmtDay(s.meta.date), tone: 'text-ink-3' }];
-}
 
 // Hours actually worked by the tipped staff (support is a tip-out). Not
 // shares.totalHours: that sums each pool's hours, so overlapping pools (Day /
@@ -111,15 +87,35 @@ export function DayDisc({ iso, size = 'size-9', text = 'text-[1rem]' }) {
   return html`<span class=${cx('grid shrink-0 place-items-center rounded-full bg-accent font-semibold tabular-nums text-on-accent', size, text)}>${m ? +m[3] : '·'}</span>`;
 }
 
-function HeaderBills({ vm }) {
-  const need = smallBillsNeeded(vm);
-  if (!need) return null;
-  return html`<span class="hdr-bills" aria-label=${'Ideal small bills: ' + need.map(b => b.n + ' $' + b.d).join(', ')}>
-    ${need.map(b => html`<span key=${b.d} data-d=${b.d}><small>$${b.d}</small><b>${b.n}</b></span>`)}
-  </span>`;
+// ── HUD: the shift at a glance, over the tab bar ────────────────────────────
+// Five figures, each a tap to where it's made: Tips → Tips, People / Hours →
+// Staff, Rate → Pay's breakdown, Bills → Pay's envelopes. Before there's a
+// split, what's known so far (the rest reads —). The small bills are the
+// fewest $10 / $5 / $1s that make every payout exact, each in its tint.
+function Hud({ vm }) {
+  const sh = !vm.blocked && vm.shares;
+  const named = vm.state.staff.filter(p => p.name.trim()).length;
+  const need = sh && smallBillsNeeded(vm);
+  const dash = html`<span class="text-ink-3">—</span>`;
+  const bills = need
+    ? need.map((c, i) => html`${i > 0 && html`<span class="text-ink-3/60">·</span>`}<span key=${c.d} data-d=${c.d} class="bill-col">${c.n}</span>`)
+    : dash;
+  const cells = [
+    { k: 'Tips', v: vm.totalCash > 0 ? fmtMoney(vm.totalCash) : dash, d: figDelta(vm, 'total'), go: () => App.tab('tips') },
+    { k: named === 1 ? 'Person' : 'People', v: named || dash, go: () => App.tab('staff') },
+    { k: 'Hours', v: sh ? fmtHrs(shiftHours(sh)) : dash, d: figDelta(vm, 'hours'), unit: 'h', go: () => App.tab('staff') },
+    { k: 'Per hour', v: sh ? rate2(sh.rate) : dash, d: figDelta(vm, 'rate'), tone: 'text-good', go: () => App.tab('pay', { sub: 'split' }) },
+    { k: '$10 · $5 · $1', v: bills, go: () => App.tab('pay', { sub: 'bills' }) },
+  ];
+  return html`<div class="hud-row" role="group" aria-label="The shift at a glance">
+    ${cells.map(c => html`<button key=${c.k} class="hud-cell" onClick=${c.go}>
+      <span class=${cx('hud-v', sh && c.tone)}>${c.v}</span>
+      <span class="hud-k">${c.d ? html`<${Delta} d=${c.d} unit=${c.unit || '$'} />` : c.k}</span>
+    </button>`)}
+  </div>`;
 }
 
-function Header({ vm, tab, subs, sessionName }) {
+function Header({ vm, tab, subs }) {
   const stack = stackOf(tab);
   const top = stack[stack.length - 1];
   if (top) {
@@ -134,7 +130,7 @@ function Header({ vm, tab, subs, sessionName }) {
   return html`<div class="hdr-bar">
       <button class="hdr-btn" onClick=${() => App.openMenu()} aria-label="Menu: sessions and tools" aria-controls="menu">
         <${DayDisc} iso=${vm.state.meta.date} /></button>
-      <div class="hdr-text"><h1 class="hdr-title">${TITLES[tab]}</h1><span class="hdr-facts"><${Meta} class="hdr-meta" items=${metaOf(vm, tab, sessionName)} /><${HeaderBills} vm=${vm} /></span></div>
+      <div class="hdr-text"><h1 class="hdr-title">${TITLES[tab]}</h1></div>
     </div>
     ${subs.length > 0 && html`<div class="hdr-tabs" role="tablist" aria-label=${TITLES[tab]}>
       ${subs.map(s => html`<button key=${tab + s.value} role="tab" class="hdr-tab" aria-selected=${String(s.value === sub)}

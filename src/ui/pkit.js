@@ -378,7 +378,7 @@ export function SheetShell({ id, title, tall = false, foot = false }) {
 export function Section({ title, aside, footer, class: cls = '', children }) {
   return html`<section class=${cx('ui-section flex flex-col gap-2', cls)}>
     ${(title || aside) && html`<div class="section-heading flex min-h-5 items-end justify-between gap-3">
-      <span class="t-cap flex min-w-0 items-center gap-2 text-ink-3">${title}</span>
+      <span class="t-cap flex min-w-0 items-center gap-2 text-ink-2">${title}</span>
       ${aside && html`<span class="t-small shrink-0 text-ink-3">${aside}</span>`}
     </div>`}
     ${children}
