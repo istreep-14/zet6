@@ -166,7 +166,7 @@ function moved(v, v0) {
 // land on the sheet it just opened. `data-drag` marks it for the sheet
 // swipe; clicks don't bubble (so a box inside a tappable row doesn't also
 // open the row).
-export function DragTime({ abs, min, max, onSet, onTap, tapWheel = false, set, bad, label, cls = CELL, tone, full = false, mins = false, kcell, active = false, preview = null, onPreview, wheelSub }) {
+export function DragTime({ abs, min, max, onSet, onTap, tapWheel = false, set, bad, label, cls = CELL, tone, full = false, mins = false, bare = false, alt = null, kcell, active = false, preview = null, onPreview, wheelSub }) {
   const input = useRef(null);                     // keypad cells: the focusable input
   const { held, handlers, consumeClick, openNow } = useHoldWheel({
     value: abs, enabled: abs != null && !bad, onSet, onPreview,
@@ -182,7 +182,12 @@ export function DragTime({ abs, min, max, onSet, onTap, tapWheel = false, set, b
     held === 'open' ? LOOK_ARMED
       : active ? cx('bg-accent/12 font-semibold ring-2 ring-inset ring-accent', preview != null ? 'text-accent' : 'text-ink')
       : cx(held && 'bg-ink/10', bad ? 'font-semibold text-bad' : (typeof tone === 'function' ? tone(set) : tone) || (set ? 'font-semibold text-ink' : 'text-ink-2')));
-  const body = bad && !active ? '?' : shown != null ? html`<${Clock} abs=${shown} full=${full} mins=${mins} />` : '—';
+  // `alt`: what to show at rest instead of the time (e.g. "close" for an Out
+  // that is the shift's close) — the real time comes back while it's being
+  // edited, previewed or held.
+  const body = bad && !active ? '?'
+    : alt != null && !active && preview == null && !held ? alt
+    : shown != null ? html`<${Clock} abs=${shown} full=${full} mins=${mins} bare=${bare} />` : '—';
   const aria = label + (tapWheel ? ' — tap to pick from a wheel' : ' — tap to edit, hold to pick from a wheel');
   if (!kcell) {
     return html`<button data-drag class=${look} ...${handlers}
