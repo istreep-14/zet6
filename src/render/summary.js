@@ -633,16 +633,16 @@ function MathTable({ vm }) {
 // The rows share one grid (subgrid), so every pill starts after the longest
 // name and the 4s, 5s and 6s stack in a column. Then the chump and the Total
 // (open | close · tipped hours · paid out — hold the amount for its wheel).
-const PI_COLS = 'grid grid-cols-[minmax(0,max-content)_auto_auto_minmax(0,1fr)_auto_auto] gap-x-2';
+const PI_COLS = 'grid grid-cols-[minmax(0,max-content)_auto_auto_minmax(0,1fr)_auto_auto] gap-x-2 -mx-[var(--gutter)]';
 const PI_ROW = 'relative col-span-full grid grid-cols-subgrid items-center gap-y-1.5 border-b border-line px-4 pb-1.5 pt-2.5 text-left';
-const PI_NAME = 'min-w-0 truncate text-[1.0625rem] font-medium leading-snug';
+const PI_NAME = 'min-w-0 truncate text-[1.0625rem] font-semibold leading-snug text-ink';
 const PI_MONEY = 'text-[1.125rem] font-semibold leading-tight tracking-tight';
 const PI_TAIL = 'row-span-2 self-center';
 // The pill: two keypad cells joined. Small, medium weight, calmer than the
 // name. In sits on their colour (--hue, set on the row); Out is outlined.
 const TPILL = 'flex h-6 items-center px-1.5 text-[0.75rem] font-medium leading-none tabular-nums tracking-[-0.01em] transition';
-const PILL_IN = cx(TPILL, 'rounded-l-md bg-[color-mix(in_srgb,var(--hue)_16%,transparent)]');
-const PILL_OUT = cx(TPILL, 'rounded-r-md border border-l-0 border-ink/15');
+const PILL_IN = cx(TPILL, 'rounded-md bg-[color-mix(in_srgb,var(--hue)_16%,transparent)]');
+const PILL_OUT = cx(TPILL, 'rounded-md bg-surface-2');
 const IN_TONE = mv => (mv ? 'text-accent' : 'text-[color:color-mix(in_srgb,var(--hue)_72%,var(--ink-2))]');
 const OUT_TONE = (mv, close) => (mv ? 'text-accent' : close ? 'text-ink-3' : 'text-ink-2');
 const HRS_TEXT = 'ml-0.5 whitespace-nowrap text-[0.75rem] font-medium tabular-nums';
@@ -658,7 +658,7 @@ function ShiftLine({ span, p }) {
   if (!span || p.inAbs == null || p.outAbs == null) return html`<span class="col-start-1 col-end-5 h-[3px]"></span>`;
   const a = posOf(span, p.inAbs), b = posOf(span, p.outAbs);
   const brk = p.brkLen > 0 && p.brkStart != null;
-  return html`<span class="relative col-start-1 col-end-5 h-[3px] rounded-full bg-ink/[.05]" aria-hidden="true">
+  return html`<span class="relative col-start-1 col-end-5 mr-10 h-[3px] rounded-full bg-ink/[.05]" aria-hidden="true">
     <span class="absolute inset-y-0 rounded-full bg-[var(--hue)] opacity-90" style=${{ left: a + '%', width: Math.max(0, b - a) + '%' }}></span>
     ${brk && html`<span class="absolute -inset-y-px bg-bg" style=${{ left: posOf(span, p.brkStart) + '%', width: Math.max(0, posOf(span, p.brkStart + p.brkLen) - posOf(span, p.brkStart)) + '%' }}></span>`}
   </span>`;
@@ -667,7 +667,7 @@ function ShiftLine({ span, p }) {
 // [In|Out] — the two halves are keypad cells; `close` swaps the Out for
 // "close" (the real time comes back while it's edited or held).
 function TimePill({ a, b }) {
-  return html`<span class="ml-1 inline-flex shrink-0 items-stretch">${a}${b}</span>`;
+  return html`<span class="ml-1 inline-flex shrink-0 items-center gap-1">${a}<span class="text-xs text-ink-3" aria-hidden="true">→</span>${b}</span>`;
 }
 
 function PayItem({ vm, p, before, span }) {
@@ -685,8 +685,7 @@ function PayItem({ vm, p, before, span }) {
     <${TimePill}
       a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" bare cls=${PILL_IN} tone=${IN_TONE(timeMoved(vm, p.id, 'in'))} />`}
       b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" bare alt=${close ? 'close' : null} cls=${PILL_OUT} tone=${OUT_TONE(timeMoved(vm, p.id, 'out'), close)} />`} />
-    <span class=${cx(HRS_TEXT, sup ? 'text-ink-3/80' : 'text-ink-3')}>${fmtHrs(p.shiftHours ?? p.hours)}h</span>
-    <span></span>
+    <span></span><span></span>
     <span class=${cx(PI_TAIL, 'row-start-1 col-start-5 flex flex-col items-end gap-0.5 pl-2')}>
       <${Money} value=${p.final} class=${cx(PI_MONEY, sup ? SUP_TEXT : p.final > 0 ? 'text-money' : 'text-ink-3', d?.kind === 'preview' && '!text-accent')} />
       ${d ? html`<${Delta} d=${d} />`
@@ -694,6 +693,7 @@ function PayItem({ vm, p, before, span }) {
     </span>
     <${Icon} name="chevR" class=${cx(CHEV, 'row-start-1 col-start-6')} />
     <${ShiftLine} span=${span} p=${p} />
+    <span class=${cx(HRS_TEXT, 'col-start-4 row-start-2 justify-self-end', sup ? 'text-ink-3/80' : 'text-ink-3')}>${fmtHrs(p.shiftHours ?? p.hours)}h</span>
     <${Flash} d=${d} />
   </div>`;
 }

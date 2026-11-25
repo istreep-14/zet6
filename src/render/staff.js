@@ -307,7 +307,7 @@ function Axis({ span }) {
   </div>`;
 }
 
-const CARD = 'staff-person-card li grid w-full grid-cols-[2rem_minmax(0,1fr)_minmax(8.75rem,auto)_3rem] items-center gap-x-3 gap-y-2 px-4 py-2.5 text-left';
+const CARD = 'li grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 px-4 py-2.5 text-left';
 const BOX = 'h-10 w-[3.5rem] rounded-lg bg-surface-2 text-[0.875rem] tabular-nums transition';
 
 function TimeBox({ vm, p, field }) {
@@ -317,18 +317,6 @@ function TimeBox({ vm, p, field }) {
   return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${set} bad=${t.bad} ...${keyCell(p, field)}
     min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub}
     cls=${BOX} tone=${set ? 'font-semibold text-ink' : 'font-normal text-ink-3'} label=${p.name + ' ' + field + ' time'} />`;
-}
-
-// The rail makes an In → Out pair read as one stretch of a shift, rather
-// than two independent timestamps separated by a bare arrow.
-function TimeRange({ children }) {
-  return html`<span class="staff-time-range">
-    ${children}
-  </span>`;
-}
-
-function TimeStop({ label, children }) {
-  return html`<span class="staff-time-stop"><span class="staff-time-label">${label}</span>${children}</span>`;
 }
 
 function PersonCard({ vm, p, n, tint, span, allClose, lines = true }) {
@@ -352,19 +340,17 @@ function PersonCard({ vm, p, n, tint, span, allClose, lines = true }) {
   // the night everyone still ends at the close).
   const closer = t.forced ? 'bg-bad text-white' : t.closer && !allClose ? 'bg-bad/12 text-bad' : '';
   const right = mode === 'times'
-    ? html`<span class="contents"><${TimeRange}>
-        <${TimeStop} label="In"><${TimeBox} vm=${vm} p=${p} field="in" /><//>
-        <span class="staff-time-link" aria-hidden="true"></span>
-        <${TimeStop} label="Out"><${TimeBox} vm=${vm} p=${p} field="out" /><//>
-      <//><span class=${cx('staff-hours t-body font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) + 'h' : '?'}</span></span>`
-    : html`<span class="contents">
-        <${TimeRange}>
-          ${t.bad ? html`<span class="col-span-3 t-small font-semibold text-bad">Check times</span>` : html`
-            <${TimeStop} label="In"><span class=${cx('t-small tabular-nums', t.inSet ? 'font-medium text-ink' : 'text-ink-2')}>${t.inAbs != null ? html`<${Clock} abs=${t.inAbs} />` : '—'}</span><//>
-            <span class="staff-time-link" aria-hidden="true"></span>
-            <${TimeStop} label="Out"><span class=${cx('t-small tabular-nums', t.outSet ? 'font-medium text-ink' : 'text-ink-2')}>${t.outAbs != null ? html`<${Clock} abs=${t.outAbs} />` : '—'}</span><//>`}
-        <//>
-        <span class=${cx('staff-hours t-body font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) + 'h' : '?'}</span>
+    ? html`<span class="flex items-center gap-1.5">
+        <${TimeBox} vm=${vm} p=${p} field="in" /><span class="text-[0.75rem] text-ink-3/70">→</span><${TimeBox} vm=${vm} p=${p} field="out" />
+      </span>`
+    : html`<span class="flex items-center gap-3">
+        <span class="t-small whitespace-nowrap tabular-nums">
+          ${t.bad ? html`<span class="font-semibold text-bad">Check times</span>` : html`
+            <span class=${t.inSet ? 'font-medium text-ink' : 'text-ink-2'}>${t.inAbs != null ? html`<${Clock} abs=${t.inAbs} />` : '—'}</span>
+            <span class="mx-1 text-ink-3/70">→</span>
+            <span class=${t.outSet ? 'font-medium text-ink' : 'text-ink-2'}>${t.outAbs != null ? html`<${Clock} abs=${t.outAbs} />` : '—'}</span>`}
+        </span>
+        <span class=${cx('t-body w-10 text-right font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) + 'h' : '?'}</span>
       </span>`;
   const Tag = mode === 'times' ? 'div' : 'button';
   return html`<${Tag} class=${cx(CARD, Tag === 'button' && 'transition active:bg-surface-2', on && 'bg-accent/8', next && 'ring-2 ring-inset ring-accent')}
@@ -372,14 +358,14 @@ function PersonCard({ vm, p, n, tint, span, allClose, lines = true }) {
     ${lead}
     <span class="flex min-w-0 flex-col">
       <span class="flex min-w-0 items-center gap-1.5">
-        <span class="t-body truncate font-semibold text-ink">${p.name}</span>
+        <span class="t-body truncate font-medium">${p.name}</span>
         ${closer && html`<span class=${cx('shrink-0 rounded-full px-1.5 text-[0.6875rem] font-semibold leading-4', closer)}>Closer</span>`}
         ${next && html`<span class="shrink-0 rounded-full bg-accent px-1.5 text-[0.6875rem] font-semibold leading-4 text-on-accent">Next</span>`}
       </span>
       ${sub && html`<span class="t-small truncate text-ink-3">${sub}</span>`}
     </span>
     ${right}
-    ${lines && html`<span></span><div class="col-span-3"><${Timeline} span=${span} t=${t} role=${p.role} hue=${hueIndex(vm.state, p.id)} /></div>`}
+    ${lines && html`<span></span><div class="col-span-2"><${Timeline} span=${span} t=${t} role=${p.role} hue=${hueIndex(vm.state, p.id)} /></div>`}
   <//>`;
 }
 

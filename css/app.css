@@ -233,7 +233,11 @@
   html:has(.hud.is-review) .content { padding-bottom: calc(var(--dock) + 11rem); }   /* the HUD's Undo · Apply row */
 
   /* Sticky table heads sit flush with the top of .content (tucked into its 0.5rem padding). */
-  .panel { display: none; --thead-top: -0.5rem; will-change: transform; }
+  .panel {
+    display: none; --thead-top: -0.5rem; will-change: transform;
+    margin-inline: calc(-1 * (var(--gutter) + var(--safe-l))) calc(-1 * (var(--gutter) + var(--safe-r)));
+    padding-inline: calc(var(--gutter) + var(--safe-l)) calc(var(--gutter) + var(--safe-r));
+  }
   .panel.active { display: block; }
   /* A page stepped to slides in from the side it came from (ui/pages.js). */
   .panel.active.from-right { animation: inRight .24s cubic-bezier(.2, .8, .3, 1); }
@@ -592,29 +596,6 @@
      (iOS's long-press select-and-highlight), no callout. */
   html.holding, html.holding * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }
 
-  /* Staff rows keep the shift as one connected interval. The hour total has
-     its own fixed end column, so every value lands on the same right edge. */
-  .staff-time-range {
-    display: grid;
-    grid-template-columns: auto minmax(1.25rem, 1fr) auto;
-    align-items: center;
-    min-width: 8.75rem;
-    gap: .375rem;
-  }
-  .staff-time-stop { display: inline-flex; align-items: baseline; gap: .25rem; min-width: 0; white-space: nowrap; }
-  .staff-time-label { color: var(--ink-3); font-size: .625rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; }
-  .staff-time-link { position: relative; height: 1px; min-width: .75rem; background: var(--line); }
-  .staff-time-link::after {
-    content: ''; position: absolute; right: 0; top: 50%; width: .3125rem; height: .3125rem;
-    border-right: 1px solid var(--ink-3); border-top: 1px solid var(--ink-3); transform: translateY(-50%) rotate(45deg);
-  }
-  .staff-hours { width: 3rem; justify-self: end; text-align: right; }
-  @media (max-width: 400px) {
-    .staff-person-card { grid-template-columns: 2rem minmax(0, 1fr) minmax(7.75rem, auto) 2.75rem; column-gap: .5rem; }
-    .staff-time-label { display: none; }
-    .staff-time-range { min-width: 7.75rem; gap: .25rem; }
-    .staff-hours { width: 2.75rem; }
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
