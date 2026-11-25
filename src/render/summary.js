@@ -2,7 +2,7 @@
 // Tips; until it's done this shows the close-out checklist).
 //   pool warnings, the register banner (an over / short on Tips)
 //   → the figures: Tips · Hours · Rate · $10 · $5 · $1
-//   → payouts: a numbered hours ring, name and editable times, take-home,
+//   → payouts: a colored number, name and times, take-home,
 //     then the chump and Total
 //   → pools (several pools; tap → that pool's table in a sheet).
 // The other views (Table — the old Shift grid, Pools, Bills, Math) are picked from the page drawer
@@ -15,8 +15,9 @@ import { fmtHrs, fmtMoney, hasMinutes, hrsDecimals, hrsText } from '../util.js';
 import { TIME_TEXT, ARROW_BEFORE, DragAmount } from '../ui/dragtime.js';
 import { html, render, useRef, useEffect, useLayoutEffect } from '../ui/preact.js';
 import { payDelta, sumDelta, figDelta, timeMoved, defaultMoved } from '../ui/changes.js';
-import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Delta, Flash, Table, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL, hueTile, hueIndex, hueVar } from '../ui/pkit.js';
+import { cx, Icon, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Delta, Flash, Table, ROLE_TINT, TABLE, TABLE_ROW, TABLE_HEAD, THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL, hueTile, hueIndex } from '../ui/pkit.js';
 import { StaffTime, DefaultTime, fmtBreak } from './staff.js';
+import { parseTime, inAbsOf } from '../time.js';
 import { smallBillsNeeded } from './tabs.js';
 import { EnvelopeTable } from './payout.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
@@ -617,35 +618,19 @@ function MathTable({ vm }) {
 // Shared columns keep payouts aligned as names and amounts vary.
 const PI_COLS = '-mx-[var(--gutter)] grid grid-cols-[minmax(0,1fr)_auto_3rem] gap-x-2';
 const PI_ROW = 'relative col-span-full grid w-full grid-cols-subgrid items-center border-b border-line pl-4 pr-2 py-1 text-left';
-const PI_NAME = 'min-w-0 truncate text-[1.0625rem] font-medium leading-snug text-ink';
+const PI_NAME = 'min-w-0 truncate text-[1.0625rem] font-semibold leading-snug text-ink';
 const PI_MONEY = 'text-[1.125rem] font-medium leading-tight tracking-tight';
-const TPILL = 'flex h-5 items-center justify-center rounded-md px-1 text-[0.8125rem] font-medium leading-none tabular-nums transition';
-const PILL_IN = TPILL;
-const PILL_OUT = TPILL;
-const IN_TONE = mv => mv ? 'text-accent' : 'text-ink-3';
-const OUT_TONE = IN_TONE;
-const HRS_TEXT = 'whitespace-nowrap text-[0.8125rem] font-medium tabular-nums text-ink-3';
+const HRS_TEXT = 'whitespace-nowrap text-[0.75rem] tabular-nums text-ink-3';
 const CHEV = 'size-4 text-ink-3';
 
-// Both times remain separate keypad and wheel targets.
-function TimePill({ a, b }) {
-  return html`<span class="inline-flex shrink-0 items-center gap-2">${a}<span class="text-xs text-ink-3" aria-hidden="true">→</span>${b}</span>`;
+function TimeLine({ start, end }) {
+  return html`<span class="whitespace-nowrap text-[0.75rem] leading-tight tabular-nums text-ink-3">${start == null ? '—' : html`<${Clock} abs=${start} />`}<span class="mx-0.5" aria-hidden="true">→</span>${end == null ? '—' : html`<${Clock} abs=${end} />`}</span>`;
 }
 
-// Like a clock face, one complete ring represents twelve worked hours.
-function HoursRing({ n, hours, hue }) {
-  const fraction = Math.max(0, Math.min(1, (Number(hours) || 0) / 12));
-  return html`<span aria-hidden="true" class="grid size-9 shrink-0 place-items-center rounded-full p-[2px]" style=${{ background: `conic-gradient(${hueVar(hue)} ${fraction * 100}%, var(--surface-2) 0)` }}>
-    <span class="grid size-full place-items-center rounded-full bg-bg t-small font-semibold text-ink-2">${n}</span>
-  </span>`;
-}
-
-function ShiftTimes({ vm, p }) {
+function ShiftTimes({ p }) {
   return html`<span class="flex min-w-0 flex-col items-start">
       <span class=${PI_NAME}>${p.name}</span>
-      <span class="-ml-1 flex items-center gap-2"><${TimePill}
-        a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" bare cls=${PILL_IN} tone=${IN_TONE(timeMoved(vm, p.id, 'in'))} />`}
-        b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" bare cls=${PILL_OUT} tone=${OUT_TONE(timeMoved(vm, p.id, 'out'))} />`} /><span class=${HRS_TEXT}>· ${fmtHrs(p.shiftHours ?? p.hours)}h</span></span>
+      <span class="flex items-center gap-1.5"><${TimeLine} start=${p.inAbs} end=${p.outAbs} /><span class=${HRS_TEXT}>· ${fmtHrs(p.shiftHours ?? p.hours)}h</span></span>
   </span>`;
 }
 
@@ -659,7 +644,7 @@ function PayItem({ vm, p, before, n }) {
     class=${cx(PI_ROW, 'cursor-pointer transition active:bg-surface-2')}
     aria-label=${p.name + ', ' + fmtHrs(p.shiftHours ?? p.hours) + ' hours' + brk + ', takes home ' + fmtMoney(p.final)}
     onClick=${() => App.personModal(p.id)} onKeyDown=${e => { if (e.key === 'Enter' && e.target === e.currentTarget) App.personModal(p.id); }}>
-    <span class="flex min-w-0 items-center gap-3"><${HoursRing} n=${n} hours=${p.shiftHours ?? p.hours} hue=${hue} /><${ShiftTimes} vm=${vm} p=${p} /></span>
+    <span class="flex min-w-0 items-center gap-3"><span aria-hidden="true" class="grid size-8 shrink-0 place-items-center rounded-lg t-small font-semibold tabular-nums" style=${hueTile(hue)}>${n}</span><${ShiftTimes} p=${p} /></span>
     <span class="flex flex-col items-end">
       <${Money} value=${p.final} class=${cx(PI_MONEY, 'text-ink', d?.kind === 'preview' && '!text-accent')} />
       ${d ? html`<${Delta} d=${d} />`
@@ -686,10 +671,10 @@ function PayItems({ vm, name }) {
         onTap=${() => App.tab('tips')} />`
     : html`<${Money} value=${paidOut} class=${cx(PI_MONEY, 'text-ink')} />`;
   const td = sumDelta(vm, paidOut);
-  const shiftTone = mv => (mv ? 'text-accent' : 'text-ink-2');
+  const open = parseTime(vm.state.defaults.global.in);
   const anySup = ordered.some(isSup);
   const footer = html`<span class="flex flex-wrap items-center gap-x-3 gap-y-1">
-    <span>Tap a time to type it · hold for the wheel · full ring = 12 hours</span>
+    <span>Tap a person to view or edit their times</span>
     ${anySup && html`<span>Support is a tip-out, not counted in hours</span>`}</span>`;
   return html`<${Section} title=${name || 'Payouts'} aside=${ordered.length + (ordered.length === 1 ? ' person' : ' people')} footer=${footer}>
     <div class=${PI_COLS}>
@@ -705,9 +690,7 @@ function PayItems({ vm, name }) {
       </button>`}
       <div class=${cx(PI_ROW, 'border-b-0 bg-surface-2')}>
         <span class="flex min-w-0 flex-col items-start"><span class="text-[1.0625rem] font-semibold leading-snug">Total</span>
-          <${TimePill}
-            a=${html`<${DefaultTime} vm=${vm} field="in" bare cls=${PILL_IN} tone=${shiftTone(defaultMoved(vm, 'in'))} />`}
-            b=${html`<${DefaultTime} vm=${vm} field="out" bare cls=${PILL_OUT} tone=${shiftTone(defaultMoved(vm, 'out'))} />`} />
+          <${TimeLine} start=${open.value == null ? null : inAbsOf(open)} end=${vm.resolved.closeAbs} />
         </span>
         <span class="flex flex-col items-end">
           ${total}
