@@ -615,26 +615,25 @@ function MathTable({ vm }) {
 }
 
 // ── Payouts as a list (the page) ─────────────────────────────────────────────
-// Each person has their editable time range under their name, and hours under
-// their payout. Total follows the same layout.
-const PI_COLS = '-mx-[var(--gutter)]';
-const PI_ROW = 'relative grid w-full grid-cols-[minmax(0,1fr)_auto_1rem] items-center gap-x-3 border-b border-line px-4 py-3 text-left';
+// Shared columns keep hours and payouts aligned as names and amounts vary.
+const PI_COLS = '-mx-[var(--gutter)] grid grid-cols-[minmax(0,1fr)_minmax(3.5rem,max-content)_auto_1rem] gap-x-2';
+const PI_ROW = 'relative col-span-full grid w-full grid-cols-subgrid items-center border-b border-line pl-4 pr-6 py-2 text-left';
 const PI_NAME = 'min-w-0 truncate text-[1.125rem] font-bold leading-snug tracking-tight text-ink';
 const PI_MONEY = 'text-[1.125rem] font-semibold leading-tight tracking-tight';
-const TPILL = 'flex h-7 items-center rounded-md px-1 text-[0.8125rem] font-medium leading-none tabular-nums transition';
+const TPILL = 'flex h-6 items-center justify-center rounded-md px-1 text-[0.8125rem] font-medium leading-none tabular-nums transition';
 const PILL_IN = TPILL;
 const PILL_OUT = TPILL;
-const IN_TONE = mv => mv ? 'text-accent' : 'text-ink-2';
+const IN_TONE = mv => mv ? 'text-accent' : 'text-[color:var(--time-color)]';
 const OUT_TONE = IN_TONE;
-const HRS_TEXT = 'whitespace-nowrap text-[0.75rem] font-medium tabular-nums text-ink-3';
+const HRS_TEXT = 'whitespace-nowrap text-[0.9375rem] font-semibold tabular-nums text-ink-2';
 const CHEV = 'size-4 text-ink-3';
 
 // Both times remain separate keypad and wheel targets.
 function TimePill({ a, b }) {
-  return html`<span class="-ml-1 inline-flex items-center gap-1">${a}<span class="text-xs text-ink-3" aria-hidden="true">→</span>${b}</span>`;
+  return html`<span class="inline-flex shrink-0 items-center gap-2">${a}<span class="text-xs text-ink-3" aria-hidden="true">→</span>${b}</span>`;
 }
 
-// Every row shares the same time axis. The fine line occupies only the part
+// Every row shares the same time axis. The tint occupies only the part
 // of the shift window the person worked, fading inside the endpoints.
 function shiftWash(span, p, hue) {
   if (!span || p.inAbs == null || p.outAbs == null || p.outAbs <= p.inAbs) return undefined;
@@ -642,8 +641,21 @@ function shiftWash(span, p, hue) {
   const start = at(p.inAbs), end = at(p.outAbs);
   if (end <= start) return undefined;
   const fade = Math.min(3, (end - start) / 4);
-  const tint = `color-mix(in srgb, ${hueVar(hue)} 45%, transparent)`;
+  const tint = `color-mix(in srgb, ${hueVar(hue)} 75%, transparent)`;
   return `linear-gradient(90deg, transparent ${start}%, ${tint} ${start + fade}%, ${tint} ${end - fade}%, transparent ${end}%)`;
+}
+
+function ShiftTimes({ vm, p, span, hue }) {
+  const wash = shiftWash(span, p, hue);
+  return html`<span class="flex min-w-0 flex-1 flex-col gap-1" style=${{ '--time-color': hueVar(hue) }}>
+    <span class="flex min-w-0 items-center gap-3">
+      <span class=${PI_NAME}>${p.name}</span>
+      <${TimePill}
+        a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" bare cls=${PILL_IN} tone=${IN_TONE(timeMoved(vm, p.id, 'in'))} />`}
+        b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" bare cls=${PILL_OUT} tone=${OUT_TONE(timeMoved(vm, p.id, 'out'))} />`} />
+    </span>
+    <span aria-hidden="true" class="block h-1.5 w-full rounded-full bg-ink/[.07]" style=${{ backgroundImage: wash }}></span>
+  </span>`;
 }
 
 function PayItem({ vm, p, before, n, span }) {
@@ -653,28 +665,21 @@ function PayItem({ vm, p, before, n, span }) {
   const ch = p.final - before;
   const brk = p.brkLen > 0 ? ', ' + fmtBreak(p.brkLen) + ' break' : '';
   const hue = hueIndex(vm.state, p.id);
-  const wash = shiftWash(span, p, hue);
   return html`<div role="button" tabindex="0"
     class=${cx(PI_ROW, 'cursor-pointer transition active:bg-surface-2')}
     aria-label=${p.name + ', ' + fmtHrs(p.shiftHours ?? p.hours) + ' hours' + brk + ', takes home ' + fmtMoney(p.final)}
     onClick=${() => App.personModal(p.id)} onKeyDown=${e => { if (e.key === 'Enter' && e.target === e.currentTarget) App.personModal(p.id); }}>
-    <span class="flex min-w-0 items-center gap-3">
+    <span class="flex min-w-0 items-center gap-2">
       <span aria-hidden="true" class="grid size-8 shrink-0 place-items-center rounded-lg t-small font-semibold tabular-nums" style=${hueTile(hue)}>${n}</span>
-      <span class="flex min-w-0 flex-col items-start">
-      <span class=${PI_NAME}>${p.name}</span>
-      <${TimePill}
-        a=${html`<${StaffTime} vm=${vm} id=${p.id} field="in" bare cls=${PILL_IN} tone=${IN_TONE(timeMoved(vm, p.id, 'in'))} />`}
-        b=${html`<${StaffTime} vm=${vm} id=${p.id} field="out" bare cls=${PILL_OUT} tone=${OUT_TONE(timeMoved(vm, p.id, 'out'))} />`} />
-      </span>
+      <${ShiftTimes} vm=${vm} p=${p} span=${span} hue=${hue} />
     </span>
-    <span class="flex flex-col items-end gap-0.5 pl-2">
+    <span class=${cx(HRS_TEXT, 'min-w-[3.5rem] rounded-lg px-2 py-1 text-center')} style=${hueTile(hue)}>${fmtHrs(p.shiftHours ?? p.hours)}h</span>
+    <span class="flex flex-col items-end">
       <${Money} value=${p.final} class=${cx(PI_MONEY, sup ? SUP_TEXT : p.final > 0 ? 'text-money' : 'text-ink-3', d?.kind === 'preview' && '!text-accent')} />
-      <span class=${HRS_TEXT}>${fmtHrs(p.shiftHours ?? p.hours)}h</span>
       ${d ? html`<${Delta} d=${d} />`
         : adj && html`<span class=${cx('t-small font-medium tabular-nums', ch < 0 ? 'text-bad' : ch > 0 ? 'text-good' : 'text-ink-3')}>${ch ? signed(ch) : 'same'}</span>`}
     </span>
     <${Icon} name="chevR" class=${CHEV} />
-    ${wash && html`<span aria-hidden="true" class="pointer-events-none absolute bottom-0.5 left-4 right-4 h-1 rounded-full" style=${{ backgroundImage: wash }}></span>`}
     <${Flash} d=${d} />
   </div>`;
 }
@@ -706,7 +711,7 @@ function PayItems({ vm, name }) {
       ${ordered.map((p, i) => html`<${PayItem} key=${p.id} vm=${vm} p=${p} n=${i + 1} before=${was(p.id)} span=${span} />`)}
       ${s.leftover > 0 && html`<button style=${{ '--inset': '1rem' }} class=${cx(PI_ROW, 'pb-2.5 transition active:bg-surface-2')} onClick=${() => App.openBonus()}>
         <span class="flex min-w-0 flex-col"><span class="text-[1.0625rem] font-medium leading-snug text-ink-2">Chump</span><span class="t-small text-ink-3">stays in the drawer</span></span>
-        <span class="pl-2 text-right text-[1.0625rem] font-semibold tabular-nums text-ink-2">${fmtMoney(s.leftover)}</span>
+        <span></span><span class="text-right text-[1.0625rem] font-semibold tabular-nums text-ink-2">${fmtMoney(s.leftover)}</span>
         <${Icon} name="chevR" class=${CHEV} />
       </button>`}
       <div class=${cx(PI_ROW, 'border-b-0')}>
@@ -715,9 +720,9 @@ function PayItems({ vm, name }) {
             a=${html`<${DefaultTime} vm=${vm} field="in" bare cls=${PILL_IN} tone=${shiftTone(defaultMoved(vm, 'in'))} />`}
             b=${html`<${DefaultTime} vm=${vm} field="out" bare cls=${PILL_OUT} tone=${shiftTone(defaultMoved(vm, 'out'))} />`} />
         </span>
-        <span class="flex flex-col items-end gap-0.5 pl-2">
+        <span class=${cx(HRS_TEXT, 'text-right')}>${fmtHrs(hours)}h</span>
+        <span class="flex flex-col items-end">
           ${total}
-          <span class=${HRS_TEXT}>${fmtHrs(hours)}h</span>
           ${td ? html`<${Delta} d=${td} />` : adj && html`<span class="t-small tabular-nums text-ink-3">was ${fmtMoney(paidBefore)}</span>`}
         </span>
         <span></span>
