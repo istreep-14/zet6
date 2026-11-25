@@ -1,10 +1,10 @@
 // Navigation chrome (ui/nav.js holds the state): the header, the sub-tab
 // row, the tab bar's active tab and badges, and the totals strip.
 //
-//   header     a root page: its title (+ a line under it — Home: the date
-//              and shift type) and its actions (Home: Copy). A subpage:
-//              ‹ Back (the page under it) · its title · its actions.
-//   sub-tabs   a full-width segmented row under the header (Home, Tips).
+//   header     one compact row. A root page: its sub-tabs (Home, Tips) or
+//              its title, and its actions (Home: Copy; Staff: Select).
+//              A subpage: ‹ Back (the page under it) · its title · its
+//              actions.
 //   strip      Staff and Tips only: Tips · Hours · Rate in one quiet line —
 //              the would-be numbers while an edit is previewed, and a row
 //              with Undo · Apply after a wheel / keypad edit.
@@ -58,44 +58,38 @@ export function renderChrome(vm = last?.vm, sessionName = last?.sessionName || '
     if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
   });
   renderBadges(vm);
-  const hdr = $('hdr');
-  if (hdr) render(html`<${Header} vm=${vm} tab=${tab} sessionName=${sessionName} />`, hdr);
-  const st = $('subtabs');
   // Home's views mean nothing until there's a split (it shows the checklist).
   const subs = tab === 'home' && vm.blocked ? [] : subsOf(tab);
-  if (st) render(subs.length ? html`<${Seg} size="md" value=${currentSub(tab)} items=${subs}
-    onChange=${v => setSub(tab, v)} />` : null, st);
+  const hdr = $('hdr');
+  if (hdr) render(html`<${Header} vm=${vm} tab=${tab} subs=${subs} />`, hdr);
   renderStrip(vm);
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
 
-function Header({ vm, tab, sessionName }) {
+// One compact row. A page with sub-tabs puts them in the header in place of
+// its title (the tab bar already says which page it is); a page without
+// shows its title. A subpage: ‹ Back · its title · its actions.
+function Header({ vm, tab, subs }) {
   const stack = stackOf(tab);
-  const top = stack.at(-1);
+  const top = stack[stack.length - 1];
   if (top) {
-    const under = stack.at(-2)?.title || TITLES[tab];
+    const under = stack[stack.length - 2]?.title || TITLES[tab];
     return html`<button class="hdr-back" onClick=${() => App.back()} aria-label=${'Back to ' + under}>
         <${Icon} name="chevR" class="size-5 shrink-0 rotate-180" /><span class="truncate">${under}</span></button>
       <h1 class="hdr-mid">${top.title}</h1>
       <div class="hdr-actions">${top.actions?.(vm)}</div>`;
   }
-  const s = vm.state;
-  // Home's title is the shift itself: its name, else its date.
-  const type = (s.meta.shiftType || 'night') === 'day' ? 'Day shift' : 'Night shift';
-  const named = s.staff.filter(p => p.name.trim()).length;
-  const title = tab === 'home' ? sessionName || fmtDay(s.meta.date) : TITLES[tab];
-  const line = tab === 'home' ? [sessionName && fmtDay(s.meta.date), type, named && named + (named === 1 ? ' person' : ' people')].filter(Boolean).join(' · ') : '';
+  const named = vm.state.staff.filter(p => p.name.trim()).length;
   const selecting = tab === 'staff' && staffMode() === 'select';
-  const text = 't-body h-[var(--tap)] rounded-full px-4 font-semibold transition active:scale-95';
-  return html`<div class="hdr-main">
-      <h1 class="hdr-big truncate">${title}</h1>
-      ${line && html`<span class="hdr-line truncate">${line}</span>`}
-    </div>
-    <div class="hdr-actions">
-      ${tab === 'home' && !vm.blocked && html`<button class="icon-btn" onClick=${() => App.copySummary()} aria-label="Copy as text"><${Icon} name="copy" class="size-[1.125rem]" /></button>`}
-      ${tab === 'staff' && named > 0 && html`<button class=${cx(text, selecting ? 'bg-accent text-on-accent' : 'bg-surface text-accent')} onClick=${toggleSelect}>${selecting ? 'Done' : 'Select'}</button>`}
-    </div>`;
+  const text = 't-small h-9 rounded-full px-3.5 font-semibold transition active:scale-95';
+  const actions = html`
+    ${tab === 'home' && !vm.blocked && html`<button class="icon-btn" onClick=${() => App.copySummary()} aria-label="Copy as text"><${Icon} name="copy" class="size-[1.0625rem]" /></button>`}
+    ${tab === 'staff' && named > 0 && html`<button class=${cx(text, selecting ? 'bg-accent text-on-accent' : 'bg-surface text-accent')} onClick=${toggleSelect}>${selecting ? 'Done' : 'Select'}</button>`}`;
+  return html`${subs.length
+      ? html`<${Seg} size="md" class="min-w-0 flex-1" value=${currentSub(tab)} items=${subs} onChange=${v => setSub(tab, v)} />`
+      : html`<h1 class="hdr-big min-w-0 flex-1 truncate">${TITLES[tab]}</h1>`}
+    <div class="hdr-actions">${actions}</div>`;
 }
 
 // ── Tab bar badges: staff count, tips total, `!` on a problem. ─────────────

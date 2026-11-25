@@ -57,17 +57,16 @@
 </head>
 <body>
 
-<!-- Header (render/tabs.js): the page title and its actions; on a subpage,
-     Back · the subpage's title · its actions. -->
+<!-- Header (render/tabs.js), one row: the page's sub-tabs (Home, Tips) or
+     its title, and its actions; on a subpage Back · its title · its actions. -->
 <header class="hdr" id="hdr"></header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
-<!-- The stage: the sub-tab row, the four tab pages, and the subpages pushed
+<!-- The stage: the four tab pages, and the subpages pushed
      over them from the right (src/ui/nav.js). Tabs change only from the tab
      bar; a sideways swipe moves between a page's sub-tabs, and a swipe right
      on a subpage goes back. -->
 <div class="stage">
-  <nav class="subtabs" id="subtabs" aria-label="Views"></nav>
   <main class="content" id="mainContent">
     <section class="panel active" id="tab-home"><div id="home-root"></div></section>
     <section class="panel" id="tab-staff"><div id="staff-root"></div></section>

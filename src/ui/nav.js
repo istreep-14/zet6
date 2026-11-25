@@ -1,8 +1,8 @@
 // Navigation: four tabs — Home · Staff · Tips · Settings — changed only by
 // tapping the tab bar. Inside a tab:
 //
-//   sub-tabs   a segmented row under the header (Home: Pay · Shift · Bills ·
-//              Split; Tips: Cash · Drawer). A sideways swipe on the page
+//   sub-tabs   a segmented control in the header, in place of the title
+//              (Home: Pay · Shift · Bills · Split; Tips: Cash · Drawer). A sideways swipe on the page
 //              moves between them; the page follows the finger, past the
 //              ends it rubber-bands. Elements in a tab's panel marked
 //              data-sub="x" show only while sub-tab x is on.
@@ -56,7 +56,7 @@ export const currentTab = () => cur;
 export const currentSub = (tab = cur) => sub[tab] ?? null;
 export const subsOf = (tab = cur) => SUBS[tab] || [];
 export const stackOf = (tab = cur) => stacks[tab];
-export const topPage = (tab = cur) => stacks[tab].at(-1) || null;
+export const topPage = (tab = cur) => stacks[tab][stacks[tab].length - 1] || null;
 export const onNav = fn => listeners.push(fn);
 const changed = () => listeners.forEach(fn => fn());
 

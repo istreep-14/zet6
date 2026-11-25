@@ -1,7 +1,7 @@
 // Staff page (Preact) — where who worked, and when, is entered. A table
 // that is always editable:
 //   the shift's Open and Close (keypad cells)
-//   → note line (count · closers · hours, warnings)
+//   → warnings, if any (input errors, out after the close)
 //   → one list: a sticky header (# · Name · In · Out · Hrs, the hour axis),
 //     a small heading per role (roles on), a row per person — number tile ·
 //     name (red dot = closer; break under it) · In → Out as boxes (tap →
@@ -226,14 +226,10 @@ const picked = state => ordered(state).filter(p => sel.has(p.id));
 
 // ── Note line ────────────────────────────────────────────────────────────────
 
+// Only what needs a look: input errors, someone out after the close. (The
+// count is on the tab, the closers are the red dots, the hours are in the
+// totals strip.)
 function Note({ vm }) {
-  const people = vm.state.staff.filter(named);
-  if (!people.length) return null;
-  const parts = [people.length + ' on shift'];
-  const closers = vm.resolved.staff.filter(p => p.closer).length;
-  if (closers) parts.push(closers + (closers === 1 ? ' closer' : ' closers'));
-  const hrs = vm.resolved.staff.filter(p => p.role !== 'support').reduce((t, p) => t + p.hours, 0);
-  if (hrs > 0) parts.push(fmtHrs(hrs) + ' hours');
   const warnings = [];
   if (vm.inputError && vm.blockedTab === 'staff') warnings.push(vm.blocked);
   const closeAbs = vm.resolved.closeAbs;
@@ -242,8 +238,7 @@ function Note({ vm }) {
       if (!p.usedDefaults.out && p.outAbs !== null && p.outAbs > closeAbs + 0.001) warnings.push(p.name + ' is out after the close time');
     });
   }
-  return html`<div class="t-small px-4 text-ink-3">${parts.join(' · ')}</div>
-    ${warnings.map(w => html`<${Alert} key=${w} tone="warn">${w}<//>`)}`;
+  return warnings.map(w => html`<${Alert} key=${w} tone="warn">${w}<//>`);
 }
 
 // ── The close time ───────────────────────────────────────────────────────────
