@@ -88,8 +88,8 @@ export function applyPendingTradeDown() {
 }
 
 // ── Envelopes table: person · denomination count grid · pay ────────────────
-// Each person gets a compact 3 × 2 count matrix. Every bill stays visible on
-// a phone, so there is no horizontal scroller competing with the sticky head.
+// Every denomination has a compact column, so the entire drawer is visible at
+// once without a horizontal scroller competing with the sticky head.
 // The envelope grid on its own (Payout's Envelopes, Summary's Bills view):
 // `order` = the people in row order (default payoutOrder). A person taking
 // bundled stacks (vm.stacks) says so under their name.
@@ -100,9 +100,10 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
   const cols = DENOMS;
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
-  const billGrid = bills => html`<span class="grid grid-cols-3 gap-x-1.5 gap-y-1">
-    ${cols.map(d => html`<span key=${d} data-d=${d} class="inline-flex h-5 min-w-0 items-center justify-between gap-1 rounded bg-[color-mix(in_srgb,var(--dc)_12%,transparent)] px-1 text-[0.625rem] tabular-nums"><span class="bill-col">$${d}</span><b class=${(bills[d] || 0) > 0 ? 'font-semibold text-ink' : 'font-normal text-ink-3/60'}>${bills[d] || '–'}</b></span>`)}
-  </span>`;
+  const count = (d, v) => v > 0
+    ? html`<span data-d=${d} class="bill-col font-semibold">${v}</span>`
+    : html`<span class="text-ink-3/45">–</span>`;
+  const head = d => html`<span data-d=${d} class="bill-col text-[0.625rem] tracking-[-.04em]" aria-label=${'$' + d}>$${d}</span>`;
   const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} />${!quiet && html`<${Delta} d=${payDelta(vm, p.id, p.final)} under />`}</span>`;
   const stackNote = id => {
     const st = vm.stacks?.[id];
@@ -112,13 +113,13 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
   };
   const envelopeName = p => html`<span class="flex min-w-0 items-center gap-2.5"><${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} size="sm" /><span class="flex min-w-0 flex-col"><span class="truncate">${p.name}</span>${stackNote(p.id)}</span></span>`;
   return html`<${Table} fixed firstWide class="envelope-grid"
-    cols=${[{ label: 'Envelope', w: 'w-[35%]' }, { label: 'Bills', w: 'w-[45%]' }, { label: 'Take home', align: 'right', w: 'w-[20%]' }]}
+    cols=${[{ label: 'Envelope', w: 'w-[32%]' }, ...cols.map(d => ({ head: head(d), w: 'w-[7%]' })), { label: 'Take home', align: 'right', w: 'w-[26%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => onRow(p.id),
-        cells: [envelopeName(p), billGrid(byPerson[p.id] || {}), pay(p)] })),
-      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, billGrid(rem), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
+        cells: [envelopeName(p), ...cols.map(d => count(d, (byPerson[p.id] || {})[d] || 0)), pay(p)] })),
+      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, ...cols.map(d => count(d, rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
     ]}
-    foot=${[html`<${RowLabel}>Total<//>`, billGrid(Object.fromEntries(cols.map(d => [d, colTotal(d)]))), html`<${Money} value=${grand} class="font-semibold text-money" />`]} />`;
+    foot=${[html`<${RowLabel}>Total<//>`, ...cols.map(d => count(d, colTotal(d))), html`<${Money} value=${grand} class="font-semibold text-money" />`]} />`;
 }
 
 

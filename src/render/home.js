@@ -155,8 +155,8 @@ function ShiftBar({ vm, p, span }) {
 const CELL = 'inline-flex h-auto min-w-0 items-center p-0 text-[0.8125rem] leading-tight tabular-nums transition';
 // Every time reads the same quiet grey, typed or following the default.
 const TIME_TONE = () => 'text-ink-3';
-const MONEY_PILL = 't-small font-semibold tabular-nums';
-const PayoutPill = ({ value, d, tone = 'green' }) => html`<span class=${cx('inline-flex shrink-0 items-center gap-1', d && 'live-changed')}><${Delta} d=${d} /><${Badge} tone=${tone}><span class=${MONEY_PILL}>${fmtMoney(value)}</span><//></span>`;
+const PAY_VALUE = 't-body font-semibold tabular-nums';
+const PayoutValue = ({ value, d, tone = '' }) => html`<span class=${cx('inline-flex shrink-0 items-center gap-1', d && 'live-changed')}><${Delta} d=${d} /><span class=${cx(PAY_VALUE, tone)}>${fmtMoney(value)}</span></span>`;
 function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
   const s = vm.shares;
   const raw = id => vm.state.staff.find(x => x.id === id);
@@ -165,16 +165,16 @@ function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
   const onePool = vm.state.pools.length === 1;
   const tipsTotal = onePool
     ? html`<span class="inline-flex items-center gap-1"><${Delta} d=${payDeltaSum(vm, total) || marks?.$total} />
-        <${DragAmount} plain value=${total} min=${0} label="Tips total" cls="h-6 rounded-full bg-good/14 px-2.5 py-0 text-good" moneyCls=${MONEY_PILL}
+        <${DragAmount} plain value=${total} min=${0} label="Tips total" cls="px-0 py-0 text-ink" moneyCls=${PAY_VALUE}
           onSet=${v => App.nudgeCash(v - total)} onPreview=${v => App.previewCash(v == null ? null : v - total)}
           onTap=${() => App.tab('tips')} /></span>`
-    : html`<${PayoutPill} value=${total} d=${marks?.$total} />`;
+    : html`<${PayoutValue} value=${total} d=${marks?.$total} />`;
   const totalSub = html`<span class="inline-flex items-center gap-1"><span class="inline-flex items-center gap-1"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare /><span>→</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare /></span><span>· ${fmtHrs(hours)}h</span></span>`;
   return html`<${List} class="payout-list">
     ${people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id, pageTab)}
       lead=${html`<${PersonAv} vm=${vm} p=${p} size="sm" />`} title=${p.name} sub=${timeSub(p)}
-      trail=${html`<${PayoutPill} value=${p.final} d=${payDelta(vm, p.id, p.final) || markOf(p)} tone=${isSup(p) ? 'support' : 'green'} />`} />`)}
-    ${s.leftover > 0 && html`<${Item} icon="cash" title="Chump" trail=${html`<${PayoutPill} value=${s.leftover} tone="muted" />`} chevron=${false} />`}
+      trail=${html`<${PayoutValue} value=${p.final} d=${payDelta(vm, p.id, p.final) || markOf(p)} tone=${isSup(p) ? SUP_TEXT : ''} />`} />`)}
+    ${s.leftover > 0 && html`<${Item} icon="cash" title="Chump" trail=${html`<${PayoutValue} value=${s.leftover} tone="text-ink-2" />`} chevron=${false} />`}
     <${Item} icon="sigma" title="Total" sub=${totalSub} trail=${tipsTotal} chevron=${false} />
   <//>`;
 }

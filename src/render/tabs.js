@@ -80,8 +80,8 @@ function metaOf(vm, tab, sessionName) {
   // The shift's working facts live in every root header, not behind a
   // calculator page. Small type keeps all four figures visible together.
   if (sh) return [
-    { v: fmtMoney(vm.totalCash || 0), l: 'tips', tone: 'text-money' }, people(sh.perPerson.length), hours,
-    { v: rate2(sh.rate), l: '/h', tight: true, tone: 'text-money' },
+    { v: fmtMoney(vm.totalCash || 0), l: 'tips' }, people(sh.perPerson.length), hours,
+    { v: rate2(sh.rate), l: '/h', tight: true },
   ];
   if (tab === 'home') return sh
     ? [{ v: fmtMoney(sh.perPerson.reduce((t, p) => t + p.final, 0)), l: 'paid' }, people(sh.perPerson.length), { v: rate2(sh.rate), l: '/h', tight: true }]
@@ -111,6 +111,14 @@ export function DayDisc({ iso, size = 'size-9', text = 'text-[1rem]' }) {
   return html`<span class=${cx('grid shrink-0 place-items-center rounded-full bg-accent font-semibold tabular-nums text-on-accent', size, text)}>${m ? +m[3] : '·'}</span>`;
 }
 
+function HeaderBills({ vm }) {
+  const need = smallBillsNeeded(vm);
+  if (!need) return null;
+  return html`<span class="hdr-bills" aria-label=${'Ideal small bills: ' + need.map(b => b.n + ' $' + b.d).join(', ')}>
+    ${need.map(b => html`<span key=${b.d} data-d=${b.d}><b>${b.n}</b><small>$${b.d}</small></span>`)}
+  </span>`;
+}
+
 function Header({ vm, tab, subs, sessionName }) {
   const stack = stackOf(tab);
   const top = stack[stack.length - 1];
@@ -126,7 +134,7 @@ function Header({ vm, tab, subs, sessionName }) {
   return html`<div class="hdr-bar">
       <button class="hdr-btn" onClick=${() => App.openMenu()} aria-label="Menu: sessions and tools" aria-controls="menu">
         <${DayDisc} iso=${vm.state.meta.date} /></button>
-      <div class="hdr-text"><h1 class="hdr-title">${TITLES[tab]}</h1><${Meta} class="hdr-meta" items=${metaOf(vm, tab, sessionName)} /></div>
+      <div class="hdr-text"><h1 class="hdr-title">${TITLES[tab]}</h1><span class="hdr-facts"><${Meta} class="hdr-meta" items=${metaOf(vm, tab, sessionName)} /><${HeaderBills} vm=${vm} /></span></div>
     </div>
     ${subs.length > 0 && html`<div class="hdr-tabs" role="tablist" aria-label=${TITLES[tab]}>
       ${subs.map(s => html`<button key=${tab + s.value} role="tab" class="hdr-tab" aria-selected=${String(s.value === sub)}
