@@ -1,20 +1,15 @@
-// Navigation chrome (ui/nav.js holds the state): the header, the sub-tab
-// row, the tab bar's active tab and badges, and the totals strip.
+// Navigation chrome (ui/nav.js holds the state): the header and the tab
+// bar's active tab and badges.
 //
-//   header     one compact row. A root page: its sub-tabs (Home, Tips) or
-//              its title, and its actions (Home: Copy; Staff: Select).
-//              A subpage: ‹ Back (the page under it) · its title · its
-//              actions.
-//   strip      Staff and Tips only: Tips · Hours · Rate in one quiet line —
-//              the would-be numbers while an edit is previewed, and a row
-//              with Undo · Apply after a wheel / keypad edit.
+//   header     one row. A root page: its sub-tabs (every tab has them) as a
+//              full-width segmented control — a sideways swipe on the page
+//              steps them too. A subpage: ‹ Back (the page under it) · its
+//              title · its actions.
 
-import { poolValue, fmtHrs, fmtMoney, fmtMoneyShort } from '../util.js';
+import { poolValue, fmtMoneyShort } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Seg, Delta } from '../ui/pkit.js';
-import { figDelta, isPreview, movedCount, payDelta } from '../ui/changes.js';
+import { cx, Icon, Seg } from '../ui/pkit.js';
 import { currentTab, currentSub, subsOf, setSub, stackOf, TITLES } from '../ui/nav.js';
-import { staffMode, toggleSelect } from './staff.js';
 
 const $ = id => document.getElementById(id);
 
@@ -62,14 +57,10 @@ export function renderChrome(vm = last?.vm, sessionName = last?.sessionName || '
   const subs = tab === 'home' && vm.blocked ? [] : subsOf(tab);
   const hdr = $('hdr');
   if (hdr) render(html`<${Header} vm=${vm} tab=${tab} subs=${subs} />`, hdr);
-  renderStrip(vm);
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
 
-// One compact row. A page with sub-tabs puts them in the header in place of
-// its title (the tab bar already says which page it is); a page without
-// shows its title. A subpage: ‹ Back · its title · its actions.
 function Header({ vm, tab, subs }) {
   const stack = stackOf(tab);
   const top = stack[stack.length - 1];
@@ -80,16 +71,9 @@ function Header({ vm, tab, subs }) {
       <h1 class="hdr-mid">${top.title}</h1>
       <div class="hdr-actions">${top.actions?.(vm)}</div>`;
   }
-  const named = vm.state.staff.filter(p => p.name.trim()).length;
-  const selecting = tab === 'staff' && staffMode() === 'select';
-  const text = 't-small h-9 rounded-full px-3.5 font-semibold transition active:scale-95';
-  const actions = html`
-    ${tab === 'home' && !vm.blocked && html`<button class="icon-btn" onClick=${() => App.copySummary()} aria-label="Copy as text"><${Icon} name="copy" class="size-[1.0625rem]" /></button>`}
-    ${tab === 'staff' && named > 0 && html`<button class=${cx(text, selecting ? 'bg-accent text-on-accent' : 'bg-surface text-accent')} onClick=${toggleSelect}>${selecting ? 'Done' : 'Select'}</button>`}`;
-  return html`${subs.length
-      ? html`<${Seg} size="md" class="min-w-0 flex-1" value=${currentSub(tab)} items=${subs} onChange=${v => setSub(tab, v)} />`
-      : html`<h1 class="hdr-big min-w-0 flex-1 truncate">${TITLES[tab]}</h1>`}
-    <div class="hdr-actions">${actions}</div>`;
+  return subs.length
+    ? html`<${Seg} size="md" class="min-w-0 flex-1" value=${currentSub(tab)} items=${subs} onChange=${v => setSub(tab, v)} />`
+    : html`<h1 class="hdr-big min-w-0 flex-1 truncate">${TITLES[tab]}</h1>`;
 }
 
 // ── Tab bar badges: staff count, tips total, `!` on a problem. ─────────────
@@ -108,55 +92,4 @@ function renderBadges(vm) {
     el.textContent = b.text;
     el.className = cx('tab-sub', b.tone);
   });
-}
-
-// ── The totals strip ─────────────────────────────────────────────────────────
-
-function Strip({ vm }) {
-  const pv = isPreview(vm);
-  const r = !pv && vm.changes?.review;
-  const n = r ? movedCount(vm) : 0;
-  const btn = 't-small inline-flex h-9 shrink-0 items-center gap-1 rounded-full px-3 font-semibold transition active:scale-95';
-  return html`<div class="flex min-w-0 flex-1 flex-col gap-1.5">
-    ${r && html`<div class="flex min-w-0 items-center gap-2 border-b border-line pb-1.5">
-      <span class="flex min-w-0 flex-1 flex-col leading-tight">
-        <span class="t-small truncate font-semibold text-ink">${r.label}</span>
-        <span class="t-small truncate text-ink-3">${n ? n + (n === 1 ? ' payout changed' : ' payouts changed') : 'No payouts changed'}</span>
-      </span>
-      <button class=${cx(btn, 'bg-surface-2 text-ink')} onClick=${() => App.reviewUndo()}><${Icon} name="undo" class="size-4" />Undo</button>
-      <button class=${cx(btn, 'bg-accent text-on-accent')} onClick=${() => App.reviewApply()}><${Icon} name="check" class="size-4" />Apply</button>
-    </div>`}
-    <${Totals} vm=${vm} />
-  </div>`;
-}
-
-// Tips · Hours (or the person being edited) · Rate on one line.
-function Totals({ vm }) {
-  const sh = !vm.blocked ? vm.shares : null;
-  if (!sh || !(vm.totalCash > 0)) {
-    return html`<span class=${cx('t-small truncate', vm.inputError ? 'text-bad' : 'text-ink-3')}>${vm.blocked || 'Enter the tips to see the split'}</span>`;
-  }
-  const pv = isPreview(vm);
-  const focus = pv && vm.preview.focus ? sh.perPerson.find(p => p.id === vm.preview.focus) : null;
-  const k = 'text-ink-3', v = cx('font-semibold tabular-nums', pv ? 'text-accent' : 'text-ink');
-  const dot = html`<span class="text-ink-3/60">·</span>`;
-  return html`<span class="t-small flex min-w-0 items-baseline gap-x-2 whitespace-nowrap">
-    <span><span class=${k}>Tips </span><span class=${v}>${fmtMoney(sh.totalCash)}</span> <${Delta} d=${figDelta(vm, 'total')} /></span>${dot}
-    ${focus
-      ? html`<span class="min-w-0 truncate"><span class=${k}>${focus.name} </span><span class=${v}>${fmtMoney(focus.final)}</span> <${Delta} d=${payDelta(vm, focus.id, focus.final)} /></span>`
-      : html`<span><span class=${v}>${fmtHrs(sh.totalHours)}</span><span class=${k}> hours</span></span>`}${dot}
-    <span><span class=${v}>$${sh.rate.toFixed(2)}</span><span class=${k}>/h</span> <${Delta} d=${figDelta(vm, 'rate')} /></span>
-  </span>`;
-}
-
-// Painted with the real view model after a render, or a preview one while a
-// wheel turns / a time is typed.
-export function renderStrip(vm) {
-  const hud = $('pipHud');
-  if (!hud || !vm) return;
-  hud.classList.remove('is-empty');
-  hud.classList.toggle('is-warn', !!vm.inputError);
-  hud.classList.toggle('is-preview', isPreview(vm));
-  hud.classList.toggle('is-review', !isPreview(vm) && !!vm.changes?.review);
-  render(html`<${Strip} vm=${vm} />`, hud);
 }

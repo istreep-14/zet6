@@ -70,11 +70,14 @@ await wait(200);
 assert.equal(nav.currentSub('home'), 'split');
 assert.equal(nav.currentTab(), 'home', 'tabs only change from the tab bar');
 
-// Staff has no sub-tabs: a swipe does nothing.
+// Every tab has sub-tabs; a swipe on Staff steps them, never the tab.
 nav.showTab('staff');
+assert.equal(nav.currentSub(), 'people');
 swipe('mainContent', 300, 100);
 await wait(200);
 assert.equal(nav.currentTab(), 'staff');
+assert.equal(nav.currentSub(), 'add');
+for (const t of nav.TABS) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs');
 
 // Old saved tab names.
 assert.equal(nav.normalizeTab('summary'), 'home');

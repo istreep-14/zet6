@@ -2,11 +2,10 @@
 // edits anything (times, cash and tools live on Staff and Tips). Until the
 // shift is complete it shows the close-out checklist.
 //
-//   figures    Tips · Hours · Rate · the small bills ($10 · $5 · $1)
 //   sub-tabs   Pay    one row per person: name over "5p – 2a · 9.5h", their
-//                     take-home; the chump; Total
+//                     take-home; the chump; Total (hours · rate · paid out)
 //              Shift  everyone's shift on one time axis
-//              Bills  the envelopes, bill by bill
+//              Bills  the envelopes, bill by bill; the small bills needed
 //              Split  how it was worked out: hours × rate, the rounding,
 //                     each pool
 //   subpages   a person (take-home, hours, pools, envelope), a pool
@@ -59,17 +58,11 @@ function Key({ vm, people }) {
   return items.length ? html`<span class="flex flex-wrap items-center gap-x-3 gap-y-1">${items}</span>` : null;
 }
 
-// ── Figures ──────────────────────────────────────────────────────────────────
-function Figures({ vm }) {
-  const sh = vm.shares;
-  const need = smallBillsNeeded(vm);
-  const dot = html`<span class="mx-0.5 text-ink-3">·</span>`;
-  return html`<${Stats} items=${[
-    { label: 'Tips', value: fmtMoney(sh.totalCash), tone: 'text-money' },
-    { label: 'Hours', value: fmtHrs(sh.totalHours), tone: 'text-[var(--p3)]' },
-    { label: 'Rate', value: '$' + sh.rate.toFixed(2), tone: 'text-good' },
-    { label: '$10 · $5 · $1', value: need ? need.map((c, i) => html`${i > 0 && dot}<span class="bill-col !font-semibold" data-d=${c.d}>${c.n}</span>`) : '—' },
-  ]} />`;
+// The fewest $10 / $5 / $1s that make every payout exact (under Bills).
+function SmallBills({ vm }) {
+  const need = (smallBillsNeeded(vm) || []).filter(c => c.n > 0);
+  if (!need.length) return null;
+  return html`<span>Small bills needed: ${need.map((c, i) => html`${i > 0 && ' · '}<span class="bill-col !font-semibold" data-d=${c.d}>${c.n}</span> × $${c.d}`)}</span>`;
 }
 
 // Register over / short (entered on Tips): what it changed.
@@ -108,7 +101,7 @@ function Pay({ vm, name }) {
       ${s.leftover > 0 && html`<${Item} title=${html`<span class="font-normal text-ink-2">Chump</span>`} sub="Stays in the drawer"
         value=${fmtMoney(s.leftover)} valueTone="font-medium text-ink-2" />`}
       <${Item} class="bg-surface-2/60" title=${html`<span class="font-semibold">Total</span>`}
-        sub=${html`<span class="tabular-nums"><${Times} a=${R?.anchorAbs} b=${R?.closeAbs} /> · ${fmtHrs(hours)}h</span>`}
+        sub=${html`<span class="tabular-nums"><${Times} a=${R?.anchorAbs} b=${R?.closeAbs} /> · ${fmtHrs(hours)}h · ${rate2(s.rate)}/h</span>`}
         trail=${html`<span class="flex shrink-0 flex-col items-end leading-tight">
           <${Money} value=${paid} class="text-[1.125rem] font-semibold tracking-tight text-money" />
           ${vm.sharesBefore && html`<span class="t-small tabular-nums text-ink-3">was ${fmtMoney(vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0))}</span>`}
@@ -152,7 +145,7 @@ function Bills({ vm }) {
   const ok = vm.dist && !vm.dist.error;
   return html`<div class="flex flex-col gap-3">
     ${!ok && html`<${Alert} tone="warn" action=${{ label: 'Drawer', onClick: () => App.tab('tips', { sub: 'drawer' }) }}>The bills don’t work out yet — Tips › Drawer has the fix.<//>`}
-    <${Section} title="Envelopes">
+    <${Section} title="Envelopes" footer=${html`<${SmallBills} vm=${vm} />`}>
       <${EnvelopeTable} vm=${vm} order=${staffOrder(vm, vm.shares.perPerson)} quiet onRow=${id => openPerson(id)}
         byPerson=${ok ? vm.dist.byPerson : {}} remBills=${ok ? vm.dist.remainderBills : {}} />
     <//>
@@ -252,13 +245,12 @@ function Home({ vm, name }) {
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   const view = currentSub('home');
   return html`<div class="flex flex-col gap-5">
-    ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map((w, i) => html`<${Alert} key=${i}>${w}<//>`)}
-    <${AdjustNote} vm=${vm} />
-    <${Figures} vm=${vm} />
     ${view === 'shift' ? html`<${Shift} vm=${vm} />`
       : view === 'bills' ? html`<${Bills} vm=${vm} />`
       : view === 'split' ? html`<${Split} vm=${vm} />`
       : html`<${Pay} vm=${vm} name=${name} />`}
+    <${AdjustNote} vm=${vm} />
+    ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map((w, i) => html`<${Alert} key=${i}>${w}<//>`)}
   </div>`;
 }
 

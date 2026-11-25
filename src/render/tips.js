@@ -1,11 +1,12 @@
-// Tips › Cash (Preact; Tips › Drawer is render/payout.js). The shift type
-// and + Party first. One pool: its card right on the page — the bills you
-// counted (−/+ rows), the uncounted rest as one amount, a register over /
-// short, shared-by chips, support. Several pools: a stacked card per pool
-// (name, window, who shares it, total) — tap one to open it in a sheet with
-// the full editor; "+ Add pool" opens the new pool's sheet. Under it, the
-// best bills to pull for the uncounted rest, then More (register over /
-// short, checkpoint counts, closer bonus & chump).
+// Tips (Preact) — for entering the cash and how it's split; three sub-tabs
+// (the header):
+//   Cash     the pool card(s): the amount, counted bills, checkpoints; the
+//            register over / short; checkpoint counts
+//   Pools    the shift type (Night / Day) and + Party, + Add pool, who shares
+//            the pool, the support tip-out, the closer bonus & chump
+//   Drawer   render/payout.js: the fix when the bills don't work out, the
+//            best bills for the uncounted cash, envelopes already made,
+//            stacks, tidy
 //
 // Inputs show the stored raw strings; Preact diffs each render, so typing
 // keeps focus and the totals update around it.
@@ -16,6 +17,8 @@ import { focusCell } from '../ui/keypad.js';
 import { EDGE_TOKENS } from '../resolve.js';
 import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
 import { KeyTime } from '../ui/keytime.js';
+import { currentSub } from '../ui/nav.js';
+import { SupportDefault } from './settings.js';
 import { html, render, useState } from '../ui/preact.js';
 import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, Table, Money, SwitchRow, INPUT, ROLE_DOT, holdRepeat, revealSelectedTab, subtabKeys } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
@@ -305,7 +308,7 @@ function renderCashSheet(vm) {
 
 // Which bills to pull for the uncounted rest (all pools together) — a Table
 // like Payout's: Bill · Count · Amount, total row.
-function Suggested({ vm }) {
+export function Suggested({ vm }) {
   const add = vm.looseBills;
   if (!add || !vm.bills || vm.totalCash <= 0) return null;
   const ds = [100, 50, 20, 10, 5, 1].filter(d => add[d] > 0);
@@ -341,36 +344,49 @@ function ShiftType({ vm }) {
 }
 
 function Tips({ vm }) {
+  const v = currentSub('tips');
+  if (v === 'drawer') return null;              // Tips › Drawer is render/payout.js
+  return v === 'pools' ? html`<${PoolSetup} vm=${vm} />` : html`<${Cash} vm=${vm} />`;
+}
+
+// Cash: what's in the pool(s), and the register over / short.
+function Cash({ vm }) {
   const state = vm.state;
   const err = vm.inputError && vm.blockedTab === 'tips' ? vm.blocked : '';
   const single = state.pools.length === 1;
+  const pool = state.pools.find(p => p.id === state.ui.selectedPool) || state.pools[0];
   const ready = !vm.blocked && vm.totalCash > 0;
   return html`<div class="flex flex-col gap-5">
-    <${ShiftType} vm=${vm} />
     ${err && html`<${Alert}>${err}<//>`}
     ${vm.cashNote && html`<${Alert} tone="warn">${vm.cashNote}<//>`}
     ${single ? html`<${PoolCard} pool=${state.pools[0]} vm=${vm} />` : html`<${Pools} vm=${vm} />`}
-    ${state.settings.multiPool && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
-    ${state.settings.show?.bestBills !== false && html`<${Suggested} vm=${vm} />`}
-    <${TipsMore} vm=${vm} />
+    <${List}>
+      <${Item} icon="swap" title="Register over / short" sub="Re-split if the register is off" onClick=${() => openCashSheet('adjust', pool.id)} />
+      <${Item} icon="cash" title="Bill counts by checkpoint" sub="Lowest, highest and combined counts" onClick=${() => openCashSheet('ranges', pool.id)} />
+    <//>
     ${ready && html`<${NextStep} tab="home" label="See who gets what"
       sub=${fmtMoney(vm.totalCash) + ' · $' + vm.shares.rate.toFixed(2) + ' an hour'} />`}
     ${vm.blockedTab === 'staff' && html`<${NextStep} tab="staff" label="Back to Staff" sub=${vm.blocked} />`}
   </div>`;
 }
 
-// ── More, under the cash: the pool's tools and who shares it. ─────────────
-
-function TipsMore({ vm }) {
+// Pools: how the tips are split — the shift type and parties, extra pools,
+// who shares each, the support tip-out, the closer bonus & chump.
+function PoolSetup({ vm }) {
   const state = vm.state;
   const pool = state.pools.find(p => p.id === state.ui.selectedPool) || state.pools[0];
   const single = state.pools.length === 1;
-  return html`${(state.settings.allRoles || !single) && html`<${Section} title=${'Who shares ' + pool.label}><${Card} flush><${SharedBy} pool=${pool} />${pool.includeSupport && html`<${SupportBox} pool=${pool} vm=${vm} vmPool=${vm.pools.find(p => p.id === pool.id)} />`}<//><//>`}
-    <${Section} title="More"><${List}>
-      <${Item} icon="swap" title="Register over / short" sub="Re-split if the register is off" onClick=${() => openCashSheet('adjust', pool.id)} />
-      <${Item} icon="cash" title="Bill counts by checkpoint" sub="Lowest, highest and combined counts" onClick=${() => openCashSheet('ranges', pool.id)} />
+  return html`<div class="flex flex-col gap-5">
+    <${Section} title="Shift type" footer=${(state.meta.shiftType || 'night') === 'day'
+      ? 'Day: bar + servers share the floor until the servers are out, then Mid is the bar’s.'
+      : 'Night: one pool for the whole shift.'}><${ShiftType} vm=${vm} /><//>
+    ${state.settings.multiPool && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
+    ${(state.settings.allRoles || !single) && html`<${Section} title=${'Who shares ' + pool.label}><${Card} flush><${SharedBy} pool=${pool} />${pool.includeSupport && html`<${SupportBox} pool=${pool} vm=${vm} vmPool=${vm.pools.find(p => p.id === pool.id)} />`}<//><//>`}
+    <${SupportDefault} vm=${vm} />
+    <${List}>
       <${Item} icon="gift" title="Closer bonus & chump" sub="Who gets the dollars left after rounding" onClick=${() => App.openBonus()} />
-    <//><//>`;
+    <//>
+  </div>`;
 }
 
 let lastVm = null;

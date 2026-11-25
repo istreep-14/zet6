@@ -11,7 +11,7 @@ import { countedValue, parseWholeNumber } from './util.js';
 import { nextId } from './ids.js';
 import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL } from './shifts.js';
 import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
-import { renderChrome, renderStrip, fmtDay } from './render/tabs.js';
+import { renderChrome, fmtDay } from './render/tabs.js';
 import { initNav, onNav, showTab, setSub, currentTab, popPage, popAll, topPage, resetNav, renderPages, normalizeTab } from './ui/nav.js';
 import { renderStaff, openStaffEditor } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
@@ -22,7 +22,7 @@ import { trackChanges, resetChanges, snapOf, SHOW } from './ui/changes.js';
 import { toast, copyText } from './ui/toast.js';
 import { summaryText } from './textout.js';
 import { renderHome, openPerson as homePerson } from './render/home.js';
-import { renderSettings, openShift } from './render/settings.js';
+import { renderSettings } from './render/settings.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
   renderSheets, openPerson, openBonus, adjustBonus, resetBonuses,
@@ -62,12 +62,15 @@ function render(s) {
   store.ensureBlankRows(s);
   lastVm = buildViewModel(s);
   previewing = false;
-  // A reviewed edit (drag / keypad) lands in this render; any other edit
-  // after it accepts it (Undo only ever puts back the latest one). Moving
-  // between tabs isn't an edit: only `ui` changed, so the review stays.
-  if (pendingReview) { review = { ...pendingReview, stamp: ++reviewN, after: dataKey(s) }; pendingReview = null; }
-  else if (review && dataKey(s) !== review.after) review = null;
-  if (trackChanges(lastVm, sessions.currentId(), review)) clearChangesLater();
+  // A wheel / keypad edit lands in this render: a toast says what it was,
+  // with Undo. Any other edit after it makes it stick (Undo only ever puts
+  // back the latest one); moving between tabs isn't an edit (only `ui`).
+  if (pendingReview) {
+    review = { ...pendingReview, after: dataKey(s) };
+    pendingReview = null;
+    toast(review.label, { action: { label: 'Undo', onClick: reviewUndo } });
+  } else if (review && dataKey(s) !== review.after) review = null;
+  if (trackChanges(lastVm, sessions.currentId())) clearChangesLater();
   renderStaff(lastVm);
   renderTips(lastVm);
   renderPayout(lastVm);
@@ -87,48 +90,39 @@ function render(s) {
 // ── What changed / what would change (ui/changes.js) ─────────────────────────
 // A landed edit marks the figures it moved (vm.changes) for SHOW ms, then
 // they're repainted plain. An edit in progress (a dragged or typed time)
-// re-runs the split on a copy of the state and paints Staff + the totals
-// strip with the would-be numbers (vm.preview); nothing is written until it
-// lands. Home never previews — it only shows what's been written.
+// re-runs the split on a copy of the state and paints Staff with the
+// would-be numbers (vm.preview); nothing is written until it lands. Home
+// never previews — it only shows what's been written.
 // Returns the preview view model (the wheel picker shows its figures).
 let clearTimer = 0;
 function clearChangesLater() {
   clearTimeout(clearTimer);
   clearTimer = setTimeout(() => {
-    if (!lastVm.changes || lastVm.changes.review || previewing) return;
+    if (!lastVm.changes || previewing) return;
     lastVm.changes = null;
     renderPayout(lastVm);
-    renderStrip(lastVm);
+    renderStaff(lastVm);
   }, SHOW + 50);
 }
 
-// Review: a drag or keypad edit is written at once, then waits for a word —
-// the totals strip shows what it moved with Undo (put the whole state back as it was
-// just before) and Apply (keep it; the marks go). Its marks stay until then.
-let review = null, pendingReview = null, reviewN = 0, bulkUndo = null;
+// Review: a drag or keypad edit is written at once; the toast offers Undo
+// (put the whole state back as it was just before) while nothing else has
+// changed since.
+let review = null, pendingReview = null, bulkUndo = null;
 const dataKey = s => JSON.stringify({ ...s, ui: null });
 function withReview(label, write) {
-  pendingReview = { label, before: structuredClone(store.getState()), base: snapOf(lastVm) };
+  pendingReview = { label, before: structuredClone(store.getState()) };
   write();
 }
 function reviewUndo() {
   const r = review;
-  if (!r) return;
   review = null;
+  if (!r || dataKey(store.getState()) !== r.after) { toast('Can’t undo — something else changed since'); return; }
   resetChanges();
   store.replaceState(r.before);
   render(store.getState());
   toast('Undone');
 }
-function reviewApply() {
-  if (!review) return;
-  review = null;
-  lastVm.changes = null;
-  renderStaff(lastVm);
-  renderPayout(lastVm);
-  renderStrip(lastVm);
-}
-
 // Older sessions may store an amount in addition to counted bills. Convert it
 // to an inclusive total before editing the bill count in the new interface.
 function makeCashTotal(cash) {
@@ -147,7 +141,6 @@ function preview(apply, focus = null) {
     if (!previewing) return;
     previewing = false;
     renderStaff(lastVm);
-    renderStrip(lastVm);
     return;
   }
   const base = snapOf(lastVm);
@@ -159,7 +152,6 @@ function preview(apply, focus = null) {
   pv.preview = { base, focus };
   previewing = true;
   renderStaff(pv, { preview: true });
-  renderStrip(pv);
   return pv;                                     // the wheel shows its figures
 }
 
@@ -245,6 +237,7 @@ window.App = {
     renderStaff(lastVm);
     renderSheets(lastVm);
     renderPages(lastVm);
+    renderSettings(lastVm, sessions.list(), sessions.currentId());
   },
   toggleShow: key => store.toggleShow(key),
 
@@ -252,8 +245,8 @@ window.App = {
   closeSheet,
   openBonus: () => openBonus(lastVm),
   openCloseTime: () => openCloseTime(lastVm),
-  // The shift's default times: This shift, pushed onto the current tab.
-  openDefaults: () => openShift(),
+  // The shift's default times: Staff › Defaults.
+  openDefaults: () => App.tab('staff', { sub: 'defaults' }),
   renameCurrent(name) {
     sessions.rename(sessions.currentId(), name);
     render(store.getState());
@@ -351,7 +344,6 @@ window.App = {
   // A drag / keypad edit with Undo · Apply in the totals strip (see withReview).
   reviewed: withReview,
   reviewUndo,
-  reviewApply,
   // immediate = picker / button edits (render now); typing debounces.
   staffField(id, field, value, immediate = false) {
     store.mutate(s => {
@@ -692,7 +684,12 @@ state.staff.forEach(p => rememberName(p.name, p.role));
 onNav(() => {
   const tab = currentTab();
   if (store.getState().ui.activeTab !== tab) store.getState().ui.activeTab = tab;
-  renderHome(lastVm, sessionName());          // the sub-tab picks Home's view
+  // The sub-tab picks what each page shows.
+  renderHome(lastVm, sessionName());
+  renderStaff(lastVm);
+  renderTips(lastVm);
+  renderPayout(lastVm);
+  renderSettings(lastVm, sessions.list(), sessions.currentId());
   renderChrome(lastVm, sessionName());
   requestAnimationFrame(refreshSticky);
 });

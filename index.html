@@ -57,28 +57,24 @@
 </head>
 <body>
 
-<!-- Header (render/tabs.js), one row: the page's sub-tabs (Home, Tips) or
-     its title, and its actions; on a subpage Back · its title · its actions. -->
+<!-- Header (render/tabs.js), one row: the page's sub-tabs; on a subpage
+     Back · its title · its actions. -->
 <header class="hdr" id="hdr"></header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
 <!-- The stage: the four tab pages, and the subpages pushed
      over them from the right (src/ui/nav.js). Tabs change only from the tab
-     bar; a sideways swipe moves between a page's sub-tabs, and a swipe right
-     on a subpage goes back. -->
+     bar; a sideways swipe moves between a page's sub-tabs (the header), and a
+     swipe right on a subpage goes back. -->
 <div class="stage">
   <main class="content" id="mainContent">
     <section class="panel active" id="tab-home"><div id="home-root"></div></section>
     <section class="panel" id="tab-staff"><div id="staff-root"></div></section>
-    <section class="panel" id="tab-tips"><div data-sub="cash" id="tips-root"></div><div data-sub="drawer" id="payout-root" hidden></div></section>
+    <section class="panel" id="tab-tips"><div id="tips-root"></div><div id="payout-root"></div></section>
     <section class="panel" id="tab-settings"><div id="settings-root"></div></section>
   </main>
   <div class="subpages" id="subpages"></div>
 </div>
-
-<!-- Staff and Tips: one quiet line of totals over the tabs (and Undo · Apply
-     after a wheel / keypad edit) — render/tabs.js -->
-<div class="hud is-empty" id="pipHud" role="status" aria-label="Live totals"></div>
 
 <!-- Bottom tabs (render/tabs.js keeps the active one and the badges) -->
 <nav class="tabbar">

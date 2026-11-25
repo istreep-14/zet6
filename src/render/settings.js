@@ -1,14 +1,12 @@
-// Settings tab (Preact) — what used to be the two side panels.
-//   This shift   the current session (→ its own page: name, the calendar,
-//                default times, support tip-out, export / delete; the shift
-//                type is set on Tips),
-//                New session, All sessions (→ the list: tap to switch, Edit
-//                to rename / delete)
-//   Appearance   theme, display size
-//   App          roles, several pools, 24-hour time, morning starts at
-//   Show         Staff timelines, Tips' best bills
-//   Data         copy as text, export, import
-// The shift page is also pushed onto Staff (Default times).
+// Settings tab (Preact) — three sub-tabs (the header):
+//   Shift     this session: its name, the date (inline calendar, dots on
+//             days with other sessions), export, delete
+//   Sessions  New session, every saved session (tap to switch; Edit →
+//             rename / delete)
+//   App       theme, display size, roles, several pools, 24-hour time,
+//             morning starts at; copy / export / import
+// The default shift times live on Staff › Defaults (RoleTimes is exported
+// for it), the support tip-out on Tips › Pools (SupportDefault).
 
 import { fmtMoney } from '../util.js';
 import { html, render } from '../ui/preact.js';
@@ -16,9 +14,8 @@ import { cx, Icon, Card, Field, Section, Seg, SwitchRow, List, Item, ROLE_TEXT }
 import { KeyTime } from '../ui/keytime.js';
 import { parseTime, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { focusCell } from '../ui/keypad.js';
-import { SHIFT_LABEL } from '../shifts.js';
 import { todayISO } from '../sessions.js';
-import { pushPage, refreshPages } from '../ui/nav.js';
+import { currentSub } from '../ui/nav.js';
 
 const $ = id => document.getElementById(id);
 
@@ -72,23 +69,11 @@ let sessionsNow = [], currentNow = null;
 
 // ── The tab ──────────────────────────────────────────────────────────────────
 
-function Settings({ vm }) {
+function AppPrefs({ vm }) {
   const s = vm.state;
-  const rows = rowsOf(vm, sessionsNow, currentNow);
-  const cur = rows.find(e => e.id === currentNow) || { date: s.meta.date };
-  const type = SHIFT_LABEL[s.meta.shiftType || 'night'] + ' shift';
   const extraPools = s.pools.length > 1;
-  const show = s.settings.show || {};
   const toggle = key => () => App.toggleSetting(key);
   return html`<div class="flex flex-col gap-6">
-    <${Section} title="This shift"><${List}>
-      <${Item} lead=${html`<${DateTile} iso=${cur.date} active />`} title=${html`<span class="truncate">${titleOf(cur)}</span>`}
-        sub=${[type, peopleOf(cur.people), vm.totalCash > 0 ? fmtMoney(vm.totalCash) : ''].filter(Boolean).join(' · ')}
-        onClick=${() => openShift()} />
-      <${Item} icon="plus" title=${html`<span class="text-accent">New session</span>`} chevron=${false} onClick=${() => App.newSession()} />
-      <${Item} icon="calendar" title="All sessions" value=${rows.length} valueTone="font-medium text-ink-3" onClick=${() => openSessions()} />
-    <//><//>
-
     <${Section} title="Appearance"><${List}>
       <${Item} title="Theme" chevron=${false}>
         <${Seg} value=${s.settings.theme || 'system'} onChange=${v => App.setTheme(v)}
@@ -112,17 +97,17 @@ function Settings({ vm }) {
       <//>
     <//><//>
 
-    <${Section} title="Show"><${List}>
-      <${SwitchRow} icon="clock" on=${show.timelines !== false} onClick=${() => App.toggleShow('timelines')} label="Staff timelines" hint="Each shift against the night, the close as a red line" />
-      <${SwitchRow} icon="cash" on=${show.bestBills !== false} onClick=${() => App.toggleShow('bestBills')} label="Best bills on Tips" hint="Which bills make the uncounted cash" />
-    <//><//>
-
     <${Section} title="Data"><${List}>
       <${Item} icon="copy" title="Copy summary as text" sub="For Notes" chevron=${false} onClick=${() => App.copySummary()} />
       <${Item} icon="download" title="Export this session" sub="A .json file" chevron=${false} onClick=${() => App.exportSession()} />
       <${Item} icon="upload" title="Import a session" sub="Adds it and opens it" chevron=${false} onClick=${() => App.triggerImport()} />
     <//><//>
   </div>`;
+}
+
+function Settings({ vm }) {
+  const v = currentSub('settings');
+  return v === 'sessions' ? html`<${Sessions} vm=${vm} />` : v === 'app' ? html`<${AppPrefs} vm=${vm} />` : html`<${Shift} vm=${vm} />`;
 }
 
 export function renderSettings(vm, sessions, currentId) {
@@ -132,7 +117,7 @@ export function renderSettings(vm, sessions, currentId) {
   if (root) render(html`<${Settings} vm=${vm} />`, root);
 }
 
-// ── All sessions (a subpage) ─────────────────────────────────────────────────
+// ── Sessions ─────────────────────────────────────────────────
 
 let editing = false;
 
@@ -143,7 +128,7 @@ function Sessions({ vm }) {
     <${List}>
       <${Item} icon="plus" title=${html`<span class="text-accent">New session</span>`} chevron=${false} onClick=${() => App.newSession()} />
     <//>
-    <${Section} title="Sessions" footer=${editing ? 'Deleting a session can’t be undone. Export it first to keep a copy.' : 'Tap one to open it.'}><${List}>
+    <${Section} title="Sessions" aside=${(rows.length > 1 || editing) && html`<button class="font-semibold text-accent" onClick=${() => { editing = !editing; App.repaint(); }}>${editing ? 'Done' : 'Edit'}</button>`} footer=${editing ? 'Deleting a session can’t be undone. Export it first to keep a copy.' : 'Tap one to open it.'}><${List}>
       ${rows.map(e => {
         const active = e.id === currentNow;
         const lead = html`<${DateTile} iso=${e.date} active=${active} />`;
@@ -162,19 +147,7 @@ function Sessions({ vm }) {
   </div>`;
 }
 
-export function openSessions() {
-  editing = false;
-  pushPage({
-    key: 'sessions',
-    title: 'Sessions',
-    body: vm => html`<${Sessions} vm=${vm} />`,
-    actions: () => sessionsNow.length > 1 || editing
-      ? html`<button class="t-body h-[var(--tap)] px-1 font-semibold text-accent" onClick=${() => { editing = !editing; refreshPages(); App.refreshNavigation(); }}>${editing ? 'Done' : 'Edit'}</button>`
-      : null,
-  });
-}
-
-// ── This shift (a subpage) ───────────────────────────────────────────────────
+// ── This shift ───────────────────────────────────────────────────
 
 let calY = 0, calM = 0;           // month shown in the calendar
 
@@ -191,7 +164,7 @@ function calendarStep(delta) {
     if (calM < 0) { calM = 11; calY -= 1; }
     if (calM > 11) { calM = 0; calY += 1; }
   }
-  refreshPages();
+  App.repaint();
 }
 
 function Calendar({ selected, sessionDates }) {
@@ -232,11 +205,11 @@ function Calendar({ selected, sessionDates }) {
 const ROLES3 = ['bartender', 'server', 'support'];
 const ROLE_NAME = { bartender: 'Bar', server: 'Server', support: 'Support' };
 const tap = k => focusCell(k);
-function order(rolesOn) {
-  return [['g:in', 'g:out'], ...(rolesOn ? ROLES3.map(r => ['r:' + r + ':in', 'r:' + r + ':out']) : [])];
+function order() {
+  return ROLES3.map(r => ['r:' + r + ':in', 'r:' + r + ':out']);
 }
-function navFrom(k, rolesOn) {
-  const rows = order(rolesOn);
+function navFrom(k) {
+  const rows = order();
   const r = rows.findIndex(row => row.includes(k)), c = rows[r].indexOf(k);
   return dir => {
     if (dir === 'next' || dir === 'prev') {
@@ -251,7 +224,7 @@ const parsed = raw => { const p = parseTime(raw); return p.value != null ? p : n
 const CELLCLS = 'h-11 w-full rounded-xl bg-surface-2 text-center text-[1.0625rem] tabular-nums transition';
 
 // One default time. `raw` is what's stored ('' = inherits `fallback`).
-function DefCell({ k, title, raw, fallback, field, inAbs, write, rolesOn }) {
+function DefCell({ k, title, raw, fallback, field, inAbs, write }) {
   const v = parsed(raw) ?? parsed(fallback);
   const isIn = field === 'in';
   const abs = v == null ? null : isIn ? inAbsOf(v) : afterAbsOf(v, inAbs ?? 17);
@@ -259,71 +232,58 @@ function DefCell({ k, title, raw, fallback, field, inAbs, write, rolesOn }) {
     toAbs=${(x, mer) => (isIn ? inAbsOf({ value: x, mer }) : afterAbsOf({ value: x, mer }, inAbs ?? 17))}
     fromAbs=${a => (isIn ? absToInRaw(Math.min(IN_MAX_ABS, Math.max(IN_MIN_ABS, a))) : absToOutRaw(a, inAbs ?? 17))}
     min=${isIn ? IN_MIN_ABS : (inAbs ?? 17) + 0.25} max=${isIn ? IN_MAX_ABS : (inAbs ?? 17) + 12}
-    write=${write} next=${navFrom(k, rolesOn)} rerender=${refreshPages} clearable=${k.startsWith('r:')} />`;
+    write=${write} next=${navFrom(k)} rerender=${() => App.repaint()} clearable />`;
 }
 
 function Shift({ vm }) {
   const s = vm.state;
-  const d = s.defaults;
   const entry = sessionsNow.find(e => e.id === currentNow) || {};
   const sessionDates = new Set(sessionsNow.filter(e => e.id !== currentNow).map(e => e.date));
-  const type = s.meta.shiftType || 'night';
-  const rolesOn = s.settings.allRoles;
-  const gv = parsed(d.global.in);
-  const gIn = gv != null ? inAbsOf(gv) : null;
+  if (calFor !== s.meta.date) { calFor = s.meta.date; showMonthOf(calFor); }
   return html`<div class="flex flex-col gap-6">
     <${Field} page label="Session name" value=${entry.name || ''} placeholder="e.g. Brunch, Private party" maxlength="40" enterkeyhint="done"
       onChange=${e => App.renameCurrent(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} />
-
     <${Section} title="Date"><${Calendar} selected=${s.meta.date} sessionDates=${sessionDates} /><//>
-
-    <${Section} title=${SHIFT_LABEL[type] + ' shift times'}
-      footer=${'Fills any blank In/Out; blank Outs leave at close, which also decides the auto closers. Tap a time to type it (530 = 5:30), hold it for the wheel. Remembered for the next ' + SHIFT_LABEL[type].toLowerCase() + ' shift.'}>
-      <${Card} class="grid grid-cols-2 gap-3">
-        <div class="flex flex-col gap-1.5"><span class="t-small font-medium text-ink-2">Open</span>
-          <${DefCell} k="g:in" title="Shift opens" raw=${d.global.in} field="in" rolesOn=${rolesOn} write=${r => App.globalDefault('in', r, true)} /></div>
-        <div class="flex flex-col gap-1.5"><span class="t-small font-medium text-ink-2">Close</span>
-          <${DefCell} k="g:out" title="Shift closes" raw=${d.global.out} field="out" inAbs=${gIn} rolesOn=${rolesOn} write=${r => App.globalDefault('out', r, true)} /></div>
-      <//>
-    <//>
-    ${rolesOn && html`<${Section} title="Per role" footer=${'Role times win over the shift times for that role.' + (type === 'day' ? ' Servers’ Out is where Day hands over to Mid (unless a server stays later).' : '')}>
-      <${Card}>
-        <div class="grid grid-cols-[4.5rem_1fr_1fr] items-center gap-x-3 gap-y-2.5">
-          <span></span><span class="t-small text-center font-medium text-ink-2">In</span><span class="t-small text-center font-medium text-ink-2">Out</span>
-          ${ROLES3.map(r => {
-            const rin = parsed(d.byRole[r].in) ?? parsed(d.global.in);
-            return html`
-            <span key=${r + 'l'} class=${cx('t-body font-semibold', ROLE_TEXT[r])}>${ROLE_NAME[r]}</span>
-            <${DefCell} key=${r + 'in'} k=${'r:' + r + ':in'} title=${ROLE_NAME[r] + ' in'} raw=${d.byRole[r].in} fallback=${d.global.in} field="in" rolesOn=${rolesOn}
-              write=${v => App.roleDefault(r, 'in', v, true)} />
-            <${DefCell} key=${r + 'out'} k=${'r:' + r + ':out'} title=${ROLE_NAME[r] + ' out'} raw=${d.byRole[r].out} fallback=${d.global.out} field="out"
-              inAbs=${rin != null ? inAbsOf(rin) : null} rolesOn=${rolesOn} write=${v => App.roleDefault(r, 'out', v, true)} />`;
-          })}
-        </div>
-      <//>
-    <//>`}
-    ${rolesOn && html`<${Section} title="Support" footer="Each pool can override % or $/hr on the Tips tab.">
-      <${Card}>
-        <${Field} label="Tip-out · % of each pool" inputmode="decimal" placeholder="10" value=${d.supportPct ?? ''} onInput=${e => App.supportDefault(e.target.value)} />
-      <//>
-    <//>`}
-
     <${Section} title="This session"><${List}>
       <${Item} icon="download" title="Export JSON" chevron=${false} onClick=${() => App.exportSession()} />
       <${Item} icon="trash" tone="danger" title="Delete session" chevron=${false} onClick=${() => App.deleteSession(currentNow)} />
     <//><//>
   </div>`;
 }
+let calFor = null;
 
-// tab: where it opens (Settings, or Staff for its Default times).
-export function openShift(tab) {
-  let date = null;
-  pushPage({
-    key: 'shift',
-    title: 'This shift',
-    body: vm => {
-      if (date !== vm.state.meta.date) { date = vm.state.meta.date; showMonthOf(date); }
-      return html`<${Shift} vm=${vm} />`;
-    },
-  }, tab);
+// ── Default times per role (Staff › Defaults, roles on) ──────────────────────
+// Role times win over the shift's open / close for that role. Tap a time to
+// type it, hold for the wheel; Clear puts it back to the shift's.
+export function RoleTimes({ vm }) {
+  const s = vm.state;
+  const d = s.defaults;
+  if (!s.settings.allRoles) return null;
+  const day = (s.meta.shiftType || 'night') === 'day';
+  return html`<${Section} title="Per role" footer=${'Role times win over the shift’s open / close for that role. Remembered for the next ' + (day ? 'day' : 'night') + ' shift.' + (day ? ' Servers’ Out is where Day hands over to Mid (unless a server stays later).' : '')}>
+    <${Card}>
+      <div class="grid grid-cols-[4.5rem_1fr_1fr] items-center gap-x-3 gap-y-2.5">
+        <span></span><span class="t-small text-center font-medium text-ink-2">In</span><span class="t-small text-center font-medium text-ink-2">Out</span>
+        ${ROLES3.map(r => {
+          const rin = parsed(d.byRole[r].in) ?? parsed(d.global.in);
+          return html`
+          <span key=${r + 'l'} class=${cx('t-body font-semibold', ROLE_TEXT[r])}>${ROLE_NAME[r]}</span>
+          <${DefCell} key=${r + 'in'} k=${'r:' + r + ':in'} title=${ROLE_NAME[r] + ' in'} raw=${d.byRole[r].in} fallback=${d.global.in} field="in"
+            write=${v => App.roleDefault(r, 'in', v, true)} />
+          <${DefCell} key=${r + 'out'} k=${'r:' + r + ':out'} title=${ROLE_NAME[r] + ' out'} raw=${d.byRole[r].out} fallback=${d.global.out} field="out"
+            inAbs=${rin != null ? inAbsOf(rin) : null} write=${v => App.roleDefault(r, 'out', v, true)} />`;
+        })}
+      </div>
+    <//>
+  <//>`;
+}
+
+// The support tip-out % every pool starts from (Tips › Pools, roles on).
+export function SupportDefault({ vm }) {
+  if (!vm.state.settings.allRoles) return null;
+  return html`<${Section} title="Support tip-out" footer="Each pool can override % or $/hr below.">
+    <${Card}>
+      <${Field} label="% of each pool" inputmode="decimal" placeholder="10" value=${vm.state.defaults.supportPct ?? ''} onInput=${e => App.supportDefault(e.target.value)} />
+    <//>
+  <//>`;
 }

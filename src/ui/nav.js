@@ -1,8 +1,10 @@
 // Navigation: four tabs — Home · Staff · Tips · Settings — changed only by
 // tapping the tab bar. Inside a tab:
 //
-//   sub-tabs   a segmented control in the header, in place of the title
-//              (Home: Pay · Shift · Bills · Split; Tips: Cash · Drawer). A sideways swipe on the page
+//   sub-tabs   every tab has them, as the segmented control that is the
+//              header (Home: Pay · Shift · Bills · Split; Staff: People ·
+//              Add · Bulk · Defaults; Tips: Cash · Pools · Drawer; Settings:
+//              Shift · Sessions · App). A sideways swipe on the page
 //              moves between them; the page follows the finger, past the
 //              ends it rubber-bands. Elements in a tab's panel marked
 //              data-sub="x" show only while sub-tab x is on.
@@ -33,9 +35,21 @@ export const SUBS = {
     { value: 'bills', label: 'Bills' },
     { value: 'split', label: 'Split' },
   ],
+  staff: [
+    { value: 'people', label: 'People' },
+    { value: 'add', label: 'Add' },
+    { value: 'bulk', label: 'Bulk' },
+    { value: 'defaults', label: 'Defaults' },
+  ],
   tips: [
     { value: 'cash', label: 'Cash' },
+    { value: 'pools', label: 'Pools' },
     { value: 'drawer', label: 'Drawer' },
+  ],
+  settings: [
+    { value: 'shift', label: 'Shift' },
+    { value: 'sessions', label: 'Sessions' },
+    { value: 'app', label: 'App' },
   ],
 };
 
@@ -46,7 +60,7 @@ export function normalizeTab(name) {
 }
 
 let cur = 'home';
-const sub = { home: 'pay', tips: 'cash' };
+const sub = Object.fromEntries(Object.entries(SUBS).map(([t, l]) => [t, l[0].value]));
 const stacks = Object.fromEntries(TABS.map(t => [t, []]));
 const scrollOf = {};
 const listeners = [];

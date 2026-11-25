@@ -1,19 +1,16 @@
-// Staff page (Preact) — where who worked, and when, is entered. A table
-// that is always editable:
-//   the shift's Open and Close (keypad cells)
-//   → warnings, if any (input errors, out after the close)
-//   → one list: a sticky header (# · Name · In · Out · Hrs, the hour axis),
-//     a small heading per role (roles on), a row per person — number tile ·
-//     name (red dot = closer; break under it) · In → Out as boxes (tap →
-//     keypad, hold → wheel; Undo · Apply in the totals strip) · hours — and
-//     a thin timeline under it; then + Add people
-//   → Add names, while adding (or while nobody's on shift)
-//   → Shift: Close-time what-if, Default times
-// Tap a name for the person's drawer (name, role, In / Out, break, closer,
-// remove). Select (in the header) picks people: the bulk bar docks at the
-// bottom in place of the totals strip — In / Out hour chips set the picked
-// people's times ("Each in turn" gives the next picked person the chip you
-// tap, "Same for all" sets everyone) — plus :30, Closer, Remove, Undo.
+// Staff (Preact) — for entering who worked and when, not for looking at
+// (Home is for that). Four sub-tabs, the header:
+//   People    the table: # · Name · In · Out · Hrs, In / Out always boxes
+//             (tap → keypad, hold → wheel; Undo in the toast). Tap a name for
+//             the person's drawer (name, role, In / Out, break, closer,
+//             remove). Warnings only when something needs a look.
+//   Add       type names (Return after each) or paste a list; saved names
+//             are chips; with roles on, which role they come in as.
+//   Bulk      tap people to pick them; the bulk bar docks at the bottom: In /
+//             Out hour chips ("Each in turn" — the next picked person gets the
+//             chip you tap — or "Same for all"), :30, Closers, Remove, Undo.
+//   Defaults  the shift's Open / Close and the per-role times, and the
+//             close-time what-if.
 //
 // Times are written as the same raw strings typing would store, '' when they
 // equal the default (resolve.js does the rest).
@@ -27,6 +24,8 @@ import { cx, Clock, Icon, Button, Alert, Seg, SwitchRow, List, Item, Section, Ne
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 import { DragTime } from '../ui/dragtime.js';
 import { openKeypad, activeKey, bufferAbs } from '../ui/keypad.js';
+import { currentSub, currentTab } from '../ui/nav.js';
+import { RoleTimes } from './settings.js';
 
 export { DragTime };
 
@@ -202,25 +201,15 @@ function shiftCell(field) {
 
 // ── Modes ────────────────────────────────────────────────────────────────────
 
-let mode = 'view';                // 'view' | 'select'
-let sel = new Set();              // picked ids (select mode)
+let sel = new Set();              // picked ids (Bulk)
 let how = 'turn';                 // bulk: 'turn' (each in turn) | 'all'
 let turn = 0;                     // each in turn: index into the picked people
 let half = false;                 // bulk chips at :30
 let undoLabel = '';               // the last bulk action, while Undo can put it back
 
-function setMode(m) {
-  mode = mode === m ? 'view' : m;
-  if (mode !== 'view') adding = false;
-  if (mode !== 'select') { sel = new Set(); turn = 0; undoLabel = ''; }
-  document.documentElement.classList.toggle('bulk-on', mode === 'select');
-  rerender();
-  App.refreshNavigation?.();
-}
-// The header's Select / Done (render/tabs.js).
-export const toggleSelect = () => setMode('select');
-export const staffMode = () => mode;
-export function exitStaffModes() { if (mode !== 'view') setMode(mode); }
+// The sub-tab is the mode: Bulk picks people, the others don't.
+const view = () => currentSub('staff') || 'people';
+const picking = () => view() === 'bulk';
 
 const picked = state => ordered(state).filter(p => sel.has(p.id));
 
@@ -258,32 +247,11 @@ export function CloseTime({ vm, cls, tone, mins = false, full = false, bare = fa
 }
 
 // ── The table ────────────────────────────────────────────────────────────────
-// Staff is where times are entered, so every row's In and Out are always
-// boxes: tap → the keypad, hold → the wheel. Tap the name (or anywhere else
-// on the row) for the person's drawer. Columns: # · Name · In → Out · Hrs;
-// a thin timeline under each row (Settings → Show → Staff timelines).
+// Every row's In and Out are always boxes: tap → the keypad, hold → the
+// wheel. Tap the tile or the name for the person's drawer. Columns: # · Name
+// · In → Out · Hrs.
 
-// Their shift against the night: a track with hour ticks, their stretch in
-// their colour, a placed break as a gap, the close as a red line.
-export function Timeline({ span, t, role, hue = null }) {
-  if (!span || t.span == null) return null;
-  const W = span.b - span.a;
-  const at = v => ((v - span.a) / W) * 100 + '%';
-  const len = (x, y) => ((y - x) / W) * 100 + '%';
-  const ticks = [];
-  for (let h = span.a + 1; h < span.b; h++) ticks.push(h);
-  return html`<div class="relative h-1 rounded-full bg-ink/[.07]" aria-hidden="true">
-    ${ticks.map(h => html`<span key=${h} class="absolute inset-y-0 w-px bg-ink/10" style=${{ left: at(h) }}></span>`)}
-    <span class=${cx('absolute inset-y-0 rounded-full', hue == null && ROLE_DOT[role])} style=${{ left: at(t.inAbs), width: len(t.inAbs, t.outAbs), ...(hue != null ? { background: hueVar(hue) } : {}) }}></span>
-    ${t.brk > 0 && t.brkStart != null && html`<span class="absolute -inset-y-px rounded-sm" style=${{
-      left: at(t.brkStart), width: len(t.brkStart, t.brkStart + t.brk),
-      backgroundImage: 'repeating-linear-gradient(135deg, var(--surface) 0 2px, transparent 2px 4px)', backgroundColor: 'color-mix(in srgb, var(--surface) 55%, transparent)',
-    }}></span>`}
-    ${span.close != null && html`<span class="absolute inset-y-0 w-0.5 -translate-x-1/2 rounded-full bg-bad/55" style=${{ left: at(span.close) }}></span>`}
-  </div>`;
-}
-
-// Hour labels lined up with the timelines (Home's Shift view uses them too).
+// Hour labels for a time axis (Home's Shift view).
 export function AxisLabels({ span }) {
   if (!span) return null;
   const W = span.b - span.a, step = W > 8 ? 3 : W > 5 ? 2 : 1;
@@ -312,25 +280,24 @@ function TimeBox({ vm, p, field }) {
     cls=${BOX} tone=${TONE(set)} label=${p.name + ' ' + field + ' time'} />`;
 }
 
-function Head({ span }) {
+function Head() {
   const cap = 't-cap text-ink-3';
-  return html`<${Sentinel} /><div class=${cx(THEAD, 'li flex flex-col gap-1 bg-bg px-4 pb-1.5 pt-2')} style=${{ '--inset': '0' }}>
+  return html`<${Sentinel} /><div class=${cx(THEAD, 'li bg-bg px-4 py-2')} style=${{ '--inset': '0' }}>
     <div class=${COLS}>
       <span class=${cx(cap, 'text-center')}>#</span><span class=${cap}>Name</span>
       <span class=${cx(cap, 'text-center')}>In</span><span></span><span class=${cx(cap, 'text-center')}>Out</span>
       <span class=${cx(cap, 'text-right')}>Hrs</span>
     </div>
-    ${span && html`<div class="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2 group-data-[stuck]:hidden"><span></span><${AxisLabels} span=${span} /></div>`}
   </div>`;
 }
 
-function PersonRow({ vm, p, n, span, allClose }) {
+function PersonRow({ vm, p, n, allClose }) {
   const t = times(vm.state, p, vm);
-  const picking = mode === 'select';
+  const pick = picking();
   const on = sel.has(p.id);
-  const next = picking && how === 'turn' && sel.size > 1 && picked(vm.state)[turn % sel.size]?.id === p.id;
+  const next = pick && how === 'turn' && sel.size > 1 && picked(vm.state)[turn % sel.size]?.id === p.id;
   const open = () => {
-    if (picking) {
+    if (pick) {
       if (on) sel.delete(p.id); else sel.add(p.id);
       turn = 0;
       rerender();
@@ -343,14 +310,14 @@ function PersonRow({ vm, p, n, span, allClose }) {
     t.bad ? 'Check the times' : '',
     t.brk > 0 ? fmtBreak(t.brk) + ' break' + (t.brkStart != null ? ' at ' + fmtClockShort(t.brkStart) : '') : '',
   ].filter(Boolean).join(' · ');
-  const times2 = picking
+  const times2 = pick
     ? html`<span class="t-small col-span-3 text-center tabular-nums text-ink-2">${t.inAbs != null ? html`<${Clock} abs=${t.inAbs} />` : '—'} → ${t.outAbs != null ? html`<${Clock} abs=${t.outAbs} />` : '—'}</span>`
     : html`<${TimeBox} vm=${vm} p=${p} field="in" /><span class="text-center text-[0.75rem] text-ink-3/70">→</span><${TimeBox} vm=${vm} p=${p} field="out" />`;
-  return html`<div class=${cx('li flex flex-col gap-1.5 px-4 py-2', on && 'bg-accent/8', next && 'ring-2 ring-inset ring-accent')} style=${{ '--inset': '3.5rem' }}>
+  return html`<div class=${cx('li flex flex-col px-4 py-2', on && 'bg-accent/8', next && 'ring-2 ring-inset ring-accent')} style=${{ '--inset': '3.5rem' }}>
     <div class=${COLS}>
       <button class="grid size-7 place-items-center justify-self-center rounded-lg t-small font-semibold tabular-nums"
-        style=${picking ? null : hueTile(hueIndex(vm.state, p.id))} onClick=${open} aria-label=${picking ? (on ? 'Unpick ' : 'Pick ') + p.name : 'Edit ' + p.name}>
-        ${picking ? html`<span class=${cx('grid size-6 place-items-center rounded-full', on ? 'bg-accent text-on-accent' : 'ring-2 ring-inset ring-ink/20')}>${on && html`<${Icon} name="check" class="size-3.5" />`}</span>` : n}
+        style=${pick ? null : hueTile(hueIndex(vm.state, p.id))} onClick=${open} aria-label=${pick ? (on ? 'Unpick ' : 'Pick ') + p.name : 'Edit ' + p.name}>
+        ${pick ? html`<span class=${cx('grid size-6 place-items-center rounded-full', on ? 'bg-accent text-on-accent' : 'ring-2 ring-inset ring-ink/20')}>${on && html`<${Icon} name="check" class="size-3.5" />`}</span>` : n}
       </button>
       <button class="flex min-w-0 flex-col items-start py-1 text-left" onClick=${open}>
         <span class="flex max-w-full items-center gap-1.5">
@@ -363,13 +330,12 @@ function PersonRow({ vm, p, n, span, allClose }) {
       ${times2}
       <span class=${cx('t-body text-right font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) : '?'}</span>
     </div>
-    ${span && t.span != null && html`<div class="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-2"><span></span><${Timeline} span=${span} t=${t} role=${p.role} hue=${hueIndex(vm.state, p.id)} /></div>`}
   </div>`;
 }
 
-// The shift's open and close, above the list: everyone without a time of
-// their own starts at the open; closers, and anyone without an Out, end at
-// the close.
+// The shift's open and close (Defaults): everyone without a time of their
+// own starts at the open; closers, and anyone without an Out, end at the
+// close.
 function ShiftTimes({ vm }) {
   const cell = 'h-11 w-[4.5rem] rounded-lg bg-surface-2 text-[0.9375rem] tabular-nums transition';
   return html`<${List}>
@@ -391,7 +357,6 @@ function ShiftTimes({ vm }) {
 // tap to add; Edit saved → tap to forget one. Done (or leaving the field
 // empty) folds it away.
 
-let adding = false;
 let addRole = 'bartender';
 let forgetting = false;
 const onShiftSet = state => new Set(state.staff.map(p => p.name.trim().toLowerCase()).filter(Boolean));
@@ -404,16 +369,10 @@ function addAll(names) {
 
 // Open the composer and put the cursor in it.
 export function startAdding() {
-  if (mode !== 'view') setMode(mode);
-  adding = true;
-  rerender();
-  requestAnimationFrame(() => {
-    const el = document.querySelector('[data-addnames]');
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-    el?.focus();
-  });
+  App.tab('staff', { sub: 'add' });
+  requestAnimationFrame(() => document.querySelector('[data-addnames]')?.focus());
 }
-const stopAdding = () => { adding = false; forgetting = false; rerender(); };
+
 
 function AddNames({ vm }) {
   const state = vm.state;
@@ -425,14 +384,12 @@ function AddNames({ vm }) {
   const people = state.staff.some(named);
   return html`<${Section} title="Add names" aside=${html`<span class="flex items-center gap-4">
       ${saved.length > 0 && html`<button class="t-small font-semibold text-accent" onClick=${() => { forgetting = !forgetting; rerender(); }}>${forgetting ? 'Done editing' : 'Edit saved'}</button>`}
-      ${people && html`<button class="t-small font-semibold text-accent" onClick=${stopAdding}>Done</button>`}</span>`}>
+      </span>`}>
     <${List}>
       <div class="li flex items-center gap-3 px-4 py-1.5" style=${{ '--inset': '3.5rem' }} data-addbox>
         <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/12 text-accent"><${Icon} name="plus" class="size-[1.125rem]" /></span>
         <input data-addnames class="h-11 min-w-0 flex-1 bg-transparent text-[1rem] font-medium text-ink outline-none placeholder:font-normal placeholder:text-ink-3"
           placeholder="Name, then Return — or paste a list" aria-label="Add names"
-          onFocus=${() => { if (!adding) { adding = true; rerender(); } }}
-          onBlur=${e => { if (!e.target.value.trim() && state.staff.some(named)) setTimeout(() => { if (document.activeElement?.closest?.('[data-addbox]')) return; stopAdding(); }, 150); }}
           autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="next"
           onKeyDown=${e => {
             if (e.key !== 'Enter') return;
@@ -474,7 +431,7 @@ function AddNames({ vm }) {
   <//>`;
 }
 
-// ── Bulk bar (select mode) ───────────────────────────────────────────────────
+// ── Bulk bar (the Bulk sub-tab) ───────────────────────────────────────────────────
 // Docked at the bottom in place of the totals strip while Select is on
 // (Done is in the header).
 
@@ -556,51 +513,64 @@ function BulkBar({ vm }) {
 
 function renderBulk(vm) {
   const el = $('bulkBar');
-  if (el) render(mode === 'select' ? html`<${BulkBar} vm=${vm} />` : null, el);
+  const on = picking() && currentTab() === 'staff';
+  document.documentElement.classList.toggle('bulk-on', on);
+  if (el) render(on ? html`<${BulkBar} vm=${vm} />` : null, el);
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
+function Table({ vm, people }) {
+  const gs = groups(vm.state);
+  const tipped = vm.resolved.staff.filter(p => p.role !== 'support');
+  const allClose = tipped.length > 1 && tipped.every(p => p.closer && !p.closerOverride);
+  let n = 0;
+  return html`<${List}>
+    <${Head} />
+    ${gs.map(g => html`
+      ${g.role && gs.length > 1 && html`<div key=${'h-' + g.role} class="li t-cap flex items-center gap-2 px-4 pb-1 pt-2.5 text-ink-3" style=${{ '--inset': '1rem' }}>
+        <span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}<span class="text-ink-3/70">${g.people.length}</span></div>`}
+      ${g.people.map(p => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} n=${++n} allClose=${allClose} />`)}`)}
+  <//>`;
+}
+
+const Nobody = ({ text }) => html`<div class="flex flex-col items-center gap-4 py-12 text-center">
+  <span class="t-body text-ink-3">${text}</span>
+  <${Button} variant="primary" icon="plus" onClick=${() => App.tab('staff', { sub: 'add' })}>Add people<//>
+</div>`;
+
 function Staff({ vm }) {
   const state = vm.state;
   const people = state.staff.filter(named);
-  const gs = groups(state);
-  const span = state.settings.show?.timelines !== false ? nightSpan(vm) : null;
-  const tipped = vm.resolved.staff.filter(p => p.role !== 'support');
-  const allClose = tipped.length > 1 && tipped.every(p => p.closer && !p.closerOverride);
+  const v = view();
+  if (v === 'add') return html`<${AddNames} vm=${vm} />`;
+  if (v === 'defaults') return html`<${Defaults} vm=${vm} />`;
+  if (!people.length) return html`<${Nobody} text=${v === 'bulk' ? 'Nobody to pick yet.' : 'Nobody on shift yet.'} />`;
+  if (v === 'bulk') return html`<div class="flex flex-col gap-3"><${Table} vm=${vm} people=${people} /></div>`;
   // Staff is done once everyone named has valid times (no staff-side error).
-  const done = people.length > 0 && vm.blockedTab !== 'staff';
+  const done = vm.blockedTab !== 'staff';
   const hours = done && vm.resolved.staff.filter(p => p.role !== 'support').reduce((t, p) => t + p.hours, 0);
-  const calm = mode === 'view' && !adding;
-  let n = 0;
   return html`<div class="flex flex-col gap-4">
-    <${ShiftTimes} vm=${vm} />
     <${Note} vm=${vm} />
-    ${people.length > 0 && html`<${List}>
-      <${Head} span=${span} />
-      ${gs.map(g => html`
-        ${g.role && gs.length > 1 && html`<div key=${'h-' + g.role} class="li t-cap flex items-center gap-2 px-4 pb-1 pt-2.5 text-ink-3" style=${{ '--inset': '1rem' }}>
-          <span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}<span class="text-ink-3/70">${g.people.length}</span></div>`}
-        ${g.people.map(p => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} n=${++n} span=${span} allClose=${allClose} />`)}`)}
-      ${calm && html`<button class="li flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left transition active:bg-surface-2" style=${{ '--inset': '3.5rem' }} onClick=${startAdding}>
-        <span class="grid size-7 shrink-0 place-items-center rounded-lg bg-accent/12 text-accent"><${Icon} name="plus" class="size-4" /></span>
-        <span class="t-body font-medium text-accent">Add people</span></button>`}
-    <//>`}
-    ${(adding || !people.length) && html`<${AddNames} vm=${vm} />`}
-    ${people.length > 0 && calm && html`<${StaffMore} vm=${vm} />`}
-    ${done && calm && (vm.totalCash > 0 && !vm.blocked
+    <${Table} vm=${vm} people=${people} />
+    ${done && (vm.totalCash > 0 && !vm.blocked
       ? html`<${NextStep} tab="home" label="See who gets what" sub=${fmtMoney(vm.totalCash) + ' over ' + fmtHrs(hours) + ' hours'} />`
       : html`<${NextStep} tab="tips" label="Next: enter the tips" sub=${people.length + ' on shift · ' + fmtHrs(hours) + ' hours'} />`)}
   </div>`;
 }
 
-// ── Under the list: the close-time what-if and the default times. ────────────
+// ── Defaults: the open / close, per-role times, the close-time what-if. ─────
 
-function StaffMore({ vm }) {
-  return html`<${Section} title="Shift" footer="Lighter times follow the open / close. Tap a name for breaks, closer and remove."><${List}>
+function Defaults({ vm }) {
+  return html`<div class="flex flex-col gap-5">
+    <${Section} title="Shift" footer="Anyone without a time of their own starts at the open. Closers, and anyone without an Out, leave at the close.">
+      <${ShiftTimes} vm=${vm} />
+    <//>
+    <${RoleTimes} vm=${vm} />
+    <${List}>
       <${Item} icon="clock" title="Close-time what-if" sub="Everyone’s take-home at other close times" onClick=${() => App.openCloseTime()} />
-      <${Item} icon="sliders" title="Default times" sub="Per role, and this shift’s date" onClick=${() => App.openDefaults()} />
-    <//><//>`;
+    <//>
+  </div>`;
 }
 
 // ── A person's drawer ────────────────────────────────────────────────────────

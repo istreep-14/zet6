@@ -1,10 +1,11 @@
 // Tips › Drawer (Preact) — the cash side of the payout, where the drawer is
 // fixed up (Home only reads the result):
-//   status (exact change ✓ / the fix card with Apply) → the envelopes
-//   (name · one column per bill size · pay, chump, drawer totals) → tools,
+//   status (exact change ✓ / the fix card with Apply) → the best bills for
+//   the uncounted cash → tools,
 //   each a small drawer (sheet) of its own: envelopes already made (with a
 //   register over / short), stacks for a manager, tidy the drawer.
-// Worksheet ("How the split works") and EnvelopeTable are shared with Home.
+// Worksheet ("How the split works") and EnvelopeTable (the envelopes) are
+// Home's.
 
 import { DENOMS, fmtHrs, fmtMoney, payoutOrder, poolValue } from '../util.js';
 import { fmtTimeAbs } from '../time.js';
@@ -16,6 +17,8 @@ import { html, render } from '../ui/preact.js';
 import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra, Delta, SwitchRow, hueVar, hueIndex } from '../ui/pkit.js';
 import { openSheet, isOpen, sheetBody } from '../ui/sheet.js';
 import { payDelta } from '../ui/changes.js';
+import { currentSub } from '../ui/nav.js';
+import { Suggested } from './tips.js';
 
 const $ = id => document.getElementById(id);
 
@@ -122,9 +125,6 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
     foot=${['Total', ...cols.map(d => head(d, colTotal(d))), html`<${Money} value=${grand} class="text-money" />`]} />`;
 }
 
-function Envelopes({ vm, byPerson, remBills, note }) {
-  return html`<${Section} title="Envelopes" aside=${note}><${EnvelopeTable} vm=${vm} byPerson=${byPerson} remBills=${remBills} /><//>`;
-}
 
 // ── Status: exact change, or the fix card ────────────────────────────────────
 
@@ -382,16 +382,10 @@ function Extras({ vm, tradeUp }) {
 function Payout({ vm, errMsg, tradeDown, tradeUp }) {
   if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
   const warnings = vm.shares.perPool.map(p => p.warning).filter(Boolean).map(w => html`<${Alert}>${w}<//>`);
-  // Bill columns: the real envelopes, else the swap preview, else none.
-  const bills = !errMsg && vm.dist
-    ? { ...vm.dist, note: 'tap a name for details' }
-    : tradeDown
-      ? { ...tradeDown, note: 'shown after the swap' }
-      : { byPerson: {}, remainderBills: {}, note: 'bills don’t work out yet' };
   return html`<div class="flex flex-col gap-4">
     ${warnings}
     ${errMsg ? html`<${FixCard} vm=${vm} errMsg=${errMsg} plan=${tradeDown} />` : html`<${ExactChange} vm=${vm} />`}
-    <${Envelopes} vm=${vm} byPerson=${bills.byPerson} remBills=${bills.remainderBills} note=${bills.note} />
+    ${vm.state.settings.show?.bestBills !== false && html`<${Suggested} vm=${vm} />`}
     <${Section} title="Tools"><${Extras} vm=${vm} tradeUp=${tradeUp} /><//>
   </div>`;
 }
@@ -408,7 +402,7 @@ export function renderPayout(vm) {
     pendingTradeDown = errMsg && canTrade ? breakPlan(vm) : null;
     pendingTradeUp = !errMsg && canTrade ? safeTradeUp(vm) : null;
   }
-  render(html`<${Payout} vm=${vm} errMsg=${errMsg}
-    tradeDown=${pendingTradeDown} tradeUp=${pendingTradeUp} />`, root);
+  render(currentSub('tips') === 'drawer' ? html`<${Payout} vm=${vm} errMsg=${errMsg}
+    tradeDown=${pendingTradeDown} tradeUp=${pendingTradeUp} />` : null, root);
   renderPayoutSheets(vm);
 }

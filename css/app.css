@@ -229,11 +229,11 @@
     overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain; touch-action: pan-y; pointer-events: auto;
     background: var(--bg);
-    padding: 0.5rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 4.5rem) calc(var(--gutter) + var(--safe-l));
+    padding: 1rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 2rem) calc(var(--gutter) + var(--safe-l));
     box-shadow: -1px 0 0 var(--line), -1rem 0 2.5rem rgb(0 0 0 / .12);
     transform: translateX(100%);
     transition: transform .28s cubic-bezier(.2, .9, .25, 1);
-    --thead-top: -0.5rem;
+    --thead-top: -1rem;
   }
   .subpage.in { transform: none; }
   .subpage[hidden] { display: none; }
@@ -246,11 +246,10 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     touch-action: pan-y;
-    /* clearance for the totals strip over the tab bar */
-    padding: 1rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 4.5rem) calc(var(--gutter) + var(--safe-l));
+    /* clearance for the tab bar (and a toast) */
+    padding: 1rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 2rem) calc(var(--gutter) + var(--safe-l));
   }
   body.keyboard-open .content { padding-bottom: 1.5rem; }
-  html:has(.hud.is-review) .content, html:has(.hud.is-review) .subpage { padding-bottom: calc(var(--dock) + 8rem); }   /* the HUD's Undo · Apply row */
 
   /* Sticky table heads sit flush with the top of .content (tucked into its 0.5rem padding). */
   .panel {
@@ -283,7 +282,7 @@
      screen height and the bottom-anchored layers sit inside it. */
   html.fill-screen, html.fill-screen body { height: var(--app-h); }
   html.fill-screen body { position: relative; }
-  html.fill-screen .tabbar, html.fill-screen .hud, html.fill-screen .bulkbar, html.fill-screen .sheet-backdrop { position: absolute; }
+  html.fill-screen .tabbar, html.fill-screen .bulkbar, html.fill-screen .sheet-backdrop { position: absolute; }
   html.fill-screen .sheet-backdrop { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet { max-height: calc(var(--app-h) - var(--safe-t) - 1rem); }
   html.fill-screen .sheet--tall { height: calc(var(--app-h) - var(--safe-t) - 2.5rem); }
@@ -348,30 +347,6 @@
   .tab-sub.ok { color: var(--on-accent); background: var(--accent); }
   .tab-sub.warn { color: #fff; background: var(--bad); }
 
-  /* ── Totals strip (Staff, Tips): one quiet line over the tab bar — Tips ·
-     Hours · Rate, the would-be numbers while an edit is previewed, and
-     Undo · Apply after a wheel / keypad edit (render/tabs.js). ───────── */
-  .hud {
-    position: fixed;
-    left: 0; right: 0;
-    bottom: var(--dock);
-    min-height: 2.75rem;
-    display: flex;
-    align-items: center;
-    padding: .375rem calc(var(--gutter) + var(--safe-r)) .375rem calc(var(--gutter) + var(--safe-l));
-    background: var(--glass);
-    -webkit-backdrop-filter: var(--blur);
-    backdrop-filter: var(--blur);
-    color: var(--ink);
-    box-shadow: 0 -1px 0 var(--line);
-    z-index: 80;
-    transition: bottom .2s ease;
-  }
-  .hud.is-empty { display: none; }
-  html:not([data-page="staff"]):not([data-page="tips"]) .hud { display: none; }
-  .hud.is-warn { box-shadow: 0 -1px 0 var(--line), inset 0 2px 0 var(--bad); }
-  body.keyboard-open .hud { display: none; }
-
   /* Staff's bulk bar (select mode): docks where the HUD sits, in its place. */
   .bulkbar {
     display: none; position: fixed; left: 50%; bottom: calc(var(--dock) + 0.625rem); transform: translateX(-50%);
@@ -380,7 +355,6 @@
     box-shadow: var(--shadow), 0 0 0 1px var(--line); z-index: 81;
   }
   html.bulk-on[data-page="staff"] .bulkbar { display: block; }
-  html.bulk-on[data-page="staff"] .hud { display: none; }
   html.bulk-on[data-page="staff"] .content { padding-bottom: calc(var(--dock) + 19rem); }
   body.keyboard-open .bulkbar { display: none !important; }
 
@@ -447,12 +421,12 @@
   }
   .keypad > * { max-width: 30rem; margin: 0 auto; }
   .keypad.open { transform: none; }
-  html.keypad-open .tabbar, html.keypad-open .hud { visibility: hidden; }
+  html.keypad-open .tabbar { visibility: hidden; }
   /* Room to scroll the active cell above the keypad (+ the previewing strip):
      a spacer, not padding — padding taller than the scroller would grow it
      and push the whole page up. */
   html.keypad-open .content::after, html.keypad-open .subpage::after {
-    content: ""; display: block; height: calc(var(--kp-h, 18rem) + .5rem - var(--dock));
+    content: ""; display: block; height: calc(var(--kp-h, 18rem) + 1rem - var(--dock));
   }
   html.fill-screen .keypad { position: absolute; }
   html.keypad-open .sheet-body { padding-bottom: calc(var(--kp-h, 18rem) + 1rem); }
@@ -516,12 +490,6 @@
     from { box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--accent) 14%, transparent); }
     to   { box-shadow: inset 0 0 0 100vmax transparent; }
   }
-  .hud.is-preview { box-shadow: 0 -1px 0 var(--line), inset 0 2px 0 var(--accent); }
-  /* Typing a time on the keypad: the HUD rides above the keypad while the
-     typed value is previewed (otherwise it hides with the tab bar). */
-  html.keypad-open .hud.is-preview, html.keypad-open .hud.is-review { visibility: visible; bottom: calc(var(--kp-h, 18rem) + 0.5rem); z-index: 111; }
-  /* A landed drag / keypad edit waiting for Undo · Apply (render/tabs.js). */
-  .hud.is-review { box-shadow: 0 -1px 0 var(--line), inset 0 2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
 }
 
 @layer components {
@@ -588,5 +556,9 @@
     transition: opacity .18s, transform .18s;
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  .toast.has-action { display: flex; align-items: center; gap: 1rem; padding-right: .375rem; }
+  .toast.has-action.show { pointer-events: auto; }
+  .toast-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toast-action { flex-shrink: 0; height: 2.25rem; padding: 0 .875rem; border-radius: .625rem; font-weight: 600; color: inherit; background: color-mix(in srgb, var(--bg) 18%, transparent); }
   html.fill-screen .toast { position: absolute; }
 }

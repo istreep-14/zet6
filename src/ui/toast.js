@@ -1,14 +1,25 @@
-// A short message over the tab bar ("Copied — paste into Notes"). One at a time.
+// A short message over the tab bar ("Copied — paste into Notes"), with an
+// optional action button (Undo). One at a time.
 
 let el = null;
 let timer = 0;
 
-export function toast(text, ms = 1800) {
+// opts: a number (ms), or { ms, action: { label, onClick } } — a button in
+// the toast (e.g. Undo after an edit).
+export function toast(text, opts = {}) {
+  const { ms = opts.action ? 5000 : 1800, action = null } = typeof opts === 'number' ? { ms: opts } : opts;
   if (!el) {
     el = Object.assign(document.createElement('div'), { className: 'toast', role: 'status' });
     document.body.append(el);
   }
-  el.textContent = text;
+  el.textContent = '';
+  el.append(Object.assign(document.createElement('span'), { className: 'toast-text', textContent: text }));
+  if (action) {
+    const b = Object.assign(document.createElement('button'), { className: 'toast-action', type: 'button', textContent: action.label });
+    b.onclick = () => { el.classList.remove('show'); action.onClick(); };
+    el.append(b);
+  }
+  el.classList.toggle('has-action', !!action);
   el.classList.remove('show');
   void el.offsetWidth;                 // restart the animation
   el.classList.add('show');
