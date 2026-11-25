@@ -6,7 +6,7 @@ import * as store from './store.js';
 import * as persist from './persist.js';
 import * as sessions from './sessions.js';
 import { buildViewModel } from './viewmodel.js';
-import { setClock24, setAmFrom, parseTime, inAbsOf } from './time.js';
+import { setClock24, setAmFrom } from './time.js';
 import { countedValue, parseWholeNumber } from './util.js';
 import { nextId } from './ids.js';
 import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL } from './shifts.js';
@@ -16,7 +16,7 @@ import { initNav, onNav, showTab, setSub, currentTab, popPage, popAll, topPage, 
 import { renderStaff, openStaffEditor } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderTips } from './render/tips.js';
-import { renderPayout, applyPendingTradeUp, applyPendingTradeDown, openPayoutSheet } from './render/payout.js';
+import { renderPayout, openPayoutSheet } from './render/payout.js';
 import { refreshSticky } from './ui/sticky.js';
 import { trackChanges, resetChanges, snapOf, SHOW } from './ui/changes.js';
 import { toast, copyText } from './ui/toast.js';
@@ -108,7 +108,7 @@ function clearChangesLater() {
 // Review: a drag or keypad edit is written at once; the toast offers Undo
 // (put the whole state back as it was just before) while nothing else has
 // changed since.
-let review = null, pendingReview = null, bulkUndo = null;
+let review = null, pendingReview = null;
 const dataKey = s => JSON.stringify({ ...s, ui: null });
 function withReview(label, write) {
   pendingReview = { label, before: structuredClone(store.getState()) };
@@ -212,7 +212,6 @@ store.subscribe(render);
 const rolesOn = () => store.getState().settings.allRoles;
 
 window.App = {
-  refreshNavigation: () => renderChrome(lastVm, sessionName()),
   // Tabs: Home · Staff · Tips · Settings (opts.sub: a sub-tab to show —
   // App.tab('tips', { sub: 'drawer' })). Old names map over (normalizeTab).
   tab(name, opts = {}) {
@@ -245,8 +244,6 @@ window.App = {
   closeSheet,
   openBonus: () => openBonus(lastVm),
   openCloseTime: () => openCloseTime(lastVm),
-  // The shift's default times: Staff › Defaults.
-  openDefaults: () => App.tab('staff', { sub: 'defaults' }),
   renameCurrent(name) {
     sessions.rename(sessions.currentId(), name);
     render(store.getState());
@@ -265,24 +262,7 @@ window.App = {
   },
 
   // staff
-  // Add a named person: fills a blank row of that role first (fresh sessions
-  // start with blank rows), else a new row. Remembered for next shift.
-  addPerson(name, role = 'bartender', inRaw = '') {
-    const n = String(name || '').trim();
-    if (!n) return;
-    const r = rolesOn() ? role : 'bartender';
-    store.mutate(st => {
-      // A start equal to the role's default is stored blank (it inherits).
-      const def = st.defaults.byRole[r]?.in || st.defaults.global.in || '';
-      const a = parseTime(inRaw), b = parseTime(def);
-      const start = inRaw && !(a.value != null && b.value != null && inAbsOf(a) === inAbsOf(b)) ? inRaw : '';
-      const blank = st.staff.find(p => !p.name.trim() && p.role === r);
-      if (blank) { blank.name = n; blank.in = start; }
-      else st.staff.push({ ...store.newStaff(r), name: n, in: start });
-    }, { immediate: true });
-    rememberName(n, r);
-  },
-  // Several at once, in order ([{ name, role }] — Staff's Add names). Anyone
+  // Add people, in order ([{ name, role }] — Staff's add field). Anyone
   // already on shift is skipped (and said so).
   addPeople(list) {
     const skipped = [];
@@ -303,32 +283,6 @@ window.App = {
     if (skipped.length) toast('Already on shift: ' + skipped.join(', '));
   },
   editStaff: id => openStaffEditor(id),
-  // Staff's bulk bar: set fields on several people in one go
-  // ({ id: { field: value } }), and put the last bulk action back.
-  setStaffFields(map) {
-    store.mutate(s => {
-      Object.entries(map).forEach(([id, f]) => {
-        const p = s.staff.find(x => x.id === id);
-        if (p) Object.assign(p, f);
-      });
-    }, { immediate: true });
-  },
-  bulk(label, run) {
-    const before = structuredClone(store.getState());
-    run();
-    bulkUndo = { label, before, after: dataKey(store.getState()) };
-  },
-  // Only while nothing else has changed since (else it would undo that too).
-  bulkUndo() {
-    const u = bulkUndo;
-    bulkUndo = null;
-    if (!u || dataKey(store.getState()) !== u.after) return false;
-    resetChanges();
-    store.replaceState(u.before);
-    render(store.getState());
-    toast('Undone');
-    return true;
-  },
   // Preview an In / Out (or the default open / close) before it's written —
   // raw = the string it would store, null = end the preview.
   previewStaff: (id, field, raw) => preview(raw == null ? null : s => {
@@ -374,12 +328,7 @@ window.App = {
 
   // pools
   selectPool: id => store.mutate(s => { s.ui.selectedPool = id; }, { immediate: true }),
-  addPool() { const id = store.addPool(); App.selectPool(id); App.tab('tips'); },
-  openPool(id) {
-    App.selectPool(id);
-    App.tab('tips');
-    requestAnimationFrame(() => document.querySelector(`[data-pid="${id}"]`)?.scrollIntoView({ block: 'start' }));
-  },
+  addPool() { const id = store.addPool(); App.selectPool(id); App.tab('tips', { sub: 'pools' }); },
   removePool: store.removePool,
   poolRole: store.togglePoolRole,
   poolLabel: (id, value) => store.updatePool(id, p => { p.label = value; }),
@@ -419,8 +368,8 @@ window.App = {
       s.ui.selectedPool = id;
       s.settings.multiPool = true;
     }, { immediate: true });
-    App.tab('tips');
-    requestAnimationFrame(() => document.querySelector(`[data-pid="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    App.tab('tips', { sub: 'pools' });
+    requestAnimationFrame(() => document.querySelector(`[data-setup="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
   },
   poolBill: (id, denom, value) => store.updatePool(id, p => { if (!p.cash.baseMode) makeCashTotal(p.cash); p.cash.billCounts[denom] = value; }),
   poolTotal(id, value) {
@@ -513,10 +462,8 @@ window.App = {
   remBonus: (id, delta) => adjustBonus(lastVm, id, delta),
   resetRemBonuses: resetBonuses,
 
-  // close time + trades
+  // close time
   selectCloseTime,
-  applyTradeUp: applyPendingTradeUp,
-  applyTradeDown: applyPendingTradeDown,
 
   // session
   setDate(v) {

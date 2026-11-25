@@ -3,7 +3,7 @@
 //
 //   sub-tabs   every tab has them, as the segmented control that is the
 //              header (Home: Pay · Shift · Bills · Split; Staff: People ·
-//              Add · Bulk · Defaults; Tips: Cash · Pools · Drawer; Settings:
+//              Shift; Tips: Cash · Pools · Drawer; Settings:
 //              Shift · Sessions · App). A sideways swipe on the page
 //              moves between them; the page follows the finger, past the
 //              ends it rubber-bands. Elements in a tab's panel marked
@@ -37,9 +37,7 @@ export const SUBS = {
   ],
   staff: [
     { value: 'people', label: 'People' },
-    { value: 'add', label: 'Add' },
-    { value: 'bulk', label: 'Bulk' },
-    { value: 'defaults', label: 'Defaults' },
+    { value: 'shift', label: 'Shift' },
   ],
   tips: [
     { value: 'cash', label: 'Cash' },

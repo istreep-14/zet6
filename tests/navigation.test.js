@@ -76,7 +76,7 @@ assert.equal(nav.currentSub(), 'people');
 swipe('mainContent', 300, 100);
 await wait(200);
 assert.equal(nav.currentTab(), 'staff');
-assert.equal(nav.currentSub(), 'add');
+assert.equal(nav.currentSub(), 'shift');
 for (const t of nav.TABS) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs');
 
 // Old saved tab names.

@@ -1,16 +1,13 @@
-// Staff (Preact) — for entering who worked and when, not for looking at
-// (Home is for that). Four sub-tabs, the header:
-//   People    the table: # · Name · In · Out · Hrs, In / Out always boxes
-//             (tap → keypad, hold → wheel; Undo in the toast). Tap a name for
-//             the person's drawer (name, role, In / Out, break, closer,
-//             remove). Warnings only when something needs a look.
-//   Add       type names (Return after each) or paste a list; saved names
-//             are chips; with roles on, which role they come in as.
-//   Bulk      tap people to pick them; the bulk bar docks at the bottom: In /
-//             Out hour chips ("Each in turn" — the next picked person gets the
-//             chip you tap — or "Same for all"), :30, Closers, Remove, Undo.
-//   Defaults  the shift's Open / Close and the per-role times, and the
-//             close-time what-if.
+// Staff (Preact) — for entering who worked and when. Two sub-tabs (the
+// header):
+//   People   one list: Name · In · Out · Hrs per person (In / Out are boxes —
+//            tap → keypad, whose Next walks every time in order; hold → the
+//            wheel; Undo in the toast), and as its last row an "Add a name"
+//            field: type a name and Return, the field stays ready for the
+//            next (a pasted list adds them all). Saved names not on shift are
+//            chips under it. Tap a name for the person's drawer: name, role,
+//            break, closer, remove.
+//   Shift    the shift's Open / Close, per-role times, the close-time what-if.
 //
 // Times are written as the same raw strings typing would store, '' when they
 // equal the default (resolve.js does the rest).
@@ -20,11 +17,11 @@ import { fmtHrs, fmtMoney } from '../util.js';
 import { parseTime, fmtTimeAbs, fmtClockShort, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, absToEdgeRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { getRoster } from '../roster.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Clock, Icon, Button, Alert, Seg, SwitchRow, List, Item, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_TINT, ROLE_PLURAL, hueVar, hueIndex, hueTile, Sentinel, THEAD } from '../ui/pkit.js';
+import { cx, Icon, Button, Alert, Seg, SwitchRow, List, Item, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_TINT, ROLE_PLURAL, Sentinel, THEAD } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 import { DragTime } from '../ui/dragtime.js';
 import { openKeypad, activeKey, bufferAbs } from '../ui/keypad.js';
-import { currentSub, currentTab } from '../ui/nav.js';
+import { currentSub } from '../ui/nav.js';
 import { RoleTimes } from './settings.js';
 
 export { DragTime };
@@ -199,25 +196,9 @@ function shiftCell(field) {
   return { kcell: key, active, preview: active ? bufferAbs() : null, onTap: () => openShiftCell(field) };
 }
 
-// ── Modes ────────────────────────────────────────────────────────────────────
-
-let sel = new Set();              // picked ids (Bulk)
-let how = 'turn';                 // bulk: 'turn' (each in turn) | 'all'
-let turn = 0;                     // each in turn: index into the picked people
-let half = false;                 // bulk chips at :30
-let undoLabel = '';               // the last bulk action, while Undo can put it back
-
-// The sub-tab is the mode: Bulk picks people, the others don't.
 const view = () => currentSub('staff') || 'people';
-const picking = () => view() === 'bulk';
 
-const picked = state => ordered(state).filter(p => sel.has(p.id));
-
-// ── Note line ────────────────────────────────────────────────────────────────
-
-// Only what needs a look: input errors, someone out after the close. (The
-// count is on the tab, the closers are the red dots, the hours are in the
-// totals strip.)
+// ── Warnings (only when something needs a look) ─────────────────────────────
 function Note({ vm }) {
   const warnings = [];
   if (vm.inputError && vm.blockedTab === 'staff') warnings.push(vm.blocked);
@@ -231,9 +212,8 @@ function Note({ vm }) {
 }
 
 // ── The close time ───────────────────────────────────────────────────────────
-
 // The shift's close (defaults.global.out): closers and anyone without an Out
-// of their own end then. Tap → the keypad, hold → the wheel; Undo · Apply after.
+// of their own end then. Tap → the keypad, hold → the wheel.
 export function CloseTime({ vm, cls, tone, mins = false, full = false, bare = false }) {
   const g = vm.state.defaults.global;
   const gi = parseTime(g.in), go = parseTime(g.out);
@@ -245,11 +225,6 @@ export function CloseTime({ vm, cls, tone, mins = false, full = false, bare = fa
     onPreview=${a => App.previewDefault('out', a == null ? null : absToOutRaw(a, open))}
     cls=${cls} tone=${tone} mins=${mins} full=${full} bare=${bare} label="Close time" />`;
 }
-
-// ── The table ────────────────────────────────────────────────────────────────
-// Every row's In and Out are always boxes: tap → the keypad, hold → the
-// wheel. Tap the tile or the name for the person's drawer. Columns: # · Name
-// · In → Out · Hrs.
 
 // Hour labels for a time axis (Home's Shift view).
 export function AxisLabels({ span }) {
@@ -265,9 +240,9 @@ export function AxisLabels({ span }) {
   </div>`;
 }
 
-// # · Name · In · → · Out · Hrs
-const COLS = 'grid grid-cols-[1.75rem_minmax(0,1fr)_3.5rem_0.75rem_3.5rem_2.25rem] items-center gap-x-2';
-const ROW = cx('li', COLS, 'w-full px-4 py-2 text-left');
+// ── The list ─────────────────────────────────────────────────────────────────
+// Name · In · → · Out · Hrs
+const COLS = 'grid grid-cols-[minmax(0,1fr)_3.75rem_0.625rem_3.75rem_2rem] items-center gap-x-2';
 const BOX = 'h-11 w-full rounded-lg bg-surface-2 text-[0.9375rem] tabular-nums transition';
 const TONE = set => (set ? 'font-semibold text-ink' : 'font-normal text-ink-3');
 
@@ -284,293 +259,185 @@ function Head() {
   const cap = 't-cap text-ink-3';
   return html`<${Sentinel} /><div class=${cx(THEAD, 'li bg-bg px-4 py-2')} style=${{ '--inset': '0' }}>
     <div class=${COLS}>
-      <span class=${cx(cap, 'text-center')}>#</span><span class=${cap}>Name</span>
+      <span class=${cap}>Name</span>
       <span class=${cx(cap, 'text-center')}>In</span><span></span><span class=${cx(cap, 'text-center')}>Out</span>
       <span class=${cx(cap, 'text-right')}>Hrs</span>
     </div>
   </div>`;
 }
 
-function PersonRow({ vm, p, n, allClose }) {
+function PersonRow({ vm, p, allClose }) {
   const t = times(vm.state, p, vm);
-  const pick = picking();
-  const on = sel.has(p.id);
-  const next = pick && how === 'turn' && sel.size > 1 && picked(vm.state)[turn % sel.size]?.id === p.id;
-  const open = () => {
-    if (pick) {
-      if (on) sel.delete(p.id); else sel.add(p.id);
-      turn = 0;
-      rerender();
-    } else App.editStaff(p.id);
-  };
-  // An auto closer is only worth a mark while not everyone is one (early in
-  // the night everyone still ends at the close).
+  // An auto closer is only worth a mark while not everyone is one.
   const closer = t.forced || (t.closer && !allClose);
   const sub = [
     t.bad ? 'Check the times' : '',
-    t.brk > 0 ? fmtBreak(t.brk) + ' break' + (t.brkStart != null ? ' at ' + fmtClockShort(t.brkStart) : '') : '',
+    t.brk > 0 ? fmtBreak(t.brk) + ' break' : '',
   ].filter(Boolean).join(' · ');
-  const times2 = pick
-    ? html`<span class="t-small col-span-3 text-center tabular-nums text-ink-2">${t.inAbs != null ? html`<${Clock} abs=${t.inAbs} />` : '—'} → ${t.outAbs != null ? html`<${Clock} abs=${t.outAbs} />` : '—'}</span>`
-    : html`<${TimeBox} vm=${vm} p=${p} field="in" /><span class="text-center text-[0.75rem] text-ink-3/70">→</span><${TimeBox} vm=${vm} p=${p} field="out" />`;
-  return html`<div class=${cx('li flex flex-col px-4 py-2', on && 'bg-accent/8', next && 'ring-2 ring-inset ring-accent')} style=${{ '--inset': '3.5rem' }}>
-    <div class=${COLS}>
-      <button class="grid size-7 place-items-center justify-self-center rounded-lg t-small font-semibold tabular-nums"
-        style=${pick ? null : hueTile(hueIndex(vm.state, p.id))} onClick=${open} aria-label=${pick ? (on ? 'Unpick ' : 'Pick ') + p.name : 'Edit ' + p.name}>
-        ${pick ? html`<span class=${cx('grid size-6 place-items-center rounded-full', on ? 'bg-accent text-on-accent' : 'ring-2 ring-inset ring-ink/20')}>${on && html`<${Icon} name="check" class="size-3.5" />`}</span>` : n}
-      </button>
-      <button class="flex min-w-0 flex-col items-start py-1 text-left" onClick=${open}>
-        <span class="flex max-w-full items-center gap-1.5">
-          <span class="t-body truncate font-medium">${p.name}</span>
-          ${closer && html`<span class=${cx('size-1.5 shrink-0 rounded-full', t.forced ? 'bg-bad' : 'bg-bad/60')} aria-label="closer"></span>`}
-          ${next && html`<span class="shrink-0 rounded-full bg-accent px-1.5 text-[0.6875rem] font-semibold leading-4 text-on-accent">Next</span>`}
-        </span>
-        ${sub && html`<span class=${cx('t-small truncate', t.bad ? 'text-bad' : 'text-ink-3')}>${sub}</span>`}
-      </button>
-      ${times2}
-      <span class=${cx('t-body text-right font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) : '?'}</span>
-    </div>
+  return html`<div class=${cx('li px-4 py-1.5', COLS)}>
+    <button class="flex min-h-11 min-w-0 flex-col items-start justify-center text-left active:opacity-60" onClick=${() => App.editStaff(p.id)} aria-label=${'Edit ' + p.name}>
+      <span class="flex max-w-full items-center gap-1.5">
+        <span class="t-body truncate font-medium">${p.name}</span>
+        ${closer && html`<span class=${cx('size-1.5 shrink-0 rounded-full', t.forced ? 'bg-bad' : 'bg-bad/60')} aria-label="closer"></span>`}
+      </span>
+      ${sub && html`<span class=${cx('t-small truncate', t.bad ? 'text-bad' : 'text-ink-3')}>${sub}</span>`}
+    </button>
+    <${TimeBox} vm=${vm} p=${p} field="in" /><span class="text-center text-[0.75rem] text-ink-3/70">→</span><${TimeBox} vm=${vm} p=${p} field="out" />
+    <span class=${cx('t-body text-right font-semibold tabular-nums', t.hrs == null ? 'text-bad' : p.role === 'support' ? 'text-ink-3' : 'text-ink')}>${t.hrs != null ? fmtHrs(t.hrs) : '?'}</span>
   </div>`;
 }
 
-// The shift's open and close (Defaults): everyone without a time of their
-// own starts at the open; closers, and anyone without an Out, end at the
-// close.
-function ShiftTimes({ vm }) {
-  const cell = 'h-11 w-[4.5rem] rounded-lg bg-surface-2 text-[0.9375rem] tabular-nums transition';
-  return html`<${List}>
-    <div class="li grid grid-cols-2 gap-3 px-4 py-2.5">
-      <label class="flex items-center justify-between gap-2"><span class="t-body font-medium">Open</span>
-        <${DefaultTime} vm=${vm} field="in" cls=${cell} tone="font-semibold text-ink" /></label>
-      <label class="flex items-center justify-between gap-2"><span class="t-body flex items-center gap-1.5 font-medium"><span class="size-1.5 rounded-full bg-bad"></span>Close</span>
-        <${CloseTime} vm=${vm} cls=${cell} tone="font-semibold text-ink" /></label>
-    </div>
-  <//>`;
-}
-
-// ── Add names ────────────────────────────────────────────────────────────────
-// A composer at the end of the list, shown while adding (+ Add on the HUD, or
-// the page drawer) and whenever nobody's on shift yet. Type a name and Return
-// — it's added and the field clears for the next; a comma ends a name too; a
-// pasted list (lines / commas) adds them all, in order. With roles on, the
-// chips say which role they come in as. Saved names not on shift are chips:
-// tap to add; Edit saved → tap to forget one. Done (or leaving the field
-// empty) folds it away.
-
+// ── Adding people: the list's last row ───────────────────────────────────────
+// Type a name and Return — it's added and the field stays ready for the next;
+// a comma ends a name too; a pasted list (lines / commas) adds them all, in
+// order. With roles on, the chip beside the field says which role they come
+// in as (tap to change). Saved names not on shift are chips under it,
+// narrowed by what's typed: tap one to add it.
 let addRole = 'bartender';
+let draft = '';
 let forgetting = false;
 const onShiftSet = state => new Set(state.staff.map(p => p.name.trim().toLowerCase()).filter(Boolean));
 const splitNames = text => String(text).split(/[\n,;\t]+/).map(s => s.trim()).filter(Boolean);
+const addAll = names => { if (names.length) App.addPeople(names.map(n => ({ name: n, role: addRole }))); };
+// A chip tapped while typing puts the cursor back in the add field (so the
+// keyboard stays up); tapped otherwise, it doesn't bring the keyboard up.
+let leftField = 0;
+const backToField = () => { if (Date.now() - leftField < 600) document.querySelector('[data-addnames]')?.focus(); };
+const keepFocus = e => e.preventDefault();      // mouse only: touch taps must not be cancelled
 
-function addAll(names) {
-  if (!names.length) return;
-  App.addPeople(names.map(n => ({ name: n, role: addRole })));
-}
-
-// Open the composer and put the cursor in it.
+// Staff › People with the cursor in the add field.
 export function startAdding() {
-  App.tab('staff', { sub: 'add' });
-  requestAnimationFrame(() => document.querySelector('[data-addnames]')?.focus());
-}
-
-
-function AddNames({ vm }) {
-  const state = vm.state;
-  const rolesOn = state.settings.allRoles;
-  if (!rolesOn) addRole = 'bartender';
-  const onShift = onShiftSet(state);
-  const saved = getRoster().filter(r => !onShift.has(r.name.toLowerCase()));
-  const chip = 't-small inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 font-semibold transition active:scale-95';
-  const people = state.staff.some(named);
-  return html`<${Section} title="Add names" aside=${html`<span class="flex items-center gap-4">
-      ${saved.length > 0 && html`<button class="t-small font-semibold text-accent" onClick=${() => { forgetting = !forgetting; rerender(); }}>${forgetting ? 'Done editing' : 'Edit saved'}</button>`}
-      </span>`}>
-    <${List}>
-      <div class="li flex items-center gap-3 px-4 py-1.5" style=${{ '--inset': '3.5rem' }} data-addbox>
-        <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/12 text-accent"><${Icon} name="plus" class="size-[1.125rem]" /></span>
-        <input data-addnames class="h-11 min-w-0 flex-1 bg-transparent text-[1rem] font-medium text-ink outline-none placeholder:font-normal placeholder:text-ink-3"
-          placeholder="Name, then Return — or paste a list" aria-label="Add names"
-          autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="next"
-          onKeyDown=${e => {
-            if (e.key !== 'Enter') return;
-            e.preventDefault();
-            addAll(splitNames(e.target.value));
-            e.target.value = '';
-          }}
-          onInput=${e => {
-            // A comma ends a name too (so does a pasted list).
-            const v = e.target.value;
-            if (!/[,;\n]/.test(v)) return;
-            const parts = v.split(/[\n,;]+/);
-            const rest = parts.pop();
-            addAll(parts.map(s => s.trim()).filter(Boolean));
-            e.target.value = rest.trimStart();
-          }}
-          onPaste=${e => {
-            const text = e.clipboardData?.getData('text') || '';
-            if (!/[\n,;\t]/.test(text.trim())) return;
-            e.preventDefault();
-            addAll(splitNames(e.target.value + text));
-            e.target.value = '';
-          }} />
-      </div>
-      ${rolesOn && html`<div class="li flex items-center gap-2 px-4 py-2" style=${{ '--inset': '3.5rem' }} data-addbox>
-        <span class="t-cap w-8 shrink-0 text-ink-3">As</span>
-        ${ROLES.map(r => html`<button key=${r} class=${cx(chip, addRole === r ? ROLE_TINT[r] + ' ring-1 ring-inset ring-current' : 'bg-surface-2 text-ink-2')}
-          aria-pressed=${String(addRole === r)} onPointerDown=${e => e.preventDefault()} onClick=${() => { addRole = r; rerender(); }}>
-          <span class=${cx('size-2 rounded-full', ROLE_DOT[r])}></span>${ROLE_SHORT[r]}</button>`)}
-      </div>`}
-      ${saved.length > 0 && html`<div class="li overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" style=${{ '--inset': '1rem' }} data-addbox>
-        <div class="flex w-max gap-1.5">
-          ${saved.map(r => html`<button key=${r.name} class=${cx(chip, forgetting ? 'bg-bad/12 text-bad' : 'bg-surface-2 text-ink')} onPointerDown=${e => e.preventDefault()}
-            onClick=${() => (forgetting ? App.forgetName(r.name) : App.addPeople([{ name: r.name, role: rolesOn ? r.role : 'bartender' }]))}>
-            ${forgetting ? html`<${Icon} name="x" class="size-3.5" />` : rolesOn && html`<span class=${cx('size-1.5 rounded-full', ROLE_DOT[r.role])}></span>`}${r.name}</button>`)}
-        </div>
-      </div>`}
-    <//>
-  <//>`;
-}
-
-// ── Bulk bar (the Bulk sub-tab) ───────────────────────────────────────────────────
-// Docked at the bottom in place of the totals strip while Select is on
-// (Done is in the header).
-
-function hourChips(from, to) {
-  const out = [];
-  for (let h = Math.ceil(from); h <= to; h++) out.push(h);
-  return out;
-}
-
-function bulkSet(vm, field, abs) {
-  const people = picked(vm.state);
-  if (!people.length) return;
-  const targets = how === 'turn' && people.length > 1 ? [people[turn % people.length]] : people;
-  const changes = {};
-  targets.forEach(p => {
-    if (abs == null) { changes[p.id] = { [field]: '' }; return; }
-    if (field === 'out') { const t = times(vm.state, p, vm); if (t.inAbs == null || abs <= t.inAbs || abs - t.inAbs > 12) return; }
-    changes[p.id] = { [field]: rawAt(vm, p, field, abs) };
+  App.tab('staff', { sub: 'people' });
+  requestAnimationFrame(() => {
+    const el = document.querySelector('[data-addnames]');
+    el?.scrollIntoView({ block: 'center' });
+    el?.focus();
   });
-  const what = (field === 'in' ? 'In ' : 'Out ') + (abs == null ? (field === 'in' ? 'default' : 'at close') : fmtClockShort(abs));
-  undoLabel = (targets.length === 1 ? targets[0].name.trim() : targets.length + ' people') + ' · ' + what;
-  if (how === 'turn' && people.length > 1) turn = (turn + 1) % people.length;
-  App.bulk(undoLabel, () => App.setStaffFields(changes));
 }
 
-function BulkBar({ vm }) {
-  const state = vm.state;
-  const people = picked(state);
-  const all = ordered(state);
-  const n = people.length;
-  const open = vm.resolved?.anchorAbs ?? 17;
-  const close = vm.resolved?.closeAbs ?? open + 9;
-  const off = half ? 0.5 : 0;
-  const ins = hourChips(open - 3, open + 4).map(h => h + off).filter(v => v >= IN_MIN_ABS && v <= IN_MAX_ABS);
-  const outs = hourChips(close - 6, close + 1).map(h => h + off).filter(v => v > open);
-  const chip = (label, onClick, cls = 'bg-surface-2 text-ink') => html`<button class=${cx('t-small h-9 shrink-0 rounded-full px-3 font-semibold tabular-nums transition active:scale-95 disabled:opacity-40', cls)}
-    disabled=${!n} onClick=${onClick}>${label}</button>`;
-  const row = (label, chips) => html`<div class="flex items-center gap-2">
-    <span class="t-cap w-8 shrink-0 text-ink-3">${label}</span>
-    <div class="flex min-w-0 flex-1 gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">${chips}</div>
-  </div>`;
-  const nextP = how === 'turn' && n > 1 ? people[turn % n] : null;
-  const forced = n > 0 && people.every(p => p.closerOverride);
-  return html`<div class="flex flex-col gap-2.5">
-    <div class="flex items-center gap-2">
-      <span class="flex min-w-0 flex-1 flex-col leading-tight">
-        <span class="t-body font-semibold">${n ? n + ' picked' : 'Tap people to pick them'}</span>
-        <span class="t-small truncate text-ink-3">${nextP ? 'Next: ' + nextP.name.trim() : n > 1 ? 'Every chip sets all of them' : n ? 'Tap a time to set it' : 'Then tap a time'}</span>
-      </span>
-      <button class="t-small h-9 px-2 font-semibold text-accent" onClick=${() => { sel = n === all.length ? new Set() : new Set(all.map(p => p.id)); turn = 0; rerender(); }}>${n === all.length && n ? 'None' : 'All'}</button>
-    </div>
-    ${n > 1 && html`<${Seg} size="sm" value=${how} onChange=${v => { how = v; turn = 0; rerender(); }}
-      items=${[{ value: 'turn', label: 'Each in turn' }, { value: 'all', label: 'Same for all' }]} />`}
-    ${row('In', html`
-      ${chip(':30', () => { half = !half; rerender(); }, half ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2')}
-      ${ins.map(v => html`<span key=${v} class="contents">${chip(fmtClockShort(v), () => bulkSet(vm, 'in', v))}</span>`)}
-      ${chip('Default', () => bulkSet(vm, 'in', null), 'bg-surface-2 text-ink-2')}`)}
-    ${row('Out', html`
-      ${chip('Close', () => bulkSet(vm, 'out', null), 'bg-bad/12 text-bad')}
-      ${outs.map(v => html`<span key=${v} class="contents">${chip(fmtClockShort(v), () => bulkSet(vm, 'out', v))}</span>`)}`)}
-    <div class="flex items-center gap-2">
-      ${chip(forced ? 'Not closers' : 'Closers', () => {
-        undoLabel = (forced ? 'Not closers · ' : 'Closers · ') + n;
-        App.bulk(undoLabel, () => App.setStaffFields(Object.fromEntries(people.map(p => [p.id, { closerOverride: !forced }]))));
-      })}
-      ${chip('Remove', () => {
-        undoLabel = 'Removed ' + (n === 1 ? people[0].name.trim() : n + ' people');
-        const ids = people.map(p => p.id);
-        sel = new Set();
-        App.bulk(undoLabel, () => ids.forEach(id => App.removePerson(id)));
-      }, 'bg-bad/12 text-bad')}
-      <span class="flex-1"></span>
-      ${undoLabel && html`<button class="t-small inline-flex h-9 min-w-0 items-center gap-1 rounded-full bg-surface-2 px-3 font-semibold text-ink active:scale-95"
-        onClick=${() => { if (App.bulkUndo()) { undoLabel = ''; turn = Math.max(0, turn - 1); } else { undoLabel = ''; } rerender(); }}>
-        <${Icon} name="undo" class="size-4 shrink-0" /><span class="truncate">Undo</span></button>`}
-    </div>
+function AddRow({ vm }) {
+  const rolesOn = vm.state.settings.allRoles;
+  if (!rolesOn) addRole = 'bartender';
+  const next = { bartender: 'server', server: 'support', support: 'bartender' };
+  return html`<div class="li flex items-center gap-2 px-4 py-1.5" data-addbox>
+    <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/12 text-accent"><${Icon} name="plus" class="size-[1.125rem]" /></span>
+    <input data-addnames class="h-11 min-w-0 flex-1 bg-transparent text-[1.0625rem] font-medium text-ink outline-none placeholder:font-normal placeholder:text-ink-3"
+      placeholder="Add a name" aria-label="Add a name" value=${draft} onBlur=${() => { leftField = Date.now(); }}
+      autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="next"
+      onKeyDown=${e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        addAll(splitNames(e.target.value));
+        draft = '';
+        e.target.value = '';
+        rerender();
+      }}
+      onInput=${e => {
+        const v = e.target.value;
+        if (/[,;\n]/.test(v)) {            // a comma ends a name
+          const parts = v.split(/[\n,;]+/);
+          const rest = parts.pop();
+          addAll(parts.map(x => x.trim()).filter(Boolean));
+          e.target.value = rest.trimStart();
+        }
+        draft = e.target.value;
+        rerender();
+      }}
+      onPaste=${e => {
+        const text = e.clipboardData?.getData('text') || '';
+        if (!/[\n,;\t]/.test(text.trim())) return;
+        e.preventDefault();
+        addAll(splitNames(e.target.value + text));
+        draft = '';
+        e.target.value = '';
+        rerender();
+      }} />
+    ${rolesOn && html`<button class=${cx('t-small inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 font-semibold transition active:scale-95', ROLE_TINT[addRole])}
+      onMouseDown=${keepFocus} onClick=${() => { addRole = next[addRole]; rerender(); backToField(); }} aria-label=${'Adds as ' + ROLE_SHORT[addRole] + ' — tap to change'}>
+      <span class=${cx('size-2 rounded-full', ROLE_DOT[addRole])}></span>${ROLE_SHORT[addRole]}</button>`}
   </div>`;
 }
 
-function renderBulk(vm) {
-  const el = $('bulkBar');
-  const on = picking() && currentTab() === 'staff';
-  document.documentElement.classList.toggle('bulk-on', on);
-  if (el) render(on ? html`<${BulkBar} vm=${vm} />` : null, el);
+function SavedNames({ vm }) {
+  const rolesOn = vm.state.settings.allRoles;
+  const onShift = onShiftSet(vm.state);
+  const q = draft.trim().toLowerCase();
+  const saved = getRoster().filter(r => !onShift.has(r.name.toLowerCase()) && (!q || r.name.toLowerCase().includes(q)));
+  if (!saved.length) return null;
+  const chip = 't-small inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 font-semibold transition active:scale-95';
+  return html`<${Section} title="Saved names" aside=${html`<button class="font-semibold text-accent" onClick=${() => { forgetting = !forgetting; rerender(); }}>${forgetting ? 'Done' : 'Edit'}</button>`}>
+    <div class="flex flex-wrap gap-1.5">
+      ${saved.map(r => html`<button key=${r.name} class=${cx(chip, forgetting ? 'bg-bad/12 text-bad' : 'bg-surface text-ink')} onMouseDown=${keepFocus}
+        onClick=${() => {
+          if (forgetting) { App.forgetName(r.name); return; }
+          App.addPeople([{ name: r.name, role: rolesOn ? r.role : 'bartender' }]);
+          if (q) { draft = ''; const el = document.querySelector('[data-addnames]'); if (el) el.value = ''; }
+          backToField();
+        }}>
+        ${forgetting ? html`<${Icon} name="x" class="size-3.5" />` : html`<${Icon} name="plus" class="size-3.5 text-ink-3" />`}
+        ${rolesOn && !forgetting && html`<span class=${cx('size-1.5 rounded-full', ROLE_DOT[r.role])}></span>`}${r.name}</button>`)}
+    </div>
+  <//>`;
 }
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-function Table({ vm, people }) {
-  const gs = groups(vm.state);
-  const tipped = vm.resolved.staff.filter(p => p.role !== 'support');
-  const allClose = tipped.length > 1 && tipped.every(p => p.closer && !p.closerOverride);
-  let n = 0;
-  return html`<${List}>
-    <${Head} />
-    ${gs.map(g => html`
-      ${g.role && gs.length > 1 && html`<div key=${'h-' + g.role} class="li t-cap flex items-center gap-2 px-4 pb-1 pt-2.5 text-ink-3" style=${{ '--inset': '1rem' }}>
-        <span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}<span class="text-ink-3/70">${g.people.length}</span></div>`}
-      ${g.people.map(p => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} n=${++n} allClose=${allClose} />`)}`)}
-  <//>`;
-}
-
-const Nobody = ({ text }) => html`<div class="flex flex-col items-center gap-4 py-12 text-center">
-  <span class="t-body text-ink-3">${text}</span>
-  <${Button} variant="primary" icon="plus" onClick=${() => App.tab('staff', { sub: 'add' })}>Add people<//>
-</div>`;
-
-function Staff({ vm }) {
+function People({ vm }) {
   const state = vm.state;
   const people = state.staff.filter(named);
-  const v = view();
-  if (v === 'add') return html`<${AddNames} vm=${vm} />`;
-  if (v === 'defaults') return html`<${Defaults} vm=${vm} />`;
-  if (!people.length) return html`<${Nobody} text=${v === 'bulk' ? 'Nobody to pick yet.' : 'Nobody on shift yet.'} />`;
-  if (v === 'bulk') return html`<div class="flex flex-col gap-3"><${Table} vm=${vm} people=${people} /></div>`;
+  const gs = groups(state);
+  const tipped = vm.resolved.staff.filter(p => p.role !== 'support');
+  const allClose = tipped.length > 1 && tipped.every(p => p.closer && !p.closerOverride);
   // Staff is done once everyone named has valid times (no staff-side error).
-  const done = vm.blockedTab !== 'staff';
+  const done = people.length > 0 && vm.blockedTab !== 'staff';
   const hours = done && vm.resolved.staff.filter(p => p.role !== 'support').reduce((t, p) => t + p.hours, 0);
-  return html`<div class="flex flex-col gap-4">
+  return html`<div class="flex flex-col gap-5">
     <${Note} vm=${vm} />
-    <${Table} vm=${vm} people=${people} />
+    <${List}>
+      ${people.length > 0 && html`<${Head} />`}
+      ${gs.map(g => html`
+        ${g.role && gs.length > 1 && html`<div key=${'h-' + g.role} class="li t-cap flex items-center gap-2 px-4 pb-1 pt-2.5 text-ink-3" style=${{ '--inset': '1rem' }}>
+          <span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}<span class="text-ink-3/70">${g.people.length}</span></div>`}
+        ${g.people.map(p => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} allClose=${allClose} />`)}`)}
+      <${AddRow} vm=${vm} />
+    <//>
+    <${SavedNames} vm=${vm} />
     ${done && (vm.totalCash > 0 && !vm.blocked
       ? html`<${NextStep} tab="home" label="See who gets what" sub=${fmtMoney(vm.totalCash) + ' over ' + fmtHrs(hours) + ' hours'} />`
       : html`<${NextStep} tab="tips" label="Next: enter the tips" sub=${people.length + ' on shift · ' + fmtHrs(hours) + ' hours'} />`)}
   </div>`;
 }
 
-// ── Defaults: the open / close, per-role times, the close-time what-if. ─────
+// ── Shift: the open / close, per-role times, the close-time what-if. ─────────
+function ShiftTimes({ vm }) {
+  const cell = 'h-11 w-[4.5rem] rounded-lg bg-surface-2 text-[0.9375rem] tabular-nums transition';
+  return html`<${List}>
+    <div class="li flex min-h-12 items-center justify-between gap-3 px-4 py-1.5">
+      <span class="t-body font-medium">Open</span>
+      <${DefaultTime} vm=${vm} field="in" cls=${cell} tone="font-semibold text-ink" />
+    </div>
+    <div class="li flex min-h-12 items-center justify-between gap-3 px-4 py-1.5">
+      <span class="t-body flex items-center gap-1.5 font-medium"><span class="size-1.5 rounded-full bg-bad"></span>Close</span>
+      <${CloseTime} vm=${vm} cls=${cell} tone="font-semibold text-ink" />
+    </div>
+  <//>`;
+}
 
-function Defaults({ vm }) {
+function Shift({ vm }) {
   return html`<div class="flex flex-col gap-5">
     <${Section} title="Shift" footer="Anyone without a time of their own starts at the open. Closers, and anyone without an Out, leave at the close.">
       <${ShiftTimes} vm=${vm} />
     <//>
     <${RoleTimes} vm=${vm} />
     <${List}>
-      <${Item} icon="clock" title="Close-time what-if" sub="Everyone’s take-home at other close times" onClick=${() => App.openCloseTime()} />
+      <${Item} icon="clock" title="Close-time what-if" disabled=${!(vm.totalCash > 0 && !vm.blocked)}
+        sub=${vm.totalCash > 0 && !vm.blocked ? 'Everyone’s take-home at other close times' : 'Enter the tips first'} onClick=${() => App.openCloseTime()} />
     <//>
   </div>`;
+}
+
+function Staff({ vm }) {
+  return view() === 'shift' ? html`<${Shift} vm=${vm} />` : html`<${People} vm=${vm} />`;
 }
 
 // ── A person's drawer ────────────────────────────────────────────────────────
@@ -608,21 +475,6 @@ function pickerFor(vm, p, field) {
     min: (t.inAbs ?? 17) + 0.25, max: (t.inAbs ?? 17) + 12, onSet: abs => App.reviewed(said(abs), () => set(outRaw(abs, def, t.inAbs))), onReset: () => set(''),
     onPreview: abs => App.previewStaff(p.id, field, abs == null ? null : outRaw(abs, def, t.inAbs)),
     wheelSub: abs => (t.inAbs != null ? hrsAt(abs - t.inAbs) : '') };
-}
-
-const BIG = 'h-12 w-full rounded-xl bg-surface-2 text-[1.25rem] tabular-nums transition';
-
-function TimeField({ vm, p, field }) {
-  const k = pickerFor(vm, p, field);
-  const t = times(vm.state, p, vm);
-  return html`<div class="flex min-w-0 flex-1 flex-col gap-1.5">
-    <span class="t-cap px-1 text-ink-3">${field === 'in' ? 'In' : 'Out'}</span>
-    <${DragTime} abs=${k.abs} set=${k.isSet} bad=${t.bad} ...${keyCell(p, field)} min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub}
-      cls=${BIG} tone=${k.isSet ? 'font-semibold text-ink' : 'font-medium text-ink-3'} full label=${p.name + ' ' + field + ' time'} />
-    <span class="t-small min-h-5 px-1">${k.isSet
-      ? html`<button class="font-semibold text-accent" onClick=${k.onReset}>${field === 'out' ? 'Out at close' : 'Use default'}${k.defAbs != null ? ' · ' + fmtClockShort(k.defAbs) : ''}</button>`
-      : html`<span class="text-ink-3">${field === 'out' ? 'At the close' : 'The default'}</span>`}</span>
-  </div>`;
 }
 
 const BREAKS = [0.25, 0.5, 0.75, 1, 1.5];
@@ -670,34 +522,25 @@ function Editor({ vm, p }) {
   const state = vm.state;
   const t = times(state, p, vm);
   const share = vm.shares?.perPerson.find(x => x.id === p.id);
-  const set = (field, raw) => App.staffField(p.id, field, raw, true);
+  const line = [
+    t.inAbs != null && t.outAbs != null ? fmtClockShort(t.inAbs) + ' – ' + fmtClockShort(t.outAbs) : '',
+    t.hrs != null ? fmtHrs(t.hrs) + ' hours' : 'Check the times',
+    share && vm.totalCash > 0 && !vm.blocked ? 'takes home $' + share.final : '',
+  ].filter(Boolean).join(' · ');
   return html`
     <input class=${cx(INPUT_PAGE, 'h-12 text-[1.25rem] font-semibold')} value=${p.name} placeholder="Name"
       autocomplete="off" autocorrect="off" autocapitalize="words" enterkeyhint="done" aria-label="Name"
       onInput=${e => App.staffField(p.id, 'name', e.target.value)} onChange=${() => App.rememberStaff(p.id)}
       onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} />
+    <p class="t-small px-1 text-ink-3">${line}</p>
     ${state.settings.allRoles && html`<${Seg} value=${p.role} onChange=${r => App.staffField(p.id, 'role', r, true)}
       items=${ROLES.map(r => ({ value: r, label: ROLE_SHORT[r] }))} />`}
-    <div class="flex flex-col gap-3 rounded-card bg-surface p-3.5">
-      <div class="flex items-start gap-3">
-        <${TimeField} vm=${vm} p=${p} field="in" />
-        <span class="mt-9 text-ink-3/70">→</span>
-        <${TimeField} vm=${vm} p=${p} field="out" />
-      </div>
-      <div class="t-body flex items-center justify-between border-t border-line pt-3">
-        <span class="text-ink-2">${t.hrs != null ? fmtHrs(t.hrs) + ' hours' + (t.brk > 0 ? ' (' + fmtHrs(t.span) + ' − ' + fmtBreak(t.brk) + ')' : '') : 'Check the times'}</span>
-        ${share && vm.totalCash > 0 && !vm.blocked && html`<span class="text-ink-2">takes home <b class="t-head text-ink">$${share.final}</b></span>`}
-      </div>
-    </div>
     <${BreakField} vm=${vm} p=${p} />
     <${List}>
       <${SwitchRow} on=${t.forced} onClick=${() => App.toggleCloser(p.id)} label="Closer"
         hint=${t.forced ? 'Forced — shares the closer bonus' : t.closer ? 'Auto: out at the close time' : 'Shares the dollars left after rounding'} />
     <//>
-    <div class="flex gap-2">
-      <${Button} class="flex-1" disabled=${!t.inSet && !t.outSet} onClick=${() => { set('in', ''); set('out', ''); }}>Reset times<//>
-      <${Button} variant="danger" class="flex-1" icon="trash" onClick=${() => App.reviewed('Removed ' + (p.name.trim() || 'person'), () => App.removePerson(p.id))}>Remove<//>
-    </div>`;
+    <${Button} variant="danger" block icon="trash" onClick=${() => App.reviewed('Removed ' + (p.name.trim() || 'person'), () => App.removePerson(p.id))}>Remove<//>`;
 }
 
 function renderEditor(vm) {
@@ -739,10 +582,7 @@ export function DefaultTime({ vm, field, cls, tone, full, mins, bare }) {
 
 export function renderStaff(vm, { preview = false } = {}) {
   if (!preview) lastVm = vm;
-  // Drop picks of people who are gone.
-  if (sel.size) sel = new Set([...sel].filter(id => vm.state.staff.some(p => p.id === id && named(p))));
   const root = $('staff-root');
   if (root) render(html`<${Staff} vm=${vm} />`, root);
   renderEditor(vm);
-  renderBulk(vm);
 }

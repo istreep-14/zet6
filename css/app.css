@@ -282,7 +282,7 @@
      screen height and the bottom-anchored layers sit inside it. */
   html.fill-screen, html.fill-screen body { height: var(--app-h); }
   html.fill-screen body { position: relative; }
-  html.fill-screen .tabbar, html.fill-screen .bulkbar, html.fill-screen .sheet-backdrop { position: absolute; }
+  html.fill-screen .tabbar, html.fill-screen .sheet-backdrop { position: absolute; }
   html.fill-screen .sheet-backdrop { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet { max-height: calc(var(--app-h) - var(--safe-t) - 1rem); }
   html.fill-screen .sheet--tall { height: calc(var(--app-h) - var(--safe-t) - 2.5rem); }
@@ -347,16 +347,6 @@
   .tab-sub.ok { color: var(--on-accent); background: var(--accent); }
   .tab-sub.warn { color: #fff; background: var(--bad); }
 
-  /* Staff's bulk bar (select mode): docks where the HUD sits, in its place. */
-  .bulkbar {
-    display: none; position: fixed; left: 50%; bottom: calc(var(--dock) + 0.625rem); transform: translateX(-50%);
-    width: calc(100vw - 2 * var(--gutter)); max-height: 60dvh; overflow-y: auto;
-    padding: .75rem; border-radius: 1.25rem; background: var(--surface); color: var(--ink);
-    box-shadow: var(--shadow), 0 0 0 1px var(--line); z-index: 81;
-  }
-  html.bulk-on[data-page="staff"] .bulkbar { display: block; }
-  html.bulk-on[data-page="staff"] .content { padding-bottom: calc(var(--dock) + 19rem); }
-  body.keyboard-open .bulkbar { display: none !important; }
 
   /* ── Bottom sheets: the page colour, cards inside ─────────────────────── */
   .sheet-backdrop {
