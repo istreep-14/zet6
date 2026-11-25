@@ -57,39 +57,35 @@
 </head>
 <body>
 
-<header class="hdr">
-  <button type="button" class="icon-btn" onclick="App.panel('left')" aria-label="Sessions and settings" aria-controls="drawer">
-    <svg class="size-[1.125rem]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
-  </button>
-  <!-- Small title: fades in once the page's big title scrolls away (html.scrolled) -->
-  <span class="hdr-title t-head truncate" id="hdrTitle" aria-hidden="true">Summary</span>
-  <!-- Date pill: opens this shift's panel (calendar, times, tools) -->
-  <button type="button" class="hdr-pill" id="hdrDateBtn" onclick="App.panel('right')" aria-label="Shift date and settings" aria-controls="shiftPanel">
-    <span class="truncate" id="hdrDateLabel">Today</span>
-    <svg class="size-3.5 shrink-0 text-ink-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
-  </button>
-</header>
+<!-- Header (render/tabs.js): the page title and its actions; on a subpage,
+     Back · the subpage's title · its actions. -->
+<header class="hdr" id="hdr"></header>
 <input type="file" id="importFileInput" accept=".json,application/json" hidden onchange="App.importSession(this.files[0])">
 
-<!-- Four pages — Summary (home) · Staff · Tips · Payout — one per tab in the
-     bottom tab bar; swipe sideways to step between them too (src/ui/pages.js);
-     swipe up from the bottom (the HUD, the tabs) for the page's drawer. -->
-<main class="content" id="mainContent">
-  <section class="panel active" id="tab-summary"><h1 class="page-title t-title">Summary</h1><div id="summary-root"></div></section>
-  <section class="panel" id="tab-staff"><h1 class="page-title t-title">Staff</h1><div id="staff-root"></div></section>
-  <section class="panel" id="tab-tips"><h1 class="page-title t-title">Tips</h1><div id="tips-root"></div></section>
-  <section class="panel" id="tab-payout"><h1 class="page-title t-title">Payout</h1><div id="payout-root"></div></section>
-</main>
+<!-- The stage: the sub-tab row, the four tab pages, and the subpages pushed
+     over them from the right (src/ui/nav.js). Tabs change only from the tab
+     bar; a sideways swipe moves between a page's sub-tabs, and a swipe right
+     on a subpage goes back. -->
+<div class="stage">
+  <nav class="subtabs" id="subtabs" aria-label="Views"></nav>
+  <main class="content" id="mainContent">
+    <section class="panel active" id="tab-home"><div id="home-root"></div></section>
+    <section class="panel" id="tab-staff"><div id="staff-root"></div></section>
+    <section class="panel" id="tab-tips"><div data-sub="cash" id="tips-root"></div><div data-sub="drawer" id="payout-root" hidden></div></section>
+    <section class="panel" id="tab-settings"><div id="settings-root"></div></section>
+  </main>
+  <div class="subpages" id="subpages"></div>
+</div>
 
-<!-- Live HUD — Tips · Hours · Rate · Bills, each cell opens its page; two
-     small pills on top (close time, chump) open their tools (render/tabs.js) -->
-<div class="hud is-empty" id="pipHud" role="group" aria-label="Live totals"></div>
+<!-- Staff and Tips: one quiet line of totals over the tabs (and Undo · Apply
+     after a wheel / keypad edit) — render/tabs.js -->
+<div class="hud is-empty" id="pipHud" role="status" aria-label="Live totals"></div>
 
 <!-- Bottom tabs (render/tabs.js keeps the active one and the badges) -->
 <nav class="tabbar">
-  <button class="tab" id="tb-summary" onclick="App.tabTap('summary')">
+  <button class="tab" id="tb-home" onclick="App.tabTap('home')">
     <svg viewBox="0 0 24 24"><path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z"/></svg>
-    <span class="tab-label">Summary</span><span class="tab-sub" id="tab-sub-summary"></span>
+    <span class="tab-label">Home</span><span class="tab-sub" id="tab-sub-home"></span>
   </button>
   <button class="tab" id="tb-staff" onclick="App.tabTap('staff')">
     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
@@ -99,44 +95,14 @@
     <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>
     <span class="tab-label">Tips</span><span class="tab-sub" id="tab-sub-tips"></span>
   </button>
-  <button class="tab" id="tb-payout" onclick="App.tabTap('payout')">
-    <svg viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 7l10 7 10-7"/></svg>
-    <span class="tab-label">Payout</span><span class="tab-sub" id="tab-sub-payout"></span>
+  <button class="tab" id="tb-settings" onclick="App.tabTap('settings')">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    <span class="tab-label">Settings</span><span class="tab-sub" id="tab-sub-settings"></span>
   </button>
 </nav>
 
 <!-- Staff: the bulk bar (select people, set their times) docks here -->
 <div class="bulkbar" id="bulkBar" aria-label="Selected people"></div>
-
-
-<!-- Side panels (src/ui/panels.js): left = sessions + app settings
-     (render/drawer.js), right = this shift (render/shiftpanel.js) -->
-<div class="side-scrim" id="panelScrim" onclick="App.closePanels()"></div>
-<aside class="side side--left" id="drawer" aria-label="Sessions and settings" aria-hidden="true">
-  <div class="side-head">
-    <img src="icon-192.png" alt="" class="size-10 rounded-xl">
-    <div class="min-w-0 flex-1">
-      <div class="t-title truncate">Tip Pool</div>
-      <div class="t-small truncate text-ink-3">Sessions and settings</div>
-    </div>
-    <button type="button" class="icon-btn" onclick="App.closePanels()" aria-label="Close">
-      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
-    </button>
-  </div>
-  <div class="side-body" id="drawer-body"></div>
-</aside>
-<aside class="side side--right" id="shiftPanel" aria-label="This shift" aria-hidden="true">
-  <div class="side-head">
-    <button type="button" class="icon-btn" onclick="App.closePanels()" aria-label="Close">
-      <svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-    </button>
-    <div class="min-w-0 flex-1">
-      <div class="t-title truncate">This shift</div>
-      <div class="t-small truncate text-ink-3" id="shift-sub">&nbsp;</div>
-    </div>
-  </div>
-  <div class="side-body" id="shift-body"></div>
-</aside>
 
 <!-- Time keypad (src/ui/keypad.js): docks at the bottom while a time cell is active -->
 <div class="keypad" id="keypad" aria-label="Time keypad"></div>

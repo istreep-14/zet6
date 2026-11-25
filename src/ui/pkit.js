@@ -12,6 +12,31 @@ import { PATHS } from './icons.js';
 // Class list builder: cx('a', cond && 'b', ['c', 'd']) → "a b c d".
 export const cx = (...xs) => xs.flat(Infinity).filter(Boolean).join(' ');
 
+// Keep the selected tab visible after a swipe without scrolling the page.
+export function revealSelectedTab(selector) {
+  requestAnimationFrame(() => {
+    const strip = document.querySelector(selector);
+    const selected = strip?.querySelector('[role="tab"][aria-selected="true"]');
+    if (!selected) return;
+    const outer = strip.getBoundingClientRect(), inner = selected.getBoundingClientRect();
+    const left = inner.left - outer.left - 8, right = inner.right - outer.right + 8;
+    if (left < 0) strip.scrollLeft += left;
+    else if (right > 0) strip.scrollLeft += right;
+  });
+}
+
+export function subtabKeys(e) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) || e.target.getAttribute('role') !== 'tab') return;
+  const tabs = [...e.currentTarget.querySelectorAll('[role="tab"]')];
+  const i = tabs.indexOf(e.target);
+  if (i < 0 || !tabs.length) return;
+  const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1
+    : (i + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  e.preventDefault();
+  tabs[next].focus();
+  tabs[next].click();
+}
+
 export const ROLE_TINT = {
   bartender: 'bg-bar/18 text-bar',
   server: 'bg-srv/18 text-srv',
@@ -107,7 +132,7 @@ export function Empty({ icon = 'dollar', logo = false, title, body, action }) {
   </div>`;
 }
 
-// Blocked / pristine state shared by the result tabs (Summary, Payout): the
+// Blocked / pristine state shared by the result pages (Home, Tips › Drawer): the
 // close-out steps as a checklist — Staff → Tips → the payout — each tappable,
 // with what's missing (or the error to fix) under it.
 export function Blocked({ vm }) {
@@ -119,12 +144,12 @@ export function Blocked({ vm }) {
   const steps = [
     { tab: 'staff', ok: staffOk, title: 'Who worked', sub: err('staff') || (named ? named + ' on shift' : 'Add names and times') },
     { tab: 'tips', ok: tipsOk, title: 'The tips', sub: err('tips') || (vm.totalCash > 0 ? '$' + vm.totalCash.toLocaleString('en-US') + ' in' : 'Enter the cash') },
-    { tab: 'payout', ok: false, title: 'Who gets what', sub: 'Payouts and the bills for each envelope' },
+    { tab: 'home', ok: false, title: 'Who gets what', sub: 'Payouts and the bills for each envelope' },
   ];
   const next = steps.find(x => !x.ok);
   return html`<div class="flex flex-col gap-4">
     ${pristine && html`<${Empty} logo title="No shift yet" body="Three steps to close out — start with who worked." />`}
-    <${List}>${steps.map((x, i) => html`<${Item} key=${x.tab} onClick=${() => App.tab(x.tab === 'payout' ? (next?.tab || 'payout') : x.tab)}
+    <${List}>${steps.map((x, i) => html`<${Item} key=${x.tab} onClick=${() => App.tab(x.tab === 'home' ? (next?.tab || 'home') : x.tab)}
       tone=${x === next ? 'active' : ''}
       lead=${html`<span class=${cx('grid size-8 shrink-0 place-items-center rounded-full text-[0.875rem] font-semibold',
         x.ok ? 'bg-good/15 text-good' : err(x.tab) ? 'bg-bad/12 text-bad' : x === next ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-3')}>
@@ -134,7 +159,7 @@ export function Blocked({ vm }) {
 }
 
 // The input tabs end with the next step in the close-out order
-// (Staff → Tips → Summary). Shown only once this step is done.
+// (Staff → Tips → Home). Shown only once this step is done.
 export function NextStep({ label, sub, tab }) {
   return html`<button class="flex w-full items-center gap-3 rounded-card bg-accent px-4 py-3 text-left text-on-accent transition active:scale-[0.98]"
     onClick=${() => App.tab(tab)}>

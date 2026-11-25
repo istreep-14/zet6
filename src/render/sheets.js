@@ -1,5 +1,5 @@
 // Sheets that aren't owned by a tab (Preact): Person payout and Closer bonus.
-// Settings live in the side panels (render/drawer.js, render/shiftpanel.js).
+// Settings live on the Settings tab (render/settings.js).
 // Each re-renders with the app while it's open.
 
 import { DENOMS, fmtHrs, fmtMoney } from '../util.js';

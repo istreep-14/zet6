@@ -2,9 +2,9 @@
      · colour tokens (light, dark twice: system and forced by App settings)
      · the type scale (.t-*), Poppins
      · grouped lists (.lgroup > .li) — rounded blocks, hairlines between rows
-     · the page shell (header, scroller, tab bar, HUD) — fragile on iOS
-       home-screen apps, see CLAUDE.md before touching
-     · bottom sheets, side panels, sub-tab headers
+     · the page shell (header, sub-tabs, scroller, subpages, tab bar, the
+       totals strip) — fragile on iOS home-screen apps, see CLAUDE.md
+     · bottom sheets
      · the settings switch and bill-size tints
    Everything else is Tailwind classes in the components (src/ui/pkit.js and
    src/render/*). index.html maps the Tailwind colour names onto these
@@ -24,7 +24,7 @@
 @font-face { font-family: "Poppins"; font-weight: 700; font-display: swap; src: url("../vendor/fonts/poppins-700.woff2") format("woff2"); }
 
 :root {
-  --bg: #f2f3f6;               /* page, sheets and side panels */
+  --bg: #f2f3f6;               /* page, subpages and sheets */
   --surface: #ffffff;          /* cards and groups */
   --surface-2: #eceef2;        /* controls inside cards */
   --raised: #ffffff;           /* the picked option in a segmented control */
@@ -138,7 +138,7 @@
 
 @layer components {
   :root {
-    --hdr-h: 3.25rem;
+    --hdr-h: 3.5rem;
     --hdr-gap: 1.25rem;                 /* extra top room in the home-screen app */
     --gutter: 1rem;
     /* Touch sizes — one scale for every control and row (rem, so they follow
@@ -172,33 +172,39 @@
   .figures { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; background: var(--surface); border-radius: var(--radius-card, 1rem); padding: .75rem 0; box-shadow: var(--card-ring, none); }
   .figures > * + * { box-shadow: inset 1px 0 var(--line); }
 
-  /* ── Header: menu · small title (appears on scroll) · date pill ──────── */
+  /* ── Header (render/tabs.js): the page title (+ a line under it) and its
+     actions; on a subpage Back · the centred title · its actions. ──────── */
   .hdr {
     position: relative;
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 0.75rem;
     padding: var(--safe-t) calc(var(--gutter) + var(--safe-r)) 0 calc(var(--gutter) + var(--safe-l));
     height: calc(var(--hdr-h) + var(--safe-t));
     background: var(--bg);
-    box-shadow: 0 1px 0 transparent;
-    transition: box-shadow .2s;
     z-index: 20;
   }
-  html.scrolled .hdr { box-shadow: 0 1px 0 var(--line); }
   /* Home-screen app (iOS 26) fades a band below the status bar — drop clear of it */
   html.standalone .hdr {
     padding-top: calc(var(--safe-t) + var(--hdr-gap));
     height: calc(var(--hdr-h) + var(--safe-t) + var(--hdr-gap));
   }
-  .hdr-title {
-    position: absolute; left: 50%; bottom: calc(var(--hdr-h) / 2); max-width: 45%;
-    transform: translate(-50%, calc(50% + .25rem));
-    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s;
+  .hdr-main { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+  .hdr-big { font-size: 1.625rem; font-weight: 700; line-height: 1.15; letter-spacing: -.03em; }
+  .hdr-line { font-size: .8125rem; line-height: 1.3; color: var(--ink-3); }
+  .hdr-mid {
+    position: absolute; left: 50%; bottom: calc(var(--hdr-h) / 2); transform: translate(-50%, 50%);
+    max-width: 52%; font-size: 1.0625rem; font-weight: 600; letter-spacing: -.01em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
   }
-  html.scrolled .hdr-title { opacity: 1; transform: translate(-50%, 50%); }
+  .hdr-back {
+    display: inline-flex; align-items: center; gap: .125rem; min-width: 0; max-width: 34%;
+    height: var(--tap); margin-left: -.5rem; padding-right: .5rem;
+    font-size: 1rem; font-weight: 500; color: var(--accent);
+  }
+  .hdr-back:active { opacity: .6; }
+  .hdr-actions { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; margin-left: auto; }
   .icon-btn {
     display: grid; place-items: center; flex-shrink: 0;
     width: 2.75rem; height: 2.75rem; border-radius: 999px;
@@ -215,8 +221,24 @@
   }
   .hdr-pill:active { transform: scale(.97); }
 
-  /* Each tab's big title; it scrolls away and the small one fades into the header */
-  .page-title { padding: .25rem .25rem 1.25rem; }
+  /* ── The stage: sub-tabs, the pages, and the subpages over them ───────── */
+  .stage { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+  .subtabs { flex-shrink: 0; padding: 0 calc(var(--gutter) + var(--safe-r)) .625rem calc(var(--gutter) + var(--safe-l)); background: var(--bg); box-shadow: 0 1px 0 var(--line); z-index: 5; }
+  .subtabs:empty { display: none; }
+  .subpages { position: absolute; inset: 0; z-index: 15; pointer-events: none; }
+  .subpage {
+    position: absolute; inset: 0;
+    overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain; touch-action: pan-y; pointer-events: auto;
+    background: var(--bg);
+    padding: 0.5rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 4.5rem) calc(var(--gutter) + var(--safe-l));
+    box-shadow: -1px 0 0 var(--line), -1rem 0 2.5rem rgb(0 0 0 / .12);
+    transform: translateX(100%);
+    transition: transform .28s cubic-bezier(.2, .9, .25, 1);
+    --thead-top: -0.5rem;
+  }
+  .subpage.in { transform: none; }
+  .subpage[hidden] { display: none; }
 
   /* ── Scroll area ──────────────────────────────────────────────────────── */
   .content {
@@ -226,32 +248,34 @@
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     touch-action: pan-y;
-    /* clearance for the HUD (and its pills) at the bottom */
-    padding: 0.5rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 7.5rem) calc(var(--gutter) + var(--safe-l));
+    /* clearance for the totals strip over the tab bar */
+    padding: 1rem calc(var(--gutter) + var(--safe-r)) calc(var(--dock) + 4.5rem) calc(var(--gutter) + var(--safe-l));
   }
   body.keyboard-open .content { padding-bottom: 1.5rem; }
-  html:has(.hud.is-review) .content { padding-bottom: calc(var(--dock) + 11rem); }   /* the HUD's Undo · Apply row */
+  html:has(.hud.is-review) .content, html:has(.hud.is-review) .subpage { padding-bottom: calc(var(--dock) + 8rem); }   /* the HUD's Undo · Apply row */
 
   /* Sticky table heads sit flush with the top of .content (tucked into its 0.5rem padding). */
   .panel {
-    display: none; --thead-top: -0.5rem; will-change: transform;
+    display: none; --thead-top: -1rem; will-change: transform;
     margin-inline: calc(-1 * (var(--gutter) + var(--safe-l))) calc(-1 * (var(--gutter) + var(--safe-r)));
     padding-inline: calc(var(--gutter) + var(--safe-l)) calc(var(--gutter) + var(--safe-r));
   }
   .panel.active { display: block; }
   /* Page lists and tables extend to the screen edges; sheets and drawers keep
      their grouped surfaces. Section labels stay visible while a list scrolls. */
-  .panel .lgroup, .panel .page-table, .panel .pool-editor {
+  .panel .lgroup, .panel .page-table, .panel .pool-editor,
+  .subpage .lgroup, .subpage .page-table {
     margin-inline: calc(-1 * var(--gutter));
     border-radius: 0; background: transparent; box-shadow: none; overflow: visible;
   }
   /* Pool editors use Card utilities, which otherwise override page styling. */
   .panel .pool-editor { border-radius: 0 !important; background: transparent !important; box-shadow: none !important; overflow: visible !important; }
-  .panel .ui-section:has(> .lgroup) > .section-heading {
+  .panel .ui-section:has(> .lgroup) > .section-heading,
+  .subpage .ui-section:has(> .lgroup) > .section-heading {
     position: sticky; top: var(--thead-top, 0px); z-index: 4;
     background: var(--bg); padding-block: .4rem; box-shadow: 0 1px 0 var(--line);
   }
-  /* A page stepped to slides in from the side it came from (ui/pages.js). */
+  /* A sub-tab stepped to slides in from the side it came from (ui/nav.js). */
   .panel.active.from-right { animation: inRight .24s cubic-bezier(.2, .8, .3, 1); }
   .panel.active.from-left  { animation: inLeft .24s cubic-bezier(.2, .8, .3, 1); }
   @keyframes inRight { from { opacity: .35; transform: translateX(35%); } to { opacity: 1; transform: none; } }
@@ -265,9 +289,6 @@
   html.fill-screen .sheet-backdrop { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet { max-height: calc(var(--app-h) - var(--safe-t) - 1rem); }
   html.fill-screen .sheet--tall { height: calc(var(--app-h) - var(--safe-t) - 2.5rem); }
-  html.fill-screen .side, html.fill-screen .side-scrim { position: absolute; top: 0; bottom: auto; height: var(--app-h); }
-  html.fill-screen .side--left { left: 0; }
-  html.fill-screen .side--right { right: 0; }
 
   /* ── Tab bar: docked at the bottom, frosted, a hairline on top ────────── */
   .tabbar {
@@ -329,42 +350,29 @@
   .tab-sub.ok { color: var(--on-accent); background: var(--accent); }
   .tab-sub.warn { color: #fff; background: var(--bad); }
 
-  /* ── Page actions, docked immediately above navigation ── */
+  /* ── Totals strip (Staff, Tips): one quiet line over the tab bar — Tips ·
+     Hours · Rate, the would-be numbers while an edit is previewed, and
+     Undo · Apply after a wheel / keypad edit (render/tabs.js). ───────── */
   .hud {
     position: fixed;
-    left: 50%;
+    left: 0; right: 0;
     bottom: var(--dock);
-    transform: translateX(-50%);
-    width: 100%;
-    min-height: 3.25rem;
+    min-height: 2.75rem;
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: .25rem calc(var(--gutter) + var(--safe-r)) .25rem calc(var(--gutter) + var(--safe-l));
-    border-radius: 0;
-    background: var(--surface);
+    padding: .375rem calc(var(--gutter) + var(--safe-r)) .375rem calc(var(--gutter) + var(--safe-l));
+    background: var(--glass);
+    -webkit-backdrop-filter: var(--blur);
+    backdrop-filter: var(--blur);
     color: var(--ink);
     box-shadow: 0 -1px 0 var(--line);
     z-index: 80;
     transition: bottom .2s ease;
   }
   .hud.is-empty { display: none; }
-  .hud-actions { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; touch-action: pan-x; }
-  .hud-actions::-webkit-scrollbar { display: none; }
-  /* Two quiet pills on the HUD's top edge: the close time, the chump. */
-  .hud-pills { position: absolute; left: 0; right: 0; bottom: 100%; display: flex; align-items: center; gap: .375rem; padding-bottom: .375rem; pointer-events: none; }
-  .hud-pills > * { pointer-events: auto; }
-  /* Swipe up on the HUD / tab bar raises the page drawer (sheet.js dragToOpen). */
-  .hud { touch-action: pan-x; }
-  .tabbar { touch-action: none; }
-  .hud-pill {
-    pointer-events: auto; color: var(--ink-2);
-    background: color-mix(in srgb, var(--surface) 82%, transparent);
-    -webkit-backdrop-filter: var(--blur); backdrop-filter: var(--blur);
-    box-shadow: 0 0 0 1px var(--line), 0 .25rem .75rem -.5rem rgb(0 0 0 / .3);
-  }
-  .hud.is-warn { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--bad); }
-  body.keyboard-open .hud { bottom: 0.5rem; }
+  html:not([data-page="staff"]):not([data-page="tips"]) .hud { display: none; }
+  .hud.is-warn { box-shadow: 0 -1px 0 var(--line), inset 0 2px 0 var(--bad); }
+  body.keyboard-open .hud { display: none; }
 
   /* Staff's bulk bar (select mode): docks where the HUD sits, in its place. */
   .bulkbar {
@@ -428,65 +436,6 @@
     box-shadow: 0 -1px 0 var(--line);
   }
 
-  /* ── Side panels (ui/panels.js) ─────────────────────────────────────────
-     Left = sessions + app settings, right = this shift. Each slides in over
-     one shared scrim. While a finger drags one, html.panel-dragging drops the
-     transitions and JS sets its transform. */
-  .side-scrim {
-    position: fixed; inset: 0; z-index: 90;
-    background: rgb(0 0 0 / .4);
-    opacity: 0; pointer-events: none;
-    transition: opacity .3s ease;
-  }
-  .side {
-    position: fixed; top: 0; bottom: 0;
-    width: min(86vw, 22rem);
-    z-index: 95;
-    display: flex; flex-direction: column;
-    background: var(--bg);
-    color: var(--ink);
-    visibility: hidden;
-    touch-action: pan-y;
-    transition: transform .34s cubic-bezier(.2, .9, .25, 1), visibility 0s linear .34s;
-  }
-  .side--left {
-    left: max(0px, calc(50vw - 240px));       /* the page column's left edge */
-    border-radius: 0 1.5rem 1.5rem 0;
-    box-shadow: 1.5rem 0 3.75rem rgb(0 0 0 / .22);
-    transform: translateX(-100%);
-  }
-  .side--right {
-    right: max(0px, calc(50vw - 240px));
-    border-radius: 1.5rem 0 0 1.5rem;
-    box-shadow: -1.5rem 0 3.75rem rgb(0 0 0 / .22);
-    transform: translateX(100%);
-  }
-  html.panel-open .side-scrim { opacity: 1; pointer-events: auto; }
-  html.left-open .side--left, html.right-open .side--right {
-    transform: none; visibility: visible;
-    transition: transform .34s cubic-bezier(.2, .9, .25, 1);
-  }
-  html.drag-left .side--left, html.drag-right .side--right { visibility: visible; transition: none; }
-  html.panel-dragging .side-scrim { transition: none; pointer-events: auto; }
-  .side-head {
-    flex-shrink: 0;
-    display: flex; align-items: center; gap: 0.75rem;
-    padding: calc(var(--safe-t) + 1rem) 1rem 0.75rem calc(1rem + var(--safe-l));
-  }
-  .side--right .side-head { padding-left: 1rem; padding-right: calc(1rem + var(--safe-r)); }
-  html.standalone .side-head { padding-top: calc(var(--safe-t) + var(--hdr-gap)); }
-  .side-body {
-    flex: 1;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    padding: 0.25rem 1rem calc(1.5rem + var(--safe-b));
-    display: flex; flex-direction: column; gap: 1.25rem;
-  }
-  .side--left .side-body { padding-left: calc(1rem + var(--safe-l)); }
-  .side--right .side-body { padding-right: calc(1rem + var(--safe-r)); }
-  .side-body > * { flex-shrink: 0; }
-
   /* ── Time keypad (ui/keypad.js): docked in place of the tab bar ──────── */
   .keypad {
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 110;
@@ -501,9 +450,14 @@
   .keypad > * { max-width: 30rem; margin: 0 auto; }
   .keypad.open { transform: none; }
   html.keypad-open .tabbar, html.keypad-open .hud { visibility: hidden; }
-  html.keypad-open .content { padding-bottom: calc(var(--kp-h, 18rem) + 5rem); }   /* + room for the previewing HUD */
+  /* Room to scroll the active cell above the keypad (+ the previewing strip):
+     a spacer, not padding — padding taller than the scroller would grow it
+     and push the whole page up. */
+  html.keypad-open .content::after, html.keypad-open .subpage::after {
+    content: ""; display: block; height: calc(var(--kp-h, 18rem) + .5rem - var(--dock));
+  }
   html.fill-screen .keypad { position: absolute; }
-  html.keypad-open .side-body, html.keypad-open .sheet-body { padding-bottom: calc(var(--kp-h, 18rem) + 1rem); }
+  html.keypad-open .sheet-body { padding-bottom: calc(var(--kp-h, 18rem) + 1rem); }
   [data-kcell] { scroll-margin: 3rem 0 calc(var(--kp-h, 0px) + 4.5rem); }
 
   /* ── Settings switch ──────────────────────────────────────────────────── */
@@ -564,12 +518,12 @@
     from { box-shadow: inset 0 0 0 100vmax color-mix(in srgb, var(--accent) 14%, transparent); }
     to   { box-shadow: inset 0 0 0 100vmax transparent; }
   }
-  .hud.is-preview { box-shadow: var(--shadow), inset 0 0 0 1.5px var(--accent); }
+  .hud.is-preview { box-shadow: 0 -1px 0 var(--line), inset 0 2px 0 var(--accent); }
   /* Typing a time on the keypad: the HUD rides above the keypad while the
      typed value is previewed (otherwise it hides with the tab bar). */
   html.keypad-open .hud.is-preview, html.keypad-open .hud.is-review { visibility: visible; bottom: calc(var(--kp-h, 18rem) + 0.5rem); z-index: 111; }
   /* A landed drag / keypad edit waiting for Undo · Apply (render/tabs.js). */
-  .hud.is-review { box-shadow: var(--shadow), inset 0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent); }
+  .hud.is-review { box-shadow: 0 -1px 0 var(--line), inset 0 2px 0 color-mix(in srgb, var(--accent) 55%, transparent); }
 }
 
 @layer components {

@@ -10,11 +10,10 @@ import { setClock24, setAmFrom, parseTime, inAbsOf } from './time.js';
 import { countedValue, parseWholeNumber } from './util.js';
 import { nextId } from './ids.js';
 import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL } from './shifts.js';
-import { mountSheets, closeSheet, closeAllSheets, dragToOpen } from './ui/sheet.js';
-import { switchTab, updateTabIndicators, normalizeTab } from './render/tabs.js';
-import { initPages } from './ui/pages.js';
+import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
+import { renderChrome, renderStrip, fmtDay } from './render/tabs.js';
+import { initNav, onNav, showTab, setSub, currentTab, popPage, popAll, topPage, resetNav, renderPages, normalizeTab } from './ui/nav.js';
 import { renderStaff, openStaffEditor } from './render/staff.js';
-import { openPageSheet, fillPageSheet, renderPageSheet } from './render/pagesheet.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderTips } from './render/tips.js';
 import { renderPayout, applyPendingTradeUp, applyPendingTradeDown, openPayoutSheet } from './render/payout.js';
@@ -22,16 +21,12 @@ import { refreshSticky } from './ui/sticky.js';
 import { trackChanges, resetChanges, snapOf, SHOW } from './ui/changes.js';
 import { toast, copyText } from './ui/toast.js';
 import { summaryText } from './textout.js';
-import { renderSummary, openPoolSummary } from './render/summary.js';
+import { renderHome, openPerson as homePerson } from './render/home.js';
+import { renderSettings, openShift } from './render/settings.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
   renderSheets, openPerson, openBonus, adjustBonus, resetBonuses,
 } from './render/sheets.js';
-import { renderDrawer, toggleDrawerEdit } from './render/drawer.js';
-import { renderShiftPanel, calendarStep, scrollShiftTo } from './render/shiftpanel.js';
-import {
-  openPanel, closePanel, closePanels, togglePanel, isPanelOpen, initPanelGestures,
-} from './ui/panels.js';
 
 const $ = id => document.getElementById(id);
 
@@ -46,10 +41,10 @@ state.ui.activeTab = landingTab(state);
 
 mountSheets($('sheets'));
 
-// Sessions always open on Summary — home. Its checklist points at whatever
-// step the shift still needs.
+// Sessions always open on Home. Its checklist points at whatever step the
+// shift still needs.
 function landingTab() {
-  return 'summary';
+  return 'home';
 }
 
 // ── Render loop ───────────────────────────────────────────────────────────────
@@ -76,26 +71,25 @@ function render(s) {
   renderStaff(lastVm);
   renderTips(lastVm);
   renderPayout(lastVm);
-  renderSummary(lastVm, sessionName());
+  renderHome(lastVm, sessionName());
   renderCloseTime(lastVm);
   renderSheets(lastVm);
-  updateTabIndicators(lastVm, sessionName());
   sessions.saveCurrent(s, {
     total: lastVm.totalCash || 0,
     people: s.staff.filter(p => p.name.trim()).length,
   });
+  renderSettings(lastVm, sessions.list(), sessions.currentId());
+  renderPages(lastVm);
+  renderChrome(lastVm, sessionName());
   refreshSticky();
-  const list = sessions.list(), cur = sessions.currentId();
-  renderDrawer(lastVm, list, cur);
-  renderShiftPanel(lastVm, list, cur);
-  renderPageSheet(lastVm, sessionName());
 }
 
 // ── What changed / what would change (ui/changes.js) ─────────────────────────
 // A landed edit marks the figures it moved (vm.changes) for SHOW ms, then
 // they're repainted plain. An edit in progress (a dragged or typed time)
-// re-runs the split on a copy of the state and paints Summary + the HUD with
-// the would-be numbers (vm.preview); nothing is written until it lands.
+// re-runs the split on a copy of the state and paints Staff + the totals
+// strip with the would-be numbers (vm.preview); nothing is written until it
+// lands. Home never previews — it only shows what's been written.
 // Returns the preview view model (the wheel picker shows its figures).
 let clearTimer = 0;
 function clearChangesLater() {
@@ -103,14 +97,13 @@ function clearChangesLater() {
   clearTimer = setTimeout(() => {
     if (!lastVm.changes || lastVm.changes.review || previewing) return;
     lastVm.changes = null;
-    renderSummary(lastVm, sessionName());
     renderPayout(lastVm);
-    updateTabIndicators(lastVm);
+    renderStrip(lastVm);
   }, SHOW + 50);
 }
 
 // Review: a drag or keypad edit is written at once, then waits for a word —
-// the HUD shows what it moved with Undo (put the whole state back as it was
+// the totals strip shows what it moved with Undo (put the whole state back as it was
 // just before) and Apply (keep it; the marks go). Its marks stay until then.
 let review = null, pendingReview = null, reviewN = 0, bulkUndo = null;
 const dataKey = s => JSON.stringify({ ...s, ui: null });
@@ -131,20 +124,9 @@ function reviewApply() {
   if (!review) return;
   review = null;
   lastVm.changes = null;
-  renderSummary(lastVm, sessionName());
+  renderStaff(lastVm);
   renderPayout(lastVm);
-  updateTabIndicators(lastVm);
-}
-
-// Nudge the tips total (one pool) by `delta` dollars: the uncounted rest
-// moves, the counted bills stay; with "Amount is the Total" the typed total
-// moves with it. vmPool = that pool in the current view model.
-function nudgeCash(s, vmPool, delta) {
-  const pool = s.pools[0];
-  if (!pool || !vmPool) return;
-  const rest = Math.max(0, (vmPool.rest || 0) + delta);
-  const asTotal = pool.cash.restMode === 'total' && String(pool.cash.netTotal ?? '').trim() !== '';
-  pool.cash.netTotal = String(asTotal ? (vmPool.counted || 0) + rest : rest);
+  renderStrip(lastVm);
 }
 
 // Older sessions may store an amount in addition to counted bills. Convert it
@@ -164,9 +146,8 @@ function preview(apply, focus = null) {
   if (!apply) {
     if (!previewing) return;
     previewing = false;
-    renderSummary(lastVm, sessionName());
     renderStaff(lastVm);
-    updateTabIndicators(lastVm);
+    renderStrip(lastVm);
     return;
   }
   const base = snapOf(lastVm);
@@ -177,9 +158,8 @@ function preview(apply, focus = null) {
   try { pv = buildViewModel(s); } catch { return; }
   pv.preview = { base, focus };
   previewing = true;
-  renderSummary(pv, sessionName());
   renderStaff(pv, { preview: true });
-  updateTabIndicators(pv);
+  renderStrip(pv);
   return pv;                                     // the wheel shows its figures
 }
 
@@ -205,17 +185,16 @@ function flushCurrent() {
   render(store.getState());
 }
 
-function activate(next, { keepPanel = false } = {}) {
+function activate(next) {
   carryPrefs(next);
   if (!next.meta.date) next.meta.date = sessions.todayISO();
   next.ui.activeTab = landingTab(next);
   closeAllSheets();
+  resetNav();
   store.replaceState(next);
   next.staff.forEach(p => rememberName(p.name, p.role));
-  switchTab(next.ui.activeTab);
-  syncHdrDate();
+  showTab(next.ui.activeTab);
   render(next);
-  if (!keepPanel) closePanels();
 }
 
 // A new session keeps the current shift type, with that type's remembered
@@ -236,70 +215,51 @@ function freshState() {
 
 store.subscribe(render);
 
-// ── Header date pill: "Sat, Nov 8" — tap opens the shift panel (calendar) ────
-
-function fmtHdrDate(iso) {
-  if (!iso) return 'Today';
-  // Parse as local noon so DST shifts never move the visible day.
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
-  if (!m) return iso;
-  const d = new Date(+m[1], +m[2] - 1, +m[3], 12);
-  return new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(d);
-}
-
-function syncHdrDate() {
-  const label = $('hdrDateLabel');
-  const text = fmtHdrDate(store.getState().meta.date);
-  if (label && label.textContent !== text) label.textContent = text;
-}
-
 // ── Global handler surface for inline on* attributes ──────────────────────────
 
 const rolesOn = () => store.getState().settings.allRoles;
-const fromPanel = fn => (...a) => { closePanels(); fn(...a); };
 
 window.App = {
-  // pages: Summary · Staff · Tips · Payout (opts.dir: the side a swiped-to
-  // page slides in from)
+  refreshNavigation: () => renderChrome(lastVm, sessionName()),
+  // Tabs: Home · Staff · Tips · Settings (opts.sub: a sub-tab to show —
+  // App.tab('tips', { sub: 'drawer' })). Old names map over (normalizeTab).
   tab(name, opts = {}) {
-    closeSheet('sheet-page');
-    switchTab(name, opts);
+    name = normalizeTab(name);
+    closeAllSheets();
+    if (opts.sub) setSub(name, opts.sub);
+    if (name !== currentTab()) showTab(name);
     store.setActiveTab(name);
   },
-  // A bottom tab: another page goes there; the page you're on opens its drawer.
+  // A bottom tab: another tab goes there; the tab you're on goes back to its
+  // root page (or, already there, scrolls to the top).
   tabTap(name) {
-    if (store.getState().ui.activeTab === name) openPageSheet();
-    else App.tab(name);
+    if (currentTab() !== name) { App.tab(name); return; }
+    if (topPage()) popAll(name, { animate: true });
+    else document.getElementById('mainContent')?.scrollTo({ top: 0, behavior: 'smooth' });
   },
-  // The page drawer (render/pagesheet.js): the page's actions, Show
-  // switches, Go to. Also More on the HUD, a swipe up from the bottom.
-  pageSheet: () => openPageSheet(),
-  // Repaint the pages that show the keypad's active cell (no data change).
+  // Back: the subpage on top goes.
+  back: () => popPage(),
+  // Repaint what shows the keypad's active cell (no data change).
   repaint() {
     if (previewing) return;
-    renderSummary(lastVm, sessionName());
     renderStaff(lastVm);
     renderSheets(lastVm);
+    renderPages(lastVm);
   },
   toggleShow: key => store.toggleShow(key),
 
-  // sheets
+  // sheets and subpages
   closeSheet,
-  openBonus: fromPanel(() => openBonus(lastVm)),
-  openCloseTime: fromPanel(() => openCloseTime(lastVm)),
-  // Default times live in the shift panel now.
-  openDefaults() { App.panel('right'); scrollShiftTo('shift-times'); },
-
-  // side panels: left = sessions + app settings, right = this shift
-  panel(side) { closeAllSheets(); togglePanel(side); },
-  closePanels,
-  drawerEdit: toggleDrawerEdit,
-  calMonth: calendarStep,
+  openBonus: () => openBonus(lastVm),
+  openCloseTime: () => openCloseTime(lastVm),
+  // The shift's default times: This shift, pushed onto the current tab.
+  openDefaults: () => openShift(),
   renameCurrent(name) {
     sessions.rename(sessions.currentId(), name);
     render(store.getState());
   },
-  personModal: id => openPerson(lastVm, id),
+  // A person: on Home their read-only page, elsewhere the payout sheet.
+  personModal: id => (currentTab() === 'home' ? homePerson(id) : openPerson(lastVm, id)),
 
   // settings
   setSize: size => store.setSize(size),
@@ -383,20 +343,12 @@ window.App = {
     if (p) p[field] = raw;
   }, id),
   previewDefault: (field, raw) => preview(raw == null ? null : s => { s.defaults.global[field] = String(raw).trim(); }),
-  // The tips total (Summary Total row, one pool): preview / write a nudge.
-  previewCash: delta => preview(delta == null || !delta ? null : s => nudgeCash(s, lastVm.pools[0], delta)),
-  nudgeCash(delta) {
-    const vmPool = lastVm.pools[0];
-    if (!vmPool || !delta) return;
-    withReview('Tips ' + (delta > 0 ? '+$' : '−$') + Math.abs(delta).toLocaleString('en-US'),
-      () => store.mutate(s => nudgeCash(s, vmPool, delta), { immediate: true }));
-  },
-  // Payout's extras, each a small drawer: 'fix' · 'stacks' · 'tidy'.
+  // Tips › Drawer's tools, each a small drawer: 'fix' · 'stacks' · 'tidy'.
   openPayoutSheet,
-  // Stacks of small bills for managers (Payout).
+  // Stacks of small bills for managers (Tips › Drawer).
   toggleStackTo: id => store.toggleStackTo(id),
   setStackSize: (d, v) => store.setStackSize(d, v),
-  // A drag / keypad edit with Undo · Apply in the HUD (see withReview).
+  // A drag / keypad edit with Undo · Apply in the totals strip (see withReview).
   reviewed: withReview,
   reviewUndo,
   reviewApply,
@@ -436,7 +388,6 @@ window.App = {
     App.tab('tips');
     requestAnimationFrame(() => document.querySelector(`[data-pid="${id}"]`)?.scrollIntoView({ block: 'start' }));
   },
-  openPoolSummary: id => openPoolSummary(id),
   removePool: store.removePool,
   poolRole: store.togglePoolRole,
   poolLabel: (id, value) => store.updatePool(id, p => { p.label = value; }),
@@ -502,10 +453,13 @@ window.App = {
     return true;
   },
   addCashBatch(id) {
+    let batchId = null;
     store.updatePool(id, p => {
       p.cash.batches ||= [];
-      p.cash.batches.push({ id: nextId('b'), label: '', mode: 'total', amount: '', billCounts: store.blankBillStrings() });
+      batchId = nextId('b');
+      p.cash.batches.push({ id: batchId, label: '', mode: 'total', amount: '', billCounts: store.blankBillStrings() });
     }, true);
+    return batchId;
   },
   updateCashBatch(id, batchId, field, value) {
     store.updatePool(id, p => {
@@ -576,12 +530,11 @@ window.App = {
   setDate(v) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
     store.mutate(s => { s.meta.date = v; }, { immediate: true });
-    syncHdrDate();
   },
-  // Summary as plain text on the clipboard (for Notes).
+  // Home's summary as plain text on the clipboard (for Notes).
   async copySummary() {
     const st = store.getState();
-    const text = lastVm?.shares && lastVm.totalCash > 0 ? summaryText(lastVm, [sessionName() || 'Tips', fmtHdrDate(st.meta.date)].join(' · ')) : '';
+    const text = lastVm?.shares && lastVm.totalCash > 0 ? summaryText(lastVm, [sessionName() || 'Tips', fmtDay(st.meta.date)].join(' · ')) : '';
     if (!text) { toast('Nothing to copy yet'); return; }
     toast(await copyText(text) ? 'Copied — paste into Notes' : 'Couldn’t copy on this device');
   },
@@ -629,13 +582,13 @@ window.App = {
     activate(freshState());
   },
   switchSession(id) {
-    if (id === sessions.currentId()) { closePanels(); return; }
+    if (id === sessions.currentId()) { App.tab('home'); return; }
     flushCurrent();
     const next = sessions.loadSession(id);
     if (!next) {
       alert('That session could not be opened — its saved data is damaged.');
       sessions.remove(id);
-      renderDrawer(lastVm, sessions.list(), sessions.currentId());
+      render(store.getState());
       return;
     }
     sessions.setCurrent(id);
@@ -646,7 +599,7 @@ window.App = {
     const name = prompt('Session name (blank = show the date)', e?.name || '');
     if (name === null) return;
     sessions.rename(id, name);
-    renderDrawer(lastVm, sessions.list(), sessions.currentId());
+    render(store.getState());
   },
   deleteSession(id) {
     const e = sessions.list().find(x => x.id === id);
@@ -654,21 +607,19 @@ window.App = {
     if (!confirm(`Delete ${what}? This can’t be undone.`)) return;
     const wasCurrent = id === sessions.currentId();
     sessions.remove(id);
-    if (!wasCurrent) { renderDrawer(lastVm, sessions.list(), sessions.currentId()); return; }
+    if (!wasCurrent) { render(store.getState()); return; }
     // Open the next newest session, or start a fresh one.
     for (const other of sessions.list()) {
       const next = sessions.loadSession(other.id);
-      if (next) { sessions.setCurrent(other.id); activate(next, { keepPanel: true }); return; }
+      if (next) { sessions.setCurrent(other.id); activate(next); return; }
       sessions.remove(other.id);
     }
     sessions.createId();
-    activate(freshState(), { keepPanel: true });
+    activate(freshState());
   },
 };
 
 // ── One-time DOM wiring ───────────────────────────────────────────────────────
-
-syncHdrDate();
 
 // Hide the tab bar when the software keyboard is open. Compare the visible
 // area to the layout viewport (innerHeight), not the screen: Safari's toolbars
@@ -692,7 +643,7 @@ if (window.visualViewport) {
 
 // Home-screen app fill. iOS can hand a home-screen web app a viewport shorter
 // than the screen (e.g. 844 of 912pt), leaving a black strip below the page.
-// Size <html>/<body> to the real screen height, lay the tab bar / HUD / sheets
+// Size <html>/<body> to the real screen height, lay the tab bar / totals strip / sheets
 // out inside that box, and keep the window locked at the top.
 // Add ?pwa to the URL to force this in a desktop browser for testing.
 (() => {
@@ -738,27 +689,22 @@ if (window.visualViewport) {
 loadRoster();
 state.staff.forEach(p => rememberName(p.name, p.role));
 
-switchTab(state.ui.activeTab);
+onNav(() => {
+  const tab = currentTab();
+  if (store.getState().ui.activeTab !== tab) store.getState().ui.activeTab = tab;
+  renderHome(lastVm, sessionName());          // the sub-tab picks Home's view
+  renderChrome(lastVm, sessionName());
+  requestAnimationFrame(refreshSticky);
+});
+showTab(state.ui.activeTab);
 render(state);
 
-// Side panels: drag in from either screen edge, drag back to close.
-initPanelGestures({
-  canOpen: () => !document.body.classList.contains('keyboard-open')
-    && !document.querySelector('.sheet-backdrop.open'),
-});
-
-// Page swipes (ui/pages.js): a swipe to another page goes through App.tab;
-// past the first / last page it opens that side's panel.
+// Gestures (ui/nav.js): a sideways swipe moves between a page's sub-tabs; a
+// swipe right on a subpage goes back. Tabs change only from the tab bar.
 const calm = () => !document.querySelector('.sheet-backdrop.open')
-  && !document.documentElement.classList.contains('panel-open') && !document.documentElement.classList.contains('wheel-open')
+  && !document.documentElement.classList.contains('wheel-open')
   && !document.documentElement.classList.contains('keypad-open');
-initPages({
-  go: (name, dir) => App.tab(name, { dir }),
-  ends: side => openPanel(side),
-  can: calm,
-});
-// Swipe up from the bottom — the HUD or the tab bar — for the page drawer.
-dragToOpen([$('pipHud'), document.querySelector('.tabbar')], 'sheet-page', fillPageSheet, calm);
+initNav({ can: calm });
 
 // Reveal once Tailwind has styled the page (it compiles in the browser): a
 // probe with `hidden` turns display:none once the utilities exist.

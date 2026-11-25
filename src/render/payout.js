@@ -1,10 +1,10 @@
-// Payout tab (Preact) — the cash side (the people side is the Summary tab,
-// render/summary.js). Two swipeable sub-tabs:
-//   Bills    status (exact change ✓ / fix card with Apply) → envelope table:
-//            name · one column per bill size · pay, chump, drawer totals
-//            → "Tidy the drawer".
-//   Working  how the split was worked out, step by step (single pool), or
-//            the pools list (several pools).
+// Tips › Drawer (Preact) — the cash side of the payout, where the drawer is
+// fixed up (Home only reads the result):
+//   status (exact change ✓ / the fix card with Apply) → the envelopes
+//   (name · one column per bill size · pay, chump, drawer totals) → tools,
+//   each a small drawer (sheet) of its own: envelopes already made (with a
+//   register over / short), stacks for a manager, tidy the drawer.
+// Worksheet ("How the split works") and EnvelopeTable are shared with Home.
 
 import { DENOMS, fmtHrs, fmtMoney, payoutOrder, poolValue } from '../util.js';
 import { fmtTimeAbs } from '../time.js';
@@ -95,7 +95,7 @@ const BILL_HEAD = 'bill-col inline-block min-w-[1.75rem] rounded-md bg-[color-mi
 // The envelope grid on its own (Payout's Envelopes, Summary's Bills view):
 // `order` = the people in row order (default payoutOrder). A person taking
 // bundled stacks (vm.stacks) says so under their name.
-export function EnvelopeTable({ vm, byPerson, remBills, order }) {
+export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App.personModal(id), quiet = false }) {
   const s = vm.shares;
   const ordered = order || payoutOrder(s.perPerson);
   const rem = s.leftover > 0 ? (remBills || {}) : {};
@@ -105,7 +105,7 @@ export function EnvelopeTable({ vm, byPerson, remBills, order }) {
   const n = v => v > 0 ? html`<span class="font-semibold">${v}</span>` : html`<span class="text-ink-3/40">–</span>`;
   // Bill heads / drawer totals: the bill's tint on a faint wash of it (BILL_HEAD).
   const head = (d, v) => html`<span class=${BILL_HEAD} data-d=${d}>${v}</span>`;
-  const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} /><${Delta} d=${payDelta(vm, p.id, p.final)} under /></span>`;
+  const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} />${!quiet && html`<${Delta} d=${payDelta(vm, p.id, p.final)} under />`}</span>`;
   const stackNote = id => {
     const st = vm.stacks?.[id];
     if (!st) return '';
@@ -115,7 +115,7 @@ export function EnvelopeTable({ vm, byPerson, remBills, order }) {
   return html`<${Table} fixed lines
     cols=${[{ label: 'Name', w: 'w-[28%]' }, ...cols.map(d => ({ head: head(d, d) })), { label: 'Pay', align: 'right', w: 'w-[22%]' }]}
     rows=${[
-      ...ordered.map(p => ({ key: p.id, onClick: () => App.personModal(p.id),
+      ...ordered.map(p => ({ key: p.id, onClick: () => onRow(p.id),
         cells: [html`<span class="flex min-w-0 items-center gap-1.5"><span class="size-2 shrink-0 rounded-full" style=${{ background: hueVar(hueIndex(vm.state, p.id)) }}></span><span class="truncate">${p.name}</span></span>${stackNote(p.id)}`, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), pay(p)] })),
       ...(s.leftover > 0 ? [{ key: 'chump', tone: 'muted', cells: ['Chump', ...cols.map(d => n(rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
     ]}
@@ -177,7 +177,7 @@ function hoursDecimals(values) {
 }
 const cents = n => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function Worksheet({ vm }) {
+export function Worksheet({ vm }) {
   const s = vm.shares;
   const pool = s.perPool[0];
   if (!pool || vm.state.pools.length !== 1) return null;
@@ -232,12 +232,6 @@ function Worksheet({ vm }) {
       </li>`)}
     </ol>
   <//><//>`;
-}
-
-function PoolsList({ vm }) {
-  return html`<${Section} title="Pools"><${List}>${vm.shares.perPool.map(p => html`<${Item} key=${p.id} title=${p.label}
-    sub=${`${fmtTimeAbs(p.startAbs)}–${fmtTimeAbs(p.endAbs)} · ${fmtHrs(p.tippedHours)}h${p.tippedHours > 0 ? ' · $' + p.rate.toFixed(2) + '/hr' : ''}${p.support?.cut > 0 ? ' · −' + fmtMoney(p.support.cut) + ' support' : ''}`}
-    value=${fmtMoney(p.total)} />`)}<//><//>`;
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────
@@ -398,32 +392,8 @@ function Payout({ vm, errMsg, tradeDown, tradeUp }) {
     ${warnings}
     ${errMsg ? html`<${FixCard} vm=${vm} errMsg=${errMsg} plan=${tradeDown} />` : html`<${ExactChange} vm=${vm} />`}
     <${Envelopes} vm=${vm} byPerson=${bills.byPerson} remBills=${bills.remainderBills} note=${bills.note} />
-    ${vm.state.settings.show?.working !== false && (vm.state.pools.length > 1 ? html`<${PoolsList} vm=${vm} />` : html`<${Worksheet} vm=${vm} />`)}
+    <${Section} title="Tools"><${Extras} vm=${vm} tradeUp=${tradeUp} /><//>
   </div>`;
-}
-
-// ── The page drawer's Payout part: the extras (each a small drawer of its
-//    own) and what it shows. ────────────────────────────────────────────────
-
-export function PayoutOptions({ vm }) {
-  const show = vm.state.settings.show || {};
-  return html`${!vm.blocked && html`<${Section} title="Do"><div onClickCapture=${() => App.closeSheet('sheet-page')}><${Extras} vm=${vm} tradeUp=${pendingTradeUp} /></div><//>`}
-    <${Section} title="Show"><${List}>
-      <${SwitchRow} on=${show.working !== false} onClick=${() => App.toggleShow('working')}
-        icon="calc" label="How the split works" hint=${vm.state.pools.length > 1 ? 'The pools, each with its own rate' : 'Step by step under the envelopes'} />
-    <//><//>`;
-}
-
-// The HUD's actions on Payout (pills): envelopes already made (register over
-// / short), stacks for a manager, tidy the drawer.
-export function payoutPills(vm) {
-  if (vm.blocked) return [];
-  const fx = fixesFor(vm);
-  return [
-    ...(fx && (fx.rows?.length || fx.moves?.length) ? [{ icon: 'envelope', label: 'Already made?', onClick: () => App.openPayoutSheet('fix') }] : []),
-    { icon: 'cash', label: 'Stacks', on: Object.keys(vm.stacks || {}).length > 0, onClick: () => App.openPayoutSheet('stacks') },
-    ...(pendingTradeUp ? [{ icon: 'swap', label: 'Tidy', onClick: () => App.openPayoutSheet('tidy') }] : []),
-  ];
 }
 
 export function renderPayout(vm) {

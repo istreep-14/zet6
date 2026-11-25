@@ -7,16 +7,15 @@
 //     against the night (hour ticks, the close as a red line, a placed break
 //     as a gap)
 //   → Add names, only while adding (or while nobody's on shift)
-// Its actions are on the HUD (staffPills: + Add, Times, Select, the Close
-// time) and in the page drawer (StaffOptions: the same, Default times, and
-// Show: Timelines, Roles, 24-hour times).
+//   → Shift: the Close (a time cell), Close-time what-if, Default times
+// The view chips at the top (Staff · Add · Times · Select) switch the mode.
 // Modes:
 //   view    tap a card → that person's drawer (name, role, In / Out, break,
 //           closer, remove)
 //   times   the times on each card become boxes — tap one for the wheel (hold
-//           works too), Undo · Apply in the HUD after
+//           works too), Undo · Apply in the totals strip after
 //   select  tap cards to pick people; the bulk bar docks at the bottom (in
-//           place of the HUD): In / Out hour chips set the picked people's
+//           place of the totals strip): In / Out hour chips set the picked people's
 //           times — "Each in turn" gives the next picked person the chip you
 //           tap (4, 5, 6, 6 down the list), "Same for all" sets everyone —
 //           plus :30, Closer, Remove, Undo
@@ -29,7 +28,7 @@ import { fmtHrs, fmtMoney } from '../util.js';
 import { parseTime, fmtTimeAbs, fmtClockShort, inAbsOf, afterAbsOf, absToInRaw, absToOutRaw, absToEdgeRaw, IN_MIN_ABS, IN_MAX_ABS } from '../time.js';
 import { getRoster } from '../roster.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Clock, Icon, Button, Alert, Seg, SwitchRow, List, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_PLURAL, hueVar, hueIndex, hueTile, Sentinel, THEAD } from '../ui/pkit.js';
+import { cx, Clock, Icon, Button, Alert, Seg, SwitchRow, List, Item, Section, NextStep, INPUT_PAGE, ROLE_DOT, ROLE_PLURAL, hueVar, hueIndex, hueTile, Sentinel, THEAD, revealSelectedTab, subtabKeys } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 import { DragTime } from '../ui/dragtime.js';
 import { openKeypad, activeKey, bufferAbs } from '../ui/keypad.js';
@@ -217,9 +216,12 @@ let undoLabel = '';               // the last bulk action, while Undo can put it
 
 function setMode(m) {
   mode = mode === m ? 'view' : m;
+  if (mode !== 'view') adding = false;
   if (mode !== 'select') { sel = new Set(); turn = 0; undoLabel = ''; }
   document.documentElement.classList.toggle('bulk-on', mode === 'select');
   rerender();
+  revealSelectedTab('[data-staff-views]');
+  App.refreshNavigation?.();
 }
 export const staffMode = () => mode;
 export function exitStaffModes() { if (mode !== 'view') setMode(mode); }
@@ -394,13 +396,38 @@ export function startAdding() {
   if (mode !== 'view') setMode(mode);
   adding = true;
   rerender();
+  revealSelectedTab('[data-staff-views]');
+  App.refreshNavigation?.();
   requestAnimationFrame(() => {
     const el = document.querySelector('[data-addnames]');
     el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     el?.focus();
   });
 }
-const stopAdding = () => { adding = false; forgetting = false; rerender(); };
+const stopAdding = () => { adding = false; forgetting = false; rerender(); revealSelectedTab('[data-staff-views]'); App.refreshNavigation?.(); };
+
+const STAFF_VIEWS = [{ value: 'view', label: 'Staff' }, { value: 'add', label: 'Add' }, { value: 'times', label: 'Times' }, { value: 'select', label: 'Select' }];
+const staffView = () => mode === 'view' && adding ? 'add' : mode;
+function setStaffView(view, focus = false) {
+  if (view === staffView()) { if (view === 'add' && focus) startAdding(); return; }
+  if (mode !== 'view') setMode(mode);
+  adding = false;
+  if (view === 'add' && focus) { startAdding(); return; }
+  if (view === 'add') adding = true;
+  else if (view !== 'view') { setMode(view); return; }
+  rerender();
+  revealSelectedTab('[data-staff-views]');
+  App.refreshNavigation?.();
+}
+
+function StaffViews() {
+  const current = staffView();
+  return html`<div data-staff-views class="-mx-[var(--gutter)] overflow-x-auto px-[var(--gutter)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist" aria-label="Staff views" onKeyDown=${subtabKeys}>
+    <div class="flex w-max gap-2">${STAFF_VIEWS.map(v => html`<button key=${v.value} role="tab" aria-selected=${String(v.value === current)} tabIndex=${v.value === current ? 0 : -1}
+      class=${cx('t-small h-11 rounded-full px-4 font-semibold transition', v.value === current ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2')}
+      onClick=${() => setStaffView(v.value, true)}>${v.label}</button>`)}</div>
+  </div>`;
+}
 
 function AddNames({ vm }) {
   const state = vm.state;
@@ -418,7 +445,7 @@ function AddNames({ vm }) {
         <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/12 text-accent"><${Icon} name="plus" class="size-[1.125rem]" /></span>
         <input data-addnames class="h-11 min-w-0 flex-1 bg-transparent text-[1rem] font-medium text-ink outline-none placeholder:font-normal placeholder:text-ink-3"
           placeholder="Name, then Return — or paste a list" aria-label="Add names"
-          onFocus=${() => { adding = true; }}
+          onFocus=${() => { if (!adding) { adding = true; rerender(); App.refreshNavigation?.(); } }}
           onBlur=${e => { if (!e.target.value.trim() && state.staff.some(named)) setTimeout(() => { if (document.activeElement?.closest?.('[data-addbox]')) return; stopAdding(); }, 150); }}
           autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" enterkeyhint="next"
           onKeyDown=${e => {
@@ -562,8 +589,9 @@ function Staff({ vm }) {
   const hours = done && vm.resolved.staff.filter(p => p.role !== 'support').reduce((t, p) => t + p.hours, 0);
   let n = 0;
   // One list: the hour axis once, a small heading per role (roles on), a
-  // card per person. Actions live on the HUD and in the page drawer.
+  // card per person; the shift's close and default times under it.
   return html`<div class="flex flex-col gap-4">
+    <${StaffViews} />
     <${Note} vm=${vm} />
     ${people.length > 0 && html`<${List}>
       ${lines && span && html`<${Sentinel} /><${Axis} span=${span} />`}
@@ -573,52 +601,25 @@ function Staff({ vm }) {
         ${g.people.map(p => html`<${PersonCard} key=${p.id} vm=${vm} p=${p} n=${++n} tint=${tint} span=${span} lines=${lines} allClose=${allClose} />`)}`)}
     <//>`}
     ${(adding || !people.length) && html`<${AddNames} vm=${vm} />`}
+    ${people.length > 0 && mode === 'view' && !adding && html`<${StaffMore} vm=${vm} />`}
     ${done && mode === 'view' && !adding && (vm.totalCash > 0 && !vm.blocked
-      ? html`<${NextStep} tab="summary" label="See who gets what" sub=${fmtMoney(vm.totalCash) + ' over ' + fmtHrs(hours) + ' hours'} />`
+      ? html`<${NextStep} tab="home" label="See who gets what" sub=${fmtMoney(vm.totalCash) + ' over ' + fmtHrs(hours) + ' hours'} />`
       : html`<${NextStep} tab="tips" label="Next: enter the tips" sub=${people.length + ' on shift · ' + fmtHrs(hours) + ' hours'} />`)}
   </div>`;
 }
 
-// ── The page drawer's Staff part: actions, the close, what it shows. ──────
+// ── The shift, under the list: the close, what-if, the default times. ─────
 
-export function StaffOptions({ vm }) {
-  const state = vm.state;
-  const show = state.settings.show || {};
-  const row = (icon, title, sub, onClick, on) => html`<button class=${cx('li flex min-h-12 w-full items-center gap-3 px-4 py-2.5 text-left transition active:bg-surface-2', on && 'bg-accent/8')}
-    style=${{ '--inset': '3.5rem' }} onClick=${() => { App.closeSheet('sheet-page'); onClick(); }}>
-    <span class=${cx('grid size-8 shrink-0 place-items-center rounded-lg', on ? 'bg-accent text-on-accent' : 'bg-accent/12 text-accent')}><${Icon} name=${icon} class="size-[1.125rem]" /></span>
-    <span class="flex min-w-0 flex-1 flex-col"><span class="t-body font-medium">${title}</span><span class="t-small text-ink-3">${sub}</span></span>
-  </button>`;
-  return html`<${Section} title="Do"><${List}>
-      ${row('plus', 'Add names', 'Type or paste a list; saved names are a tap', startAdding)}
-      ${row('clock', mode === 'times' ? 'Stop editing times' : 'Edit times', 'Every time becomes a wheel', () => setMode('times'), mode === 'times')}
-      ${row('users', mode === 'select' ? 'Stop selecting' : 'Select people', 'Set several people’s times at once — 4, 5, 6, 6 …', () => setMode('select'), mode === 'select')}
+function StaffMore({ vm }) {
+  return html`<${Section} title="Shift" footer="Closers, and anyone without an Out of their own, leave at the close."><${List}>
       <div class="li flex min-h-12 items-center gap-3 px-4 py-2" style=${{ '--inset': '3.5rem' }}>
         <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-bad/12 text-bad"><span class="size-2 rounded-full bg-bad"></span></span>
-        <span class="flex min-w-0 flex-1 flex-col"><span class="t-body font-medium">Close time</span><span class="t-small text-ink-3">Closers and anyone without an Out end then</span></span>
-        <${CloseTime} vm=${vm} cls="h-10 min-w-[4rem] rounded-lg bg-surface-2 px-2 text-[0.9375rem] tabular-nums transition" tone="font-semibold text-ink" />
+        <span class="t-body min-w-0 flex-1 font-medium">Close</span>
+        <${CloseTime} vm=${vm} cls="h-10 min-w-[4.5rem] rounded-lg bg-surface-2 px-2 text-[0.9375rem] tabular-nums transition" tone="font-semibold text-ink" />
       </div>
-      ${row('sliders', 'Default times', 'Open, and per role — in this shift’s panel', () => App.openDefaults())}
-    <//><//>
-    <${Section} title="Show"><${List}>
-      <${SwitchRow} on=${show.timelines !== false} onClick=${() => App.toggleShow('timelines')}
-        icon="clock" label="Timelines" hint="Each shift against the night, the close as a red line" />
-      <${SwitchRow} on=${state.settings.allRoles} onClick=${() => App.toggleSetting('allRoles')}
-        icon="users" label="Roles" hint="Bartenders · servers · support, grouped" />
-      <${SwitchRow} on=${state.settings.clock24} onClick=${() => App.toggleSetting('clock24')}
-        icon="clock" label="24-hour times" hint="17:30 instead of 5:30p" />
-    <//><//>
-    <p class="t-small px-4 text-ink-3">Tap a person for their drawer — times, a break, closer, remove. Faint times follow the defaults.</p>`;
-}
-
-// The HUD's actions on Staff (render/tabs.js shows them as pills).
-export function staffPills(vm) {
-  return [
-    { icon: 'plus', label: 'Add', onClick: startAdding },
-    { icon: 'clock', label: 'Times', on: mode === 'times', onClick: () => setMode('times') },
-    { icon: 'users', label: 'Select', on: mode === 'select', onClick: () => setMode('select') },
-    { close: true },
-  ];
+      <${Item} icon="clock" title="Close-time what-if" sub="Everyone’s take-home at other close times" onClick=${() => App.openCloseTime()} />
+      <${Item} icon="sliders" title="Default times" sub="Open, and per role" onClick=${() => App.openDefaults()} />
+    <//><//>`;
 }
 
 // ── A person's drawer ────────────────────────────────────────────────────────
