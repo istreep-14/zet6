@@ -143,7 +143,8 @@ function press(k) {
 
 function scrollToActive() {
   requestAnimationFrame(() => {
-    document.querySelector('[data-kcell][data-active]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    // The same cell can be on two pages (Staff and Home's table): the visible one.
+    [...document.querySelectorAll('[data-kcell][data-active]')].find(el => el.offsetParent)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   });
 }
 

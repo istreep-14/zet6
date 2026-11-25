@@ -246,14 +246,17 @@ const COLS = 'grid grid-cols-[minmax(0,1fr)_3.75rem_0.625rem_3.75rem_2rem] items
 const BOX = 'h-11 w-full rounded-lg bg-surface-2 text-[1rem] tabular-nums transition';
 const TONE = set => (set ? 'font-semibold text-ink' : 'font-normal text-ink-3');
 
-function TimeBox({ vm, p, field }) {
+function TimeBox({ vm, p, field, cls = BOX, mins = false }) {
   const t = times(vm.state, p, vm);
   const k = pickerFor(vm, p, field);
   const set = field === 'in' ? t.inSet : t.outSet;
   return html`<${DragTime} abs=${field === 'in' ? t.inAbs : t.outAbs} set=${set} bad=${t.bad} ...${keyCell(p, field)}
-    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub}
-    cls=${BOX} tone=${TONE(set)} label=${p.name + ' ' + field + ' time'} />`;
+    min=${k.min} max=${k.max} onSet=${k.onSet} onPreview=${k.onPreview} wheelSub=${k.wheelSub} mins=${mins}
+    cls=${cls} tone=${TONE(set)} label=${p.name + ' ' + field + ' time'} />`;
 }
+// The same keypad / wheel cell for another page (Home › Pay's table): one key
+// per person and field, so the keypad's Next walks the same order.
+export const TimeCell = TimeBox;
 
 function Head() {
   const cap = 't-cap text-ink-3';

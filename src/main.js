@@ -125,6 +125,19 @@ function reviewUndo() {
   render(store.getState());
   toast('Undone');
 }
+// Move the one pool's typed amount by `delta` dollars. The amount is the
+// uncounted rest, or (restMode 'total') the total including counted bills —
+// either way the tips total moves by delta. A blank total starts from what's
+// counted.
+function nudgeCash(s, delta) {
+  const cash = s.pools[0]?.cash;
+  if (!cash || s.pools.length !== 1) return;
+  const typed = parseWholeNumber(String(cash.netTotal ?? ''));
+  const asTotal = cash.restMode === 'total';
+  const base = typed.valid && !typed.empty ? typed.value : asTotal ? countedValue(cash.billCounts) : 0;
+  cash.netTotal = String(Math.max(asTotal ? countedValue(cash.billCounts) : 0, base + delta));
+}
+
 // Older sessions may store an amount in addition to counted bills. Convert it
 // to an inclusive total before editing the bill count in the new interface.
 function makeCashTotal(cash) {
@@ -143,6 +156,7 @@ function preview(apply, focus = null) {
     if (!previewing) return;
     previewing = false;
     renderStaff(lastVm);
+    renderHome(lastVm, sessionName());
     return;
   }
   const base = snapOf(lastVm);
@@ -154,6 +168,7 @@ function preview(apply, focus = null) {
   pv.preview = { base, focus };
   previewing = true;
   renderStaff(pv, { preview: true });
+  if (currentTab() === 'home') renderHome(pv, sessionName());   // Pay's table edits live
   return pv;                                     // the wheel shows its figures
 }
 
@@ -241,6 +256,7 @@ window.App = {
   repaint() {
     if (previewing) return;
     renderStaff(lastVm);
+    renderHome(lastVm, sessionName());
     renderSheets(lastVm);
     renderPages(lastVm);
     renderSettings(lastVm, sessions.list(), sessions.currentId());
@@ -297,6 +313,14 @@ window.App = {
     if (p) p[field] = raw;
   }, id),
   previewDefault: (field, raw) => preview(raw == null ? null : s => { s.defaults.global[field] = String(raw).trim(); }),
+  // The tips total by a nudge (Home › Pay's table, one pool): the wheel
+  // previews it, a landed nudge gets Undo.
+  previewCash: delta => preview(!delta ? null : s => nudgeCash(s, delta)),
+  nudgeCash(delta) {
+    if (!delta) return;
+    withReview('Tips ' + (delta > 0 ? '+$' : '−$') + Math.abs(delta).toLocaleString('en-US'),
+      () => store.mutate(s => nudgeCash(s, delta), { immediate: true }));
+  },
   // Tips › Drawer's tools, each a small drawer: 'fix' · 'stacks' · 'tidy'.
   openPayoutSheet,
   // Stacks of small bills for managers (Tips › Drawer).

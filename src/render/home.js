@@ -17,7 +17,9 @@ import { DENOMS, fmtHrs, fmtMoney } from '../util.js';
 import { html, render } from '../ui/preact.js';
 import { cx, Icon, Delta, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Table, Denom, Badge, Avatar, RoundIcon, RowLabel,
   THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL, hueIndex, hueVar } from '../ui/pkit.js';
-import { fmtBreak, nightSpan, AxisLabels } from './staff.js';
+import { fmtBreak, nightSpan, AxisLabels, TimeCell, DefaultTime } from './staff.js';
+import { DragAmount } from '../ui/dragtime.js';
+import { payDelta } from '../ui/changes.js';
 import { smallBillsNeeded } from './tabs.js';
 import { EnvelopeTable, Worksheet } from './payout.js';
 import { currentSub, currentTab, pushPage } from '../ui/nav.js';
@@ -162,23 +164,50 @@ function ViewSwitch({ vm, count }) {
 
 // The one-line table: Name · In · Out · Hrs · Tips, every part in its own
 // column so the times, hours and amounts line up down the page.
+// The table is the one place Home edits, live: each In / Out is the same
+// keypad cell as Staff's (tap → keypad, hold → wheel; Next walks In → Out →
+// the next person), the Total row's times are the shift's open / close, and
+// with one pool the Total's tips are a tap-or-hold amount ($1 a row on the
+// wheel). While a cell or the wheel is moving, the tips preview the change
+// (payDelta); otherwise they carry the marks from your last visit.
+const CELL = 'h-8 w-full rounded-md bg-surface-2 text-[0.8125rem] tabular-nums transition';
 function PayTable({ vm, people, total, hours }) {
-  const s = vm.shares, R = vm.resolved;
+  const s = vm.shares;
   const fr = t => t != null && Math.abs(t - Math.round(t)) > 0.01;
-  const mins = people.some(p => fr(p.inAbs) || fr(p.outAbs)) || fr(R?.anchorAbs) || fr(R?.closeAbs);
-  const T = t => (t == null ? '—' : html`<${Clock} abs=${t} mins=${mins} />`);
-  const money = (v, d, cls = '') => html`<span class="inline-flex items-baseline justify-end gap-1.5"><${Delta} d=${d} /><span class=${cx(VALUE, cls)}>${fmtMoney(v)}</span></span>`;
+  const mins = people.some(p => fr(p.inAbs) || fr(p.outAbs));
+  const raw = id => vm.state.staff.find(x => x.id === id);
+  const cell = (p, field) => (raw(p.id) ? html`<${TimeCell} vm=${vm} p=${raw(p.id)} field=${field} cls=${CELL} mins=${mins} />` : '—');
+  const money = (v, d, cls = '') => html`<span class="inline-flex items-baseline justify-end gap-1"><${Delta} d=${d} /><span class=${cx(VALUE, cls)}>${fmtMoney(v)}</span></span>`;
+  const shiftCls = cx(CELL, 'bg-ink/[.06]');
+  const onePool = vm.state.pools.length === 1;
+  const tipsTotal = onePool
+    ? html`<span class="inline-flex items-baseline justify-end gap-1"><${Delta} d=${payDeltaSum(vm, total) || marks?.$total} />
+        <${DragAmount} plain value=${total} min=${0} label="Tips total" cls="-mr-1.5" moneyCls=${VALUE}
+          onSet=${v => App.nudgeCash(v - total)} onPreview=${v => App.previewCash(v == null ? null : v - total)}
+          onTap=${() => App.tab('tips', { sub: 'cash' })} /></span>`
+    : money(total, marks?.$total);
   return html`<${Table} fixed
-    cols=${[{ label: 'Name', w: 'w-[40%]' }, { label: 'In', w: 'w-[15%]' }, { label: 'Out', w: 'w-[15%]' }, { label: 'Hrs', w: 'w-[11%]' }, { label: 'Tips', align: 'right', w: 'w-[19%]' }]}
+    cols=${[{ label: 'Name', w: 'w-[38%]' }, { label: 'In', w: 'w-[15%]' }, { label: 'Out', w: 'w-[15%]' }, { label: 'Hrs', w: 'w-[10%]' }, { label: 'Tips', align: 'right', w: 'w-[22%]' }]}
     rows=${[
       ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id),
-        cells: [html`<${NameCell} vm=${vm} p=${p} />`, T(p.inAbs), T(p.outAbs),
+        cells: [html`<${NameCell} vm=${vm} p=${p} />`, cell(p, 'in'), cell(p, 'out'),
           html`<span class=${isSup(p) ? 'text-ink-3' : ''}>${fmtHrs(hoursOf(p))}</span>`,
-          money(p.final, markOf(p), isSup(p) ? SUP_TEXT : '')] })),
+          money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : '')] })),
       ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, '', '', '', money(s.leftover, null)] }] : []),
     ]}
-    foot=${[html`<${RowLabel}>Total<//>`, T(R?.anchorAbs), T(R?.closeAbs), fmtHrs(hours), money(total, marks?.$total)]} />`;
+    foot=${[html`<${RowLabel}>Total<//>`,
+      html`<${DefaultTime} vm=${vm} field="in" cls=${shiftCls} mins=${mins} />`,
+      html`<${DefaultTime} vm=${vm} field="out" cls=${shiftCls} mins=${mins} />`,
+      fmtHrs(hours), tipsTotal]} />`;
 }
+// The total's change while a preview runs: everyone's pay plus the chump.
+const payDeltaSum = (vm, now) => {
+  if (!vm.preview) return null;
+  const b = vm.preview.base;
+  const was = Object.values(b.pay).reduce((t, x) => t + x, 0) + (b.chump || 0);
+  const v = Math.round((now - was) * 100) / 100;
+  return v ? { v, kind: 'preview', stamp: 0 } : null;
+};
 
 function Pay({ vm, name }) {
   const s = vm.shares;

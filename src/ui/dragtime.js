@@ -213,7 +213,7 @@ export function DragTime({ abs, min, max, onSet, onTap, tapWheel = false, set, b
 // wheel in $1 steps ($300 either way, never under `min`), each row with its
 // change. Summary's Total row uses it for the tips total (one pool).
 const signedMoney = d => (d > 0 ? '+$' : '−$') + Math.abs(d).toLocaleString('en-US');
-export function DragAmount({ value, min = 0, max = 1e7, onSet, onPreview, onTap, cls = '', moneyCls = '', label = 'Amount' }) {
+export function DragAmount({ value, min = 0, max = 1e7, onSet, onPreview, onTap, cls = '', moneyCls = '', label = 'Amount', plain = false }) {
   const { held, handlers, consumeClick } = useHoldWheel({
     value, enabled: value != null, onSet, onPreview,
     wheel: v0 => {
@@ -226,5 +226,7 @@ export function DragAmount({ value, min = 0, max = 1e7, onSet, onPreview, onTap,
   });
   return html`<button data-drag class=${cx('rounded-lg px-1.5 py-1 transition', NO_CALLOUT, held === 'open' ? LOOK_ARMED : held ? 'bg-ink/10' : '', cls)}
     ...${handlers} onClick=${e => { e.stopPropagation(); if (consumeClick()) return; onTap?.(); }}
-    aria-label=${label + ' — tap to edit, hold to pick from a wheel'}><${Money} value=${value} class=${cx(moneyCls, held === 'open' && '!text-on-accent')} /></button>`;
+    aria-label=${label + ' — tap to edit, hold to pick from a wheel'}>${plain
+      ? html`<span class=${cx(moneyCls, held === 'open' && '!text-on-accent')}>${'$' + Number(value || 0).toLocaleString('en-US')}</span>`
+      : html`<${Money} value=${value} class=${cx(moneyCls, held === 'open' && '!text-on-accent')} />`}</button>`;
 }
