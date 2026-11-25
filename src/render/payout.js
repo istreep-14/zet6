@@ -14,7 +14,7 @@ import { envelopeFixes, shortFixes } from '../fixups.js';
 import { STACK_BILLS, STACK_DEFAULTS } from '../stacks.js';
 import { updatePool } from '../store.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra, Delta, SwitchRow, hueVar, hueIndex } from '../ui/pkit.js';
+import { cx, Icon, Card, Button, Alert, Money, Denom, Blocked, Banner, Section, List, Item, Table, Sentinel, zebra, Delta, SwitchRow, hueVar, hueIndex, Avatar, RowLabel } from '../ui/pkit.js';
 import { openSheet, isOpen, sheetBody } from '../ui/sheet.js';
 import { payDelta } from '../ui/changes.js';
 import { currentSub } from '../ui/nav.js';
@@ -105,7 +105,7 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
   const cols = DENOMS.filter(d => colTotal(d) > 0);
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
-  const n = v => v > 0 ? html`<span class="font-semibold">${v}</span>` : html`<span class="text-ink-3/40">–</span>`;
+  const n = v => v > 0 ? html`<span>${v}</span>` : html`<span class="text-ink-3/40">–</span>`;
   // Bill heads / drawer totals: the bill's tint on a faint wash of it (BILL_HEAD).
   const head = (d, v) => html`<span class=${BILL_HEAD} data-d=${d}>${v}</span>`;
   const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} />${!quiet && html`<${Delta} d=${payDelta(vm, p.id, p.final)} under />`}</span>`;
@@ -115,14 +115,14 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
     const k = Object.values(st).reduce((t, x) => t + x, 0);
     return html`<span class="t-small block font-normal leading-tight text-accent">${k} ${k === 1 ? 'stack' : 'stacks'}</span>`;
   };
-  return html`<${Table} fixed lines
-    cols=${[{ label: 'Name', w: 'w-[28%]' }, ...cols.map(d => ({ head: head(d, d) })), { label: 'Pay', align: 'right', w: 'w-[22%]' }]}
+  return html`<${Table} fixed
+    cols=${[{ label: 'Name', w: 'w-[34%]' }, ...cols.map(d => ({ head: head(d, d) })), { label: 'Pay', align: 'right', w: 'w-[22%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => onRow(p.id),
-        cells: [html`<span class="flex min-w-0 items-center gap-1.5"><span class="size-2 shrink-0 rounded-full" style=${{ background: hueVar(hueIndex(vm.state, p.id)) }}></span><span class="truncate">${p.name}</span></span>${stackNote(p.id)}`, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), pay(p)] })),
-      ...(s.leftover > 0 ? [{ key: 'chump', tone: 'muted', cells: ['Chump', ...cols.map(d => n(rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
+        cells: [html`<span class="flex min-w-0 items-center gap-2.5"><${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} size="sm" /><span class="flex min-w-0 flex-col"><span class="truncate">${p.name}</span>${stackNote(p.id)}</span></span>`, ...cols.map(d => n((byPerson[p.id] || {})[d] || 0)), pay(p)] })),
+      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, ...cols.map(d => n(rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
     ]}
-    foot=${['Total', ...cols.map(d => head(d, colTotal(d))), html`<${Money} value=${grand} class="text-money" />`]} />`;
+    foot=${[html`<${RowLabel}>Total<//>`, ...cols.map(d => head(d, colTotal(d))), html`<${Money} value=${grand} class="font-semibold text-money" />`]} />`;
 }
 
 
@@ -189,7 +189,7 @@ export function Worksheet({ vm }) {
   const tipped = ordered.filter(p => p.hours > 0 && !(sup && p.role === 'support'));
   const supPeople = sup ? ordered.filter(p => p.role === 'support' && p.hours > 0) : [];
 
-  const V = 't-small text-ink-2 [&_b]:font-semibold [&_b]:text-ink';
+  const V = '[&_b]:font-semibold [&_b]:text-ink-2';
   const steps = [];
   const step = (label, body) => steps.push({ label, body });
 
@@ -203,13 +203,9 @@ export function Worksheet({ vm }) {
   step('Divide the pool by the hours',
     html`<div class=${V}>$${cents(sup ? pool.tippedTotal : pool.total)} ÷ ${h(pool.tippedHours)} h = <b>$${pool.rate.toFixed(4)}/hr</b></div>`);
 
-  const line = (p, rate) => html`<span class="truncate py-1.5 text-ink">${p.name}</span>
-    <span class="py-1.5 pl-2 text-right">${h(p.hours)} × ${rate.toFixed(4)}</span>
-    <span class="py-1.5 pl-2 text-right">= ${cents(p.exact)}</span>
-    <span class="py-1.5 pl-2 text-right font-semibold text-ink">${p.base}${p.bonus > 0 && html`<em class="ml-0.5 text-[0.6875rem] not-italic text-bad">+${p.bonus}</em>`}</span>`;
+  // Each person's line is the Each person table right under this list.
   step('Hours × rate, rounded down to whole dollars',
-    html`<div class="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] whitespace-nowrap rounded-xl bg-surface-2 px-2.5 py-0.5 text-[0.8125rem] text-ink-2 max-[23.375rem]:text-[0.6875rem]">
-      ${tipped.map(p => line(p, pool.rate))}${supPeople.map(p => line(p, sup.rate))}</div>`);
+    html`<div class=${V}>Each person’s hours × <b>$${pool.rate.toFixed(4)}/hr</b>${supPeople.length ? html` (support × $${sup.rate.toFixed(4)}/hr)` : ''} — the table below</div>`);
 
   const bonusSum = ordered.reduce((t, p) => t + p.bonus, 0);
   if (s.remainder > 0) {
@@ -223,15 +219,12 @@ export function Worksheet({ vm }) {
       <div class=${V}>${where}</div>`);
   }
 
-  return html`<${Section} title="How the split works" aside=${html`<span class="t-small font-semibold text-good">$${pool.rate.toFixed(2)}/hr</span>`}>
-  <${Card}>
-    <ol class="flex flex-col gap-4">
-      ${steps.map((st, i) => html`<li key=${i} class="grid grid-cols-[1.375rem_minmax(0,1fr)] gap-2.5">
-        <span class="grid size-[1.375rem] place-items-center rounded-full bg-surface-2 text-[0.6875rem] font-semibold text-ink-2">${i + 1}</span>
-        <div class="flex min-w-0 flex-col gap-1"><div class="t-small font-semibold">${st.label}</div>${st.body}</div>
-      </li>`)}
-    </ol>
-  <//><//>`;
+  // The same rows as every list: a numbered disc, the step, its sum under it.
+  return html`<${Section} title="How the split works" aside=${html`<span class="font-semibold text-good">$${pool.rate.toFixed(2)}/hr</span>`}>
+    <${List}>${steps.map((st, i) => html`<${Item} key=${i} chevron=${false}
+      lead=${html`<span class="grid size-10 shrink-0 place-items-center rounded-full bg-surface-2 font-semibold text-ink-2">${i + 1}</span>`}
+      title=${st.label} sub=${html`<span class="flex flex-col tabular-nums">${st.body}</span>`} />`)}<//>
+  <//>`;
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────

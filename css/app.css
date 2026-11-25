@@ -1,7 +1,7 @@
 /* TipPool — the design system's foundation (same look as barlog):
      · colour tokens (light, dark twice: system and forced by App settings)
      · the type scale (.t-*), Poppins
-     · grouped lists (.lgroup > .li) — rounded blocks, hairlines between rows
+     · one row style for lists and tables (.lgroup > .li, .page-table) — zebra rows
      · the page shell (header, sub-tabs, scroller, subpages, tab bar, the
        totals strip) — fragile on iOS home-screen apps, see CLAUDE.md
      · bottom sheets
@@ -162,16 +162,20 @@
   }
   @media (max-width: 374px) { :root { --gutter: 0.75rem; } }
 
-  /* ── List group (.lgroup): one rounded block of rows (pkit List / Item), hairlines
-     between rows, inset past the lead (--inset, set per Item). ─────────── */
-  .lgroup { background: var(--surface); border-radius: var(--radius-card, 1rem); overflow: hidden; box-shadow: var(--card-ring, none); }
+  /* ── One row style for every list and table ──────────────────────────────
+     Lists (.lgroup > .li, pkit List / Item) and tables (.page-table, pkit
+     Table and the custom grids) look the same: full width on a page (a
+     rounded surface group in a sheet), rows alternating with a faint tint
+     (zebra — no hairlines between rows), a surface band for the sticky head,
+     the total row on a surface-2 band. --zbase is what the rows sit on: the
+     page on a page, the card in a sheet. */
+  :root { --zbase: var(--surface); }
+  .panel, .subpage { --zbase: var(--bg); }
+  .lgroup, .page-table { background: var(--zbase); border-radius: var(--radius-card, 1rem); overflow: clip; box-shadow: var(--card-ring, none); }
   .lgroup > .li { position: relative; }
-  .lgroup > .li + .li::before {
-    content: ""; position: absolute; top: 0; right: 0; left: var(--inset, 1rem);
-    height: 1px; background: var(--line);
-  }
+  .lgroup > .li:nth-child(even of .li:not(.thead)) { background-color: color-mix(in srgb, var(--ink) 4%, var(--zbase)); }
   button.li { transition: background .12s; }
-  button.li:active:not(:disabled) { background: var(--surface-2); }
+  .lgroup > button.li.li:active:not(:disabled), button.li:active:not(:disabled) { background: var(--surface-2); }
 
   /* Figures: 2–4 equal cells split by hairlines (pkit Stats) */
   .figures { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; background: var(--surface); border-radius: var(--radius-card, 1rem); padding: .75rem 0; box-shadow: var(--card-ring, none); }
@@ -301,16 +305,20 @@
   .panel .lgroup, .panel .page-table, .panel .pool-editor,
   .subpage .lgroup, .subpage .page-table {
     margin-inline: calc(-1 * var(--gutter));
-    border-radius: 0; background: transparent; box-shadow: none; overflow: visible;
+    border-radius: 0; box-shadow: none; overflow: visible;
   }
   /* Pool editors use Card utilities, which otherwise override page styling. */
   .panel .pool-editor { border-radius: 0 !important; background: transparent !important; box-shadow: none !important; overflow: visible !important; }
   .panel .ui-section:has(> .lgroup) > .section-heading,
   .subpage .ui-section:has(> .lgroup) > .section-heading {
     position: sticky; top: var(--thead-top, 0px); z-index: 4;
-    background: var(--bg); padding-block: .4rem; box-shadow: 0 1px 0 var(--line);
+    background: var(--surface); padding-block: .4rem; box-shadow: 0 1px 0 var(--line);
     transition: top .2s;
+    margin-bottom: -.5rem;              /* the band sits right on its list (no gap of page under it) */
   }
+  /* Every sticky head — a list's caption band, a table's header row, the
+     Shift axis, Staff's Name · In · Out · Hrs — is the same surface band with
+     a hairline under it. */
   /* Text lines up down the page: captions, footnotes and a row's text start
      at the gutter, where a full-width list's rows put theirs (the caption's
      band still runs edge to edge). In sheets, captions sit over inset cards:

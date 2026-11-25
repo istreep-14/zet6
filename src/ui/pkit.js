@@ -65,9 +65,12 @@ export function Avatar({ name, i = 0, closer = false, forced = true, size = 'md'
 
 // An icon in a round tile the size of an avatar — for the non-person rows of a
 // person list (Chump, Total) so every row's text starts at the same place.
-export function RoundIcon({ name, class: cls = 'bg-surface-2 text-ink-2' }) {
-  return html`<span class=${cx('grid size-10 shrink-0 place-items-center rounded-full', cls)} aria-hidden="true"><${Icon} name=${name} class="size-5" /></span>`;
+export function RoundIcon({ name, small = false, class: cls = 'bg-surface-2 text-ink-2' }) {
+  return html`<span class=${cx('grid shrink-0 place-items-center rounded-full', small ? 'size-8' : 'size-10', cls)} aria-hidden="true"><${Icon} name=${name} class=${small ? 'size-4' : 'size-5'} /></span>`;
 }
+// A table's first column for a non-person row (Total, Chump): the small
+// round icon, then the label — lined up with the people's avatars above it.
+export const RowLabel = ({ icon = 'sigma', children }) => html`<span class="inline-flex min-w-0 items-center gap-2.5"><${RoundIcon} name=${icon} small /><span class="truncate">${children}</span></span>`;
 
 // Derived figures as one quiet line, the way a profile shows its counts:
 // each value in ink, its label after it in ink-3 ("5 people  45h  $26.24/h").
@@ -425,13 +428,14 @@ export const Row = Item;
 // rows, a sticky header that shrinks while stuck (ui/sticky.js), total row on
 // a surface-2 fill. `fixed` = table-fixed (widths from cols[].w).
 export const T_HEAD = 't-cap text-ink-3';
-export const TOTAL_FILL = 'bg-surface-2';
+// The total row: the same band as a list's Total (opaque, so a pinned first
+// column stays solid while the table scrolls sideways).
+export const TOTAL_FILL = 'bg-[color-mix(in_srgb,var(--surface-2)_60%,var(--zbase))]';
 // `lines`: hairlines between columns too (a grid — envelopes, math).
 export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, scroll = false, lines = false, class: cls = '', ...rest }) {
   const align = c => ({ left: 'text-left', right: 'text-right' }[c.align] || 'text-center');
   const first = cx('pl-4 pr-2 text-left', stickyFirst && 'sticky left-0 z-[1] bg-inherit');
-  const cell = (c, i) => cx('px-1.5 tabular-nums', i === 0 ? first : align(c), i === cols.length - 1 && i > 0 && 'pr-4', c.hl && 'bg-accent/12',
-    lines && i > 0 && 'border-l border-line');
+  const cell = (c, i) => cx('px-1.5 tabular-nums', i === 0 ? first : align(c), i === cols.length - 1 && i > 0 && 'pr-4', c.hl && 'bg-accent/12');
   const table = html`<table class=${cx('t-body w-full border-collapse whitespace-nowrap', fixed && 'table-fixed')}>
       ${fixed && html`<colgroup>${cols.map((c, i) => html`<col key=${i} class=${c.w || ''} />`)}</colgroup>`}
       <thead class="thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--line)] transition-[top] duration-200"><tr>
@@ -439,16 +443,16 @@ export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, sc
           onClick=${c.onHead}>${c.head ?? c.label}</th>`)}
       </tr></thead>
       <tbody>${rows.map((r, n) => r.section
-        ? html`<tr key=${'s' + n} class="bg-surface"><td colspan=${cols.length} class="t-cap px-4 pb-1 pt-3 text-ink-3">${r.section}</td></tr>`
+        ? html`<tr key=${'s' + n} class="bg-[var(--zbase)]"><td colspan=${cols.length} class="t-cap px-4 pb-1 pt-3 text-ink-3">${r.section}</td></tr>`
         : html`<tr key=${r.key ?? n} class=${cx(zebra(n), r.onClick && 'cursor-pointer transition active:bg-surface-2', r.tone === 'muted' && 'text-ink-2')} onClick=${r.onClick}>
-            ${r.cells.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-[var(--row)]', i === 0 && 'max-w-[7rem] truncate')}>${v}</td>`)}
+            ${r.cells.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-12', i === 0 && 'max-w-[9rem] truncate')}>${v}</td>`)}
           </tr>`)}</tbody>
-      ${foot && html`<tfoot><tr class=${cx('font-semibold', TOTAL_FILL)}>
-        ${foot.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-[var(--row-lg)]')}>${v}</td>`)}
+      ${foot && html`<tfoot><tr class=${TOTAL_FILL}>
+        ${foot.map((v, i) => html`<td key=${i} class=${cx(cell(cols[i] || {}, i), 'h-14')}>${v}</td>`)}
       </tr></tfoot>`}
     </table>`;
-  return html`<${Card} flush class=${cx('page-table', cls)} ...${rest}><${Sentinel} />${scroll
-    ? html`<div class="overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">${table}</div>` : table}<//>`;
+  return html`<div class=${cx('page-table', cls)} ...${rest}><${Sentinel} />${scroll
+    ? html`<div class="overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">${table}</div>` : table}</div>`;
 }
 
 // Status card: ok (good) / error (bad) / warn. Tappable with onClick;
@@ -494,7 +498,8 @@ export const TABLE_HEAD = 't-cap text-center text-ink-3';
 // between people) and a sticky header (THEAD after a <Sentinel />; see
 // ui/sticky.js — it shrinks while stuck via data-[stuck]: / group-data-[stuck]:).
 // Card flush uses overflow-clip (not hidden) so sticky still works inside it.
-export const ZEBRA = 'bg-[color-mix(in_srgb,var(--ink)_3%,var(--surface))]';
-export const zebra = i => (i % 2 ? ZEBRA : 'bg-surface');
+// --zbase is what the rows sit on: the page (on a page) or the card (in a sheet).
+export const ZEBRA = 'bg-[color-mix(in_srgb,var(--ink)_4%,var(--zbase))]';
+export const zebra = i => (i % 2 ? ZEBRA : 'bg-[var(--zbase)]');
 export const THEAD = 'thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--line)] transition-[top,height,padding] duration-200';
 export const Sentinel = ({ cls = '' }) => html`<div class=${cx('thead-sentinel h-0', cls)} aria-hidden="true"></div>`;

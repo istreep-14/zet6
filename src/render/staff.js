@@ -257,7 +257,7 @@ function TimeBox({ vm, p, field }) {
 
 function Head() {
   const cap = 't-cap text-ink-3';
-  return html`<${Sentinel} /><div class=${cx(THEAD, 'li bg-bg px-4 py-2')} style=${{ '--inset': '0' }}>
+  return html`<${Sentinel} /><div class=${cx(THEAD, 'li px-4 py-2')} style=${{ '--inset': '0' }}>
     <div class=${COLS}>
       <span class=${cx(cap, 'pl-[2.625rem]')}>Name</span>
       <span class=${cx(cap, 'text-center')}>In</span><span></span><span class=${cx(cap, 'text-center')}>Out</span>

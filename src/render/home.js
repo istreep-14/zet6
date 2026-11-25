@@ -15,7 +15,7 @@
 
 import { DENOMS, fmtHrs, fmtMoney } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Table, Denom, Badge, Avatar, Meta, RoundIcon,
+import { cx, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Table, Denom, Badge, Avatar, RoundIcon, RowLabel,
   THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL, hueIndex, hueVar } from '../ui/pkit.js';
 import { fmtBreak, nightSpan, AxisLabels } from './staff.js';
 import { smallBillsNeeded } from './tabs.js';
@@ -39,9 +39,11 @@ const PoolTile = ({ i, label }) => {
 };
 // The closer's dot only means something while not everyone closes.
 const allClose = vm => vm.shares.perPerson.filter(x => !isSup(x)).every(x => x.closer);
+// A person in a table's first column: their small avatar, then the name —
+// the same look as a list row.
+const NameCell = ({ vm, p }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-2.5"><${PersonAv} vm=${vm} p=${p} size="sm" /><span class="truncate">${p.name}</span></span>`;
 const PersonAv = ({ vm, p, size }) => html`<${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} closer=${p.closer && (size === 'lg' || !allClose(vm))} size=${size} />`;
 const RoleDot = ({ role }) => html`<span class=${cx('size-2 shrink-0 rounded-full', ROLE_DOT[role])} aria-label=${role}></span>`;
-const CloserDot = () => html`<span class="inline-block size-1.5 shrink-0 rounded-full bg-bad/75" aria-label="closer"></span>`;
 const hoursOf = p => p.shiftHours ?? p.hours;
 
 // Staff-tab order: state order, grouped by role when roles are on.
@@ -98,22 +100,24 @@ function Pay({ vm, name }) {
   const people = staffOrder(vm, s.perPerson);
   const { tint } = rolesOf(vm, people);
   const hours = people.filter(p => !isSup(p)).reduce((t, p) => t + hoursOf(p), 0);
-  const paid = people.reduce((t, p) => t + p.final, 0);
+  // The total is all the cash: everyone's take-home plus the chump.
+  const total = people.reduce((t, p) => t + p.final, 0) + s.leftover;
+  const before = vm.sharesBefore && vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0) + vm.sharesBefore.leftover;
   const R = vm.resolved;
   return html`<${Section} title=${name || 'Payouts'} aside=${people.length + (people.length === 1 ? ' person' : ' people')}
     footer=${html`<${Key} vm=${vm} people=${people} />`}>
     <${List}>
       ${people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id)} lead=${html`<${PersonAv} vm=${vm} p=${p} />`}
-        title=${html`${tint && html`<${RoleDot} role=${p.role} />`}<span class="truncate font-semibold">${p.name}</span>`}
+        title=${html`${tint && html`<${RoleDot} role=${p.role} />`}<span class="truncate">${p.name}</span>`}
         sub=${html`<span class="tabular-nums"><${Times} a=${p.inAbs} b=${p.outAbs} /> · ${fmtHrs(hoursOf(p))}h</span>`}
         trail=${html`<${PayValue} vm=${vm} p=${p} />`} />`)}
-      ${s.leftover > 0 && html`<${Item} lead=${html`<${RoundIcon} name="cash" />`} title=${html`<span class="font-normal text-ink-2">Chump</span>`} sub="Stays in the drawer"
-        value=${fmtMoney(s.leftover)} valueTone=" text-ink-2" />`}
-      <${Item} class="bg-surface-2/60" lead=${html`<${RoundIcon} name="sigma" />`} title=${html`<span class="font-semibold">Total</span>`}
-        sub=${html`<${Meta} items=${[{ v: html`<${Times} a=${R?.anchorAbs} b=${R?.closeAbs} />` }, { v: fmtHrs(hours), l: 'h', tight: true }, { v: rate2(s.rate), l: '/h', tight: true }]} />`}
+      ${s.leftover > 0 && html`<${Item} lead=${html`<${RoundIcon} name="cash" />`} title="Chump" sub="Left after rounding · stays in the drawer"
+        value=${fmtMoney(s.leftover)} />`}
+      <${Item} class=${TOTAL_FILL} lead=${html`<${RoundIcon} name="sigma" />`} title="Total"
+        sub=${html`<span class="tabular-nums"><${Times} a=${R?.anchorAbs} b=${R?.closeAbs} /> · ${fmtHrs(hours)}h · ${rate2(s.rate)}/h</span>`}
         trail=${html`<span class="flex shrink-0 flex-col items-end leading-tight">
-          <${Money} value=${paid} class="text-[1rem] font-semibold tracking-tight text-money" />
-          ${vm.sharesBefore && html`<span class="t-small tabular-nums text-ink-3">was ${fmtMoney(vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0))}</span>`}
+          <${Money} value=${total} class="text-[1rem] font-semibold tracking-tight text-money" />
+          ${before != null && html`<span class="t-small tabular-nums text-ink-3">was ${fmtMoney(before)}</span>`}
         </span>`} />
     <//>
   <//>`;
@@ -128,7 +132,7 @@ function Shift({ vm }) {
   return html`<${Section} title="Shift" footer="The red mark is the close. A striped gap is a break with a start time; one without counts in the hours only.">
     <div class="-mx-[var(--gutter)]">
       <${Sentinel} />
-      <div class=${cx(THEAD, 'bg-bg px-4 py-2')}><${AxisLabels} span=${span} /></div>
+      <div class=${cx(THEAD, 'px-4 py-2')}><${AxisLabels} span=${span} /></div>
       ${people.map(p => {
         const start = p.inAbs == null ? null : at(p.inAbs), end = p.outAbs == null ? null : at(p.outAbs);
         const b0 = p.brkStart == null ? null : at(p.brkStart);
@@ -136,7 +140,7 @@ function Shift({ vm }) {
         return html`<button key=${p.id} class="flex w-full flex-col gap-2 border-b border-line px-4 py-2.5 text-left transition active:bg-surface-2" onClick=${() => openPerson(p.id)}>
           <span class="flex w-full items-center gap-2.5">
             <${PersonAv} vm=${vm} p=${p} size="sm" />
-            <span class="t-body flex min-w-0 flex-1 items-center gap-1.5 font-semibold"><span class="truncate">${p.name}</span></span>
+            <span class="t-body flex min-w-0 flex-1 items-center gap-1.5"><span class="truncate">${p.name}</span></span>
             <span class="t-small shrink-0 tabular-nums text-ink-3"><${Times} a=${p.inAbs} b=${p.outAbs} /> · ${fmtHrs(hoursOf(p))}h</span>
           </span>
           <span aria-hidden="true" class="relative block h-3 w-full rounded-full bg-ink/[.07]">
@@ -174,13 +178,13 @@ function MathTable({ vm }) {
   };
   const paid = people.reduce((t, p) => t + p.final, 0);
   return html`<${Section} title="Each person" footer=${'Hours × rate = the exact share, rounded down to whole dollars; + is a closer bonus' + (s.perPool.length > 1 ? '. With several pools the rate is the blend.' : '.')}>
-    <${Table} lines scroll stickyFirst
+    <${Table} scroll stickyFirst
       cols=${[{ label: 'Name' }, { label: 'Hrs' }, { label: 'Rate' }, { label: 'Exact', align: 'right' }, { label: 'Round', align: 'right' }, { label: 'Tips', align: 'right' }]}
       rows=${people.map(p => ({ key: p.id, onClick: () => openPerson(p.id), tone: isSup(p) ? 'muted' : '',
-        cells: [html`<span class="inline-flex max-w-full items-center gap-1.5"><span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span>`,
+        cells: [html`<${NameCell} vm=${vm} p=${p} />`,
           fmtHrs(p.hours), p.hours > 0 ? r2(p.exact / p.hours) : dash, r2(p.exact), round(p),
           html`<${Money} value=${p.final} class=${cx('font-semibold', isSup(p) && SUP_TEXT)} />`] }))}
-      foot=${['Total', fmtHrs(s.totalHours), r2(s.rate), r2(s.totalCash), s.leftover > 0 ? html`<span class="text-ink-2">−${s.leftover}</span>` : dash, html`<${Money} value=${paid} />`]} />
+      foot=${[html`<${RowLabel}>Total<//>`, fmtHrs(s.totalHours), r2(s.rate), r2(s.totalCash), s.leftover > 0 ? html`<span class="text-ink-2">−${s.leftover}</span>` : dash, html`<${Money} value=${paid} />`]} />
   <//>`;
 }
 
@@ -196,13 +200,13 @@ function PoolGrid({ vm }) {
     return isSup(p) ? !!st.includeSupport : !!st.roles?.[p.role];
   };
   const TH = 'px-3 pb-2 pt-2.5 font-normal';
-  const TD = 'whitespace-nowrap px-3 py-2 text-right align-top tabular-nums';
-  const SEP = 'border-l border-line';
+  const TD = 'whitespace-nowrap px-3 py-2 text-right align-middle tabular-nums';
+  const SEP = '';
   const NAME = 'sticky left-0 z-[1] bg-inherit pl-4 pr-2 text-left';
   const Two = ({ top, sub, subCls = 'text-ink-3' }) => html`<span class="block leading-tight">${top}</span><span class=${cx('t-small block', subCls)}>${sub}</span>`;
   const paid = people.reduce((t, p) => t + p.final, 0);
   return html`<${Section} title="By pool" footer="Each pool: what it paid · their hours in it (exact, before rounding). Blank = their role isn’t in that pool · — = didn’t work its window.">
-    <${Card} flush class="page-table"><div class="overflow-x-auto [scrollbar-width:thin]">
+    <div class="page-table"><div class="overflow-x-auto [scrollbar-width:thin]">
       <table class="min-w-full border-separate border-spacing-0 text-[1rem]">
         <thead><tr class="bg-surface shadow-[0_1px_0_var(--line)]">
           <th class=${cx(NAME, TH, 't-cap z-[2] align-bottom text-ink-3')}>Name</th>
@@ -215,7 +219,7 @@ function PoolGrid({ vm }) {
         </tr></thead>
         <tbody>
           ${people.map((p, i) => html`<tr key=${p.id} class=${cx(zebra(i), 'cursor-pointer active:brightness-95')} onClick=${() => openPerson(p.id)}>
-            <td class=${cx(NAME, 'py-2 align-top')}><span class="flex max-w-[9rem] items-center gap-1.5"><span class="truncate">${p.name}</span>${p.closer && html`<${CloserDot} />`}</span></td>
+            <td class=${cx(NAME, 'py-2 align-middle')}><span class="flex max-w-[10rem]"><${NameCell} vm=${vm} p=${p} /></span></td>
             ${pools.map(pl => {
               const x = p.perPool?.[pl.id];
               return html`<td key=${pl.id} class=${cx(TD, SEP, isSup(p) && SUP_TEXT)}>${x ? html`<${Two} top=${r2(x.raw)} sub=${fmtHrs(x.hours) + 'h'} />`
@@ -225,12 +229,12 @@ function PoolGrid({ vm }) {
           </tr>`)}
         </tbody>
         <tfoot><tr class=${TOTAL_FILL}>
-          <td class=${cx(NAME, 'py-2.5 align-top font-semibold')}>Total</td>
+          <td class=${cx(NAME, 'py-2.5 align-middle')}><${RowLabel}>Total<//></td>
           ${pools.map(pl => html`<td key=${pl.id} class=${cx(TD, SEP, 'py-2.5')}><${Two} top=${html`<${Money} value=${pl.total} class="font-semibold" />`} sub=${fmtHrs(pl.tippedHours) + 'h'} subCls=" text-ink-2" /></td>`)}
           <td class=${cx(TD, SEP, 'py-2.5 pr-4')}><${Money} value=${paid} class="font-semibold" /></td>
         </tr></tfoot>
       </table>
-    </div><//>
+    </div></div>
   <//>`;
 }
 
@@ -238,7 +242,7 @@ function PoolRows({ vm }) {
   const pools = vm.shares.perPool;
   return html`<${Section} title="Pools"><${List}>${pools.map((pl, i) => html`<${Item} key=${pl.id}
     lead=${html`<${PoolTile} i=${i} label=${pl.label} />`}
-    title=${pl.label} sub=${html`<${Meta} items=${[{ v: html`<${Times} a=${pl.startAbs} b=${pl.endAbs} />` }, { v: fmtHrs(pl.tippedHours), l: 'h', tight: true }, { v: rate2(pl.rate), l: '/h', tight: true }]} />`}
+    title=${pl.label} sub=${html`<span class="tabular-nums"><${Times} a=${pl.startAbs} b=${pl.endAbs} /> · ${fmtHrs(pl.tippedHours)}h · ${rate2(pl.rate)}/h</span>`}
     value=${fmtMoney(pl.total)} onClick=${() => openPool(pl.id)} />`)}<//><//>`;
 }
 
