@@ -220,6 +220,8 @@
   .hdr-btn:active { background: var(--surface-2); }
   .hdr-text { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
   .hdr-title { font-size: 1.25rem; font-weight: 600; line-height: 1.2; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hdr-meta { font-size: .6875rem; line-height: 1.2; }
+  .hdr-meta > span { margin-right: .5rem !important; }
   .hdr-actions { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; }
   .status-total { display: flex; flex-direction: column; gap: .35rem; }
   .roster-rail { display: flex; gap: .75rem; overflow-x: auto; overscroll-behavior-x: contain; padding: .25rem var(--gutter) .5rem; margin-inline: calc(-1 * var(--gutter)); scrollbar-width: none; }
@@ -548,7 +550,9 @@
   .billtag i { font-style: normal; font-weight: 400; margin-left: 1px; color: var(--ink-2); }
   /* bill table (Payout): column heads and drawer totals in the bill's tint */
   .bill-col { color: var(--dc); font-weight: 600; }
-  .envelope-grid table { min-width: 34.5rem; }
+  .cash-floor { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--surface)), var(--surface)); box-shadow: var(--card-ring, none); }
+  .envelope-grid { background: color-mix(in srgb, var(--accent) 3%, var(--surface)); }
+  .payout-list { background: color-mix(in srgb, var(--good) 4%, var(--surface)); }
 }
 
 @layer components {

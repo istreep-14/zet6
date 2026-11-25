@@ -10,9 +10,8 @@
 
 import { poolValue, fmtMoney, fmtMoneyShort, fmtHrs } from '../util.js';
 import { html, render } from '../ui/preact.js';
-import { cx, Icon, Meta, Clock, Delta, Card, Section, Stats } from '../ui/pkit.js';
-import { currentTab, currentSub, subsOf, setSub, stackOf, onSwipe, TITLES, pushPage } from '../ui/nav.js';
-import { figDelta } from '../ui/changes.js';
+import { cx, Icon, Meta, Clock } from '../ui/pkit.js';
+import { currentTab, currentSub, subsOf, setSub, stackOf, onSwipe, TITLES } from '../ui/nav.js';
 
 const $ = id => document.getElementById(id);
 
@@ -78,6 +77,12 @@ function metaOf(vm, tab, sessionName) {
   const span = R?.anchorAbs != null && R?.closeAbs != null
     && { v: html`<${Clock} abs=${R.anchorAbs} /> – <${Clock} abs=${R.closeAbs} />` };
   const hours = sh && { v: fmtHrs(shiftHours(sh)), l: 'h', tight: true };
+  // The shift's working facts live in every root header, not behind a
+  // calculator page. Small type keeps all four figures visible together.
+  if (sh) return [
+    { v: fmtMoney(vm.totalCash || 0), l: 'tips', tone: 'text-money' }, people(sh.perPerson.length), hours,
+    { v: rate2(sh.rate), l: '/h', tight: true, tone: 'text-money' },
+  ];
   if (tab === 'home') return sh
     ? [{ v: fmtMoney(sh.perPerson.reduce((t, p) => t + p.final, 0)), l: 'paid' }, people(sh.perPerson.length), { v: rate2(sh.rate), l: '/h', tight: true }]
     : [{ v: fmtDay(s.meta.date) }, named ? people(named) : { v: 'Nobody yet', tone: 'text-ink-3' }];
@@ -121,37 +126,13 @@ function Header({ vm, tab, subs, sessionName }) {
   return html`<div class="hdr-bar">
       <button class="hdr-btn" onClick=${() => App.openMenu()} aria-label="Menu: sessions and tools" aria-controls="menu">
         <${DayDisc} iso=${vm.state.meta.date} /></button>
-      <div class="hdr-text"><h1 class="hdr-title">${TITLES[tab]}</h1><${Meta} items=${metaOf(vm, tab, sessionName)} /></div>
-      <button class="hdr-btn" onClick=${openShiftStatus} aria-label="Open shift status"><${Icon} name="calc" class="size-5 text-accent" /></button>
+      <div class="hdr-text"><h1 class="hdr-title">${TITLES[tab]}</h1><${Meta} class="hdr-meta" items=${metaOf(vm, tab, sessionName)} /></div>
     </div>
     ${subs.length > 0 && html`<div class="hdr-tabs" role="tablist" aria-label=${TITLES[tab]}>
       ${subs.map(s => html`<button key=${tab + s.value} role="tab" class="hdr-tab" aria-selected=${String(s.value === sub)}
         onClick=${() => setSub(tab, s.value)}><span class="hdr-tab-label">${s.label}</span></button>`)}
       <span class="hdr-ink" aria-hidden="true"></span>
     </div>`}`;
-}
-
-// Shift facts are deliberately on demand rather than repeated above every
-// task. The work pages stay focused; this is the one clear home for the
-// whole shift's numbers.
-function ShiftStatus({ vm }) {
-  const sh = !vm.blocked && vm.shares;
-  const named = vm.state.staff.filter(p => p.name.trim()).length;
-  const hours = sh ? shiftHours(sh) : vm.resolved?.staff?.filter(p => p.role !== 'support').reduce((n, p) => n + (p.hours || 0), 0);
-  const figure = (label, value, key, unit = '', tone = '') => {
-    const d = key && figDelta(vm, key);
-    return { label, value: html`<span class=${cx(tone, d && 'live-changed')}>${value}<${Delta} d=${d} unit=${unit} /></span>` };
-  };
-  return html`<div class="flex flex-col gap-6">
-    <${Card} class="status-total bg-accent/12"><span class="t-cap text-accent">Tips to split</span><span class="t-display text-money">${fmtMoney(vm.totalCash || 0)}</span><span class="t-small text-ink-3">Cash entered across this shift</span><//>
-    <${Section} title="Shift at a glance"><${Stats} items=${[
-      figure('People', named), figure('Hours worked', hours != null ? fmtHrs(hours) + 'h' : '—', 'hours', 'h', 'text-accent'), figure('Average rate', sh ? rate2(sh.rate) + '/h' : '—', 'rate', '$', 'text-money'),
-    ]} /><//>
-  </div>`;
-}
-
-function openShiftStatus() {
-  pushPage({ key: 'shift-status', title: 'Shift status', meta: vm => [{ v: fmtMoney(vm.totalCash || 0), l: 'in tips' }], body: vm => html`<${ShiftStatus} vm=${vm} />` });
 }
 
 // The underline sits under the current sub-tab's label, `progress` sub-tabs

@@ -76,7 +76,7 @@ function Key({ vm, people }) {
 // shift-status page.
 function SmallBills({ vm }) {
   const need = smallBillsNeeded(vm) || [{ d: 10, n: 0 }, { d: 5, n: 0 }, { d: 1, n: 0 }];
-  return html`<${Card} class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
+  return html`<${Card} class="cash-floor flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5">
     <span class="flex min-w-0 flex-col gap-0.5">
       <span class="t-cap text-ink-3">Exact-change floor</span>
       <span class="t-small text-ink-2">Small bills needed for every envelope</span>
@@ -148,49 +148,35 @@ function ShiftBar({ vm, p, span }) {
 }
 
 // ── Pay: one row per person ──────────────────────────────────────────────────
-// The amount reads like the pool page's: plain "$168" in the row's value
-// style (body, semibold, ink; support in its colour) — no small "$", no
-// green. A register over / short adds the change under it.
-const VALUE = 't-body font-semibold tabular-nums';
-function PayValue({ vm, p }) {
-  const before = vm.sharesBefore?.perPerson.find(x => x.id === p.id)?.final;
-  const ch = before == null ? 0 : p.final - before;
-  return html`<span class=${cx('flex shrink-0 flex-col items-end rounded-md leading-tight', payDelta(vm, p.id, p.final) && 'live-changed')}>
-    <span class="flex items-baseline gap-1.5"><${Delta} d=${markOf(p)} /><span class=${cx(VALUE, isSup(p) ? SUP_TEXT : p.final > 0 ? 'text-ink' : 'text-ink-3')}>${fmtMoney(p.final)}</span></span>
-    ${vm.sharesBefore && html`<span class=${cx('t-small tabular-nums', ch < 0 ? 'text-bad' : ch > 0 ? 'text-good' : 'text-ink-3')}>${ch ? signed(ch) : 'same'}</span>`}
-  </span>`;
-}
-
-// Home has one payout ledger instead of two nearly identical presentations.
-// It keeps the useful live time and cash controls, but makes the reading order
-// unmistakable: person → shift → take-home.
+// Home uses the same direct list rhythm as a pool: person and shift at left,
+// then the take-home as a nearby coloured pill instead of a distant table cell.
 // On the ledger, time is an inline control rather than a field. It keeps the
 // same tap/hold behaviour, but does not reserve a box-height under the name.
 const CELL = 'inline-flex h-auto min-w-0 items-center p-0 text-[0.8125rem] leading-tight tabular-nums transition';
 // Every time reads the same quiet grey, typed or following the default.
 const TIME_TONE = () => 'text-ink-3';
-const TableName = ({ vm, p, sub }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-2"><${PersonAv} vm=${vm} p=${p} size="sm" /><span class="flex min-w-0 flex-col leading-tight"><span class="t-body inline-flex items-center gap-1.5 truncate">${p.name}${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}</span>${sub}</span></span>`;
+const MONEY_PILL = 't-small font-semibold tabular-nums';
+const PayoutPill = ({ value, d, tone = 'green' }) => html`<span class=${cx('inline-flex shrink-0 items-center gap-1', d && 'live-changed')}><${Delta} d=${d} /><${Badge} tone=${tone}><span class=${MONEY_PILL}>${fmtMoney(value)}</span><//></span>`;
 function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
   const s = vm.shares;
   const raw = id => vm.state.staff.find(x => x.id === id);
   const cell = (p, field) => (raw(p.id) ? html`<${TimeCell} vm=${vm} p=${raw(p.id)} field=${field} cls=${CELL} bare tone=${TIME_TONE} />` : '—');
-  const money = (v, d, cls = '') => html`<span class=${cx('inline-flex items-baseline justify-end gap-1 rounded-md', d && 'live-changed')}><${Delta} d=${d} /><span class=${cx(VALUE, cls)}>${fmtMoney(v)}</span></span>`;
+  const timeSub = p => html`<span class="inline-flex items-center gap-1"><span class="inline-flex items-center gap-1">${cell(p, 'in')}<span>→</span>${cell(p, 'out')}</span><span>· ${fmtHrs(hoursOf(p))}h</span></span>`;
   const onePool = vm.state.pools.length === 1;
   const tipsTotal = onePool
-    ? html`<span class="inline-flex items-baseline justify-end gap-1"><${Delta} d=${payDeltaSum(vm, total) || marks?.$total} />
-        <${DragAmount} plain value=${total} min=${0} label="Tips total" cls="-mr-1.5" moneyCls=${VALUE}
+    ? html`<span class="inline-flex items-center gap-1"><${Delta} d=${payDeltaSum(vm, total) || marks?.$total} />
+        <${DragAmount} plain value=${total} min=${0} label="Tips total" cls="h-6 rounded-full bg-good/14 px-2.5 py-0 text-good" moneyCls=${MONEY_PILL}
           onSet=${v => App.nudgeCash(v - total)} onPreview=${v => App.previewCash(v == null ? null : v - total)}
           onTap=${() => App.tab('tips')} /></span>`
-    : money(total, marks?.$total);
-  return html`<${Table} fixed firstWide class="payout-ledger"
-    cols=${[{ label: 'Person', w: 'w-[76%]' }, { label: 'Take home', align: 'right', w: 'w-[24%]' }]}
-    rows=${[
-      ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id, pageTab),
-        cells: [html`<${TableName} vm=${vm} p=${p} sub=${html`<span class="t-small inline-flex items-center gap-1 text-ink-3"><span class="inline-flex items-center gap-1">${cell(p, 'in')}<span>→</span>${cell(p, 'out')}</span><span>· ${fmtHrs(hoursOf(p))}h</span></span>`} />`,
-          money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : 'text-money')] })),
-      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, money(s.leftover, null)] }] : []),
-    ]}
-    foot=${[html`<${RowLabel}>Total<//><span class="ml-2 t-small inline-flex items-center gap-1 text-ink-3"><span class="inline-flex items-center gap-1"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare /><span>→</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare /></span><span>· ${fmtHrs(hours)}h</span></span>`, tipsTotal]} />`;
+    : html`<${PayoutPill} value=${total} d=${marks?.$total} />`;
+  const totalSub = html`<span class="inline-flex items-center gap-1"><span class="inline-flex items-center gap-1"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare /><span>→</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare /></span><span>· ${fmtHrs(hours)}h</span></span>`;
+  return html`<${List} class="payout-list">
+    ${people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id, pageTab)}
+      lead=${html`<${PersonAv} vm=${vm} p=${p} size="sm" />`} title=${p.name} sub=${timeSub(p)}
+      trail=${html`<${PayoutPill} value=${p.final} d=${payDelta(vm, p.id, p.final) || markOf(p)} tone=${isSup(p) ? 'support' : 'green'} />`} />`)}
+    ${s.leftover > 0 && html`<${Item} icon="cash" title="Chump" trail=${html`<${PayoutPill} value=${s.leftover} tone="muted" />`} chevron=${false} />`}
+    <${Item} icon="sigma" title="Total" sub=${totalSub} trail=${tipsTotal} chevron=${false} />
+  <//>`;
 }
 // The total's change while a preview runs: everyone's pay plus the chump.
 const payDeltaSum = (vm, now) => {

@@ -88,9 +88,8 @@ export function applyPendingTradeDown() {
 }
 
 // ── Envelopes table: person · denomination count grid · pay ────────────────
-// Each denomination keeps its own colour-coded column. The grid can scroll
-// under a pinned name column, so counts remain legible instead of collapsing
-// into tiny cells on a phone.
+// Each person gets a compact 3 × 2 count matrix. Every bill stays visible on
+// a phone, so there is no horizontal scroller competing with the sticky head.
 // The envelope grid on its own (Payout's Envelopes, Summary's Bills view):
 // `order` = the people in row order (default payoutOrder). A person taking
 // bundled stacks (vm.stacks) says so under their name.
@@ -101,10 +100,9 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
   const colTotal = d => ordered.reduce((t, p) => t + ((byPerson[p.id] || {})[d] || 0), 0) + (rem[d] || 0);
   const cols = DENOMS;
   const grand = ordered.reduce((t, p) => t + p.final, 0) + s.leftover;
-  const count = (d, v) => v > 0
-    ? html`<span data-d=${d} class="bill-col font-semibold">${v}</span>`
-    : html`<span class="text-ink-3/40">–</span>`;
-  const head = (d, v = '$' + d) => html`<span data-d=${d} class="bill-col inline-block min-w-[2rem] rounded-md bg-[color-mix(in_srgb,var(--dc)_14%,transparent)] px-1 py-0.5 normal-case tracking-tight">${v}</span>`;
+  const billGrid = bills => html`<span class="grid grid-cols-3 gap-x-1.5 gap-y-1">
+    ${cols.map(d => html`<span key=${d} data-d=${d} class="inline-flex h-5 min-w-0 items-center justify-between gap-1 rounded bg-[color-mix(in_srgb,var(--dc)_12%,transparent)] px-1 text-[0.625rem] tabular-nums"><span class="bill-col">$${d}</span><b class=${(bills[d] || 0) > 0 ? 'font-semibold text-ink' : 'font-normal text-ink-3/60'}>${bills[d] || '–'}</b></span>`)}
+  </span>`;
   const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} />${!quiet && html`<${Delta} d=${payDelta(vm, p.id, p.final)} under />`}</span>`;
   const stackNote = id => {
     const st = vm.stacks?.[id];
@@ -113,14 +111,14 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
     return html`<span class="t-small block font-normal leading-tight text-accent">${k} ${k === 1 ? 'stack' : 'stacks'}</span>`;
   };
   const envelopeName = p => html`<span class="flex min-w-0 items-center gap-2.5"><${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} size="sm" /><span class="flex min-w-0 flex-col"><span class="truncate">${p.name}</span>${stackNote(p.id)}</span></span>`;
-  return html`<${Table} fixed scroll stickyFirst firstWide class="envelope-grid"
-    cols=${[{ label: 'Envelope', w: 'w-[10.5rem]' }, ...cols.map(d => ({ head: head(d), w: 'w-12' })), { label: 'Take home', align: 'right', w: 'w-20' }]}
+  return html`<${Table} fixed firstWide class="envelope-grid"
+    cols=${[{ label: 'Envelope', w: 'w-[35%]' }, { label: 'Bills', w: 'w-[45%]' }, { label: 'Take home', align: 'right', w: 'w-[20%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => onRow(p.id),
-        cells: [envelopeName(p), ...cols.map(d => count(d, (byPerson[p.id] || {})[d] || 0)), pay(p)] })),
-      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, ...cols.map(d => count(d, rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
+        cells: [envelopeName(p), billGrid(byPerson[p.id] || {}), pay(p)] })),
+      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, billGrid(rem), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
     ]}
-    foot=${[html`<${RowLabel}>Total<//>`, ...cols.map(d => head(d, colTotal(d))), html`<${Money} value=${grand} class="font-semibold text-money" />`]} />`;
+    foot=${[html`<${RowLabel}>Total<//>`, billGrid(Object.fromEntries(cols.map(d => [d, colTotal(d)]))), html`<${Money} value=${grand} class="font-semibold text-money" />`]} />`;
 }
 
 
