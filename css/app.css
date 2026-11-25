@@ -548,6 +548,7 @@
   .billtag i { font-style: normal; font-weight: 400; margin-left: 1px; color: var(--ink-2); }
   /* bill table (Payout): column heads and drawer totals in the bill's tint */
   .bill-col { color: var(--dc); font-weight: 600; }
+  .envelope-grid table { min-width: 34.5rem; }
 }
 
 @layer components {

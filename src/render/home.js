@@ -169,7 +169,7 @@ function PayValue({ vm, p }) {
 const CELL = 'inline-flex h-auto min-w-0 items-center p-0 text-[0.8125rem] leading-tight tabular-nums transition';
 // Every time reads the same quiet grey, typed or following the default.
 const TIME_TONE = () => 'text-ink-3';
-const TableName = ({ vm, p, sub }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-2"><${PersonAv} vm=${vm} p=${p} size="sm" /><span class="flex min-w-0 flex-col leading-tight"><span class="inline-flex items-center gap-1.5 truncate font-semibold">${p.name}${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}</span>${sub}</span></span>`;
+const TableName = ({ vm, p, sub }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-2"><${PersonAv} vm=${vm} p=${p} size="sm" /><span class="flex min-w-0 flex-col leading-tight"><span class="t-body inline-flex items-center gap-1.5 truncate">${p.name}${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}</span>${sub}</span></span>`;
 function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
   const s = vm.shares;
   const raw = id => vm.state.staff.find(x => x.id === id);
@@ -186,11 +186,11 @@ function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
     cols=${[{ label: 'Person', w: 'w-[76%]' }, { label: 'Take home', align: 'right', w: 'w-[24%]' }]}
     rows=${[
       ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id, pageTab),
-        cells: [html`<${TableName} vm=${vm} p=${p} sub=${html`<span class="t-small inline-flex items-center gap-1 text-ink-3"><span class="inline-flex items-center gap-1">${cell(p, 'in')}<span>→</span>${cell(p, 'out')}</span><span class="font-semibold text-ink-2">· ${fmtHrs(hoursOf(p))}h</span></span>`} />`,
+        cells: [html`<${TableName} vm=${vm} p=${p} sub=${html`<span class="t-small inline-flex items-center gap-1 text-ink-3"><span class="inline-flex items-center gap-1">${cell(p, 'in')}<span>→</span>${cell(p, 'out')}</span><span>· ${fmtHrs(hoursOf(p))}h</span></span>`} />`,
           money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : 'text-money')] })),
       ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, money(s.leftover, null)] }] : []),
     ]}
-    foot=${[html`<${RowLabel}>Total<//><span class="ml-2 t-small inline-flex items-center gap-1 text-ink-3"><span class="inline-flex items-center gap-1"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare /><span>→</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare /></span><span class="font-semibold text-ink-2">· ${fmtHrs(hours)}h</span></span>`, tipsTotal]} />`;
+    foot=${[html`<${RowLabel}>Total<//><span class="ml-2 t-small inline-flex items-center gap-1 text-ink-3"><span class="inline-flex items-center gap-1"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare /><span>→</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare /></span><span>· ${fmtHrs(hours)}h</span></span>`, tipsTotal]} />`;
 }
 // The total's change while a preview runs: everyone's pay plus the chump.
 const payDeltaSum = (vm, now) => {
@@ -444,7 +444,7 @@ function PoolView({ vm, id, tab }) {
       <${List}>${people.length ? people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id, tab)} lead=${html`<${PersonAv} vm=${vm} p=${p} />`}
         title=${html`<span class="truncate">${p.name}</span>`}
         sub=${fmtHrs(p.perPool[pool.id].hours) + 'h in this pool'}
-        value=${'$' + r2(p.perPool[pool.id].raw)} valueTone=${isSup(p) ? SUP_TEXT : ''} />`)
+        value=${'$' + r2(p.perPool[pool.id].raw)} valueTone=${isSup(p) ? SUP_TEXT : 'text-money'} />`)
         : html`<${Item} icon="users" title=${html`<span class="text-ink-3">Nobody worked its window</span>`} />`}<//>
     <//>
   </div>`;
