@@ -115,14 +115,14 @@ function Header({ vm, tab, subs, sessionName }) {
       <button class="hdr-btn" onClick=${() => App.back()} aria-label=${'Back to ' + under}><${Icon} name="chevR" class="size-6 rotate-180" /></button>
       <div class="hdr-text"><h1 class="hdr-title">${top.title}</h1>${top.meta && html`<${Meta} items=${top.meta(vm)} />`}</div>
       <div class="hdr-actions">${top.actions?.(vm)}</div>
-    </div><${SummaryStrip} vm=${vm} />`;
+    </div>`;
   }
   const sub = currentSub(tab);
   return html`<div class="hdr-bar">
       <button class="hdr-btn" onClick=${() => App.openMenu()} aria-label="Menu: sessions and tools" aria-controls="menu">
         <${DayDisc} iso=${vm.state.meta.date} /></button>
       <div class="hdr-text"><h1 class="hdr-title">${TITLES[tab]}</h1><${Meta} items=${metaOf(vm, tab, sessionName)} /></div>
-    </div><${SummaryStrip} vm=${vm} />
+    </div>
     ${subs.length > 0 && html`<div class="hdr-tabs" role="tablist" aria-label=${TITLES[tab]}>
       ${subs.map(s => html`<button key=${tab + s.value} role="tab" class="hdr-tab" aria-selected=${String(s.value === sub)}
         onClick=${() => setSub(tab, s.value)}><span class="hdr-tab-label">${s.label}</span></button>`)}
@@ -130,23 +130,28 @@ function Header({ vm, tab, subs, sessionName }) {
     </div>`}`;
 }
 
-function SummaryStrip({ vm }) {
+// Live figures belong with the work, not in the navigation chrome. Keeping
+// this card in the scrollable page gives the figures room to breathe and
+// leaves the header to do one job: orient and switch views.
+export function ShiftContext({ vm, class: cls = '' }) {
   const sh = !vm.blocked && vm.shares;
   const named = vm.state.staff.filter(p => p.name.trim()).length;
   const hours = sh ? shiftHours(sh) : vm.resolved?.staff?.filter(p => p.role !== 'support').reduce((n, p) => n + (p.hours || 0), 0);
   const bills = smallBillsNeeded(vm);
-  const figure = (label, value, key, unit = '$') => {
+  const figure = (label, value, key, unit = '', tone = '') => {
     const d = key && figDelta(vm, key);
-    return html`<span class=${cx('summary-figure', d && 'live-changed')}><span class="summary-label">${label}</span><b>${value}</b><${Delta} d=${d} unit=${unit} /></span>`;
+    return html`<span class=${cx('context-figure', tone, d && 'live-changed')}><span class="context-label">${label}</span><b>${value}</b><${Delta} d=${d} unit=${unit} /></span>`;
   };
-  return html`<div class="summary-strip" role="region" aria-label="Live shift summary" tabindex="0">
-    ${figure('Tips', fmtMoney(vm.totalCash || 0), 'total')}
-    ${figure('Hours', hours != null ? fmtHrs(hours) : '—', 'hours', 'h')}
-    ${figure('People', named)}
-    ${figure('Rate', sh ? rate2(sh.rate) + '/h' : '—', 'rate')}
-    <span class="summary-label summary-bills-label">Bills needed</span>
-    ${[1, 5, 10].map(d => figure('$' + d, bills ? String(bills.find(b => b.d === d).n) : '—', 'bills' + d, ''))}
-  </div>`;
+  const billText = bills ? bills.map(b => '$' + b.d + ' × ' + b.n).join('  ·  ') : '—';
+  return html`<section class=${cx('shift-context', cls)} role="region" aria-label="Live shift summary">
+    <div class="context-main">
+      ${figure('Tips in', fmtMoney(vm.totalCash || 0), 'total', '$', 'context-money')}
+      ${figure('People', named, null)}
+      ${figure('Worked', hours != null ? fmtHrs(hours) + 'h' : '—', 'hours', 'h')}
+      ${figure('Rate', sh ? rate2(sh.rate) + '/h' : '—', 'rate', '$')}
+    </div>
+    <div class="context-note"><span>Exact-change floor</span><b>${billText}</b></div>
+  </section>`;
 }
 
 // The underline sits under the current sub-tab's label, `progress` sub-tabs

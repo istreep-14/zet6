@@ -23,6 +23,7 @@ import { DragTime } from '../ui/dragtime.js';
 import { openKeypad, activeKey, bufferAbs } from '../ui/keypad.js';
 import { RoleTimes } from './settings.js';
 import { timeMoved, defaultMoved, hoursMoved } from '../ui/changes.js';
+import { ShiftContext } from './tabs.js';
 
 export { DragTime };
 
@@ -365,19 +366,19 @@ function SavedNames({ vm }) {
   const q = draft.trim().toLowerCase();
   const saved = getRoster().filter(r => !onShift.has(r.name.toLowerCase()) && (!q || r.name.toLowerCase().includes(q)));
   if (!saved.length) return null;
-  const chip = 't-small inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3 font-semibold transition active:scale-95';
-  return html`<${Section} title="Saved names" aside=${html`<button class="font-semibold text-accent" onClick=${() => { forgetting = !forgetting; rerender(); }}>${forgetting ? 'Done' : 'Edit'}</button>`}>
-    <div class="flex flex-wrap gap-1.5">
-      ${saved.map(r => html`<button key=${r.name} class=${cx(chip, forgetting ? 'bg-bad/12 text-bad' : 'bg-surface text-ink')} onMouseDown=${keepFocus}
-        onClick=${() => {
+  return html`<${Section} title="Saved roster" aside=${html`<button class="font-semibold text-accent" onClick=${() => { forgetting = !forgetting; rerender(); }}>${forgetting ? 'Done' : 'Edit'}</button>`}
+    footer=${forgetting ? 'Remove names you no longer use.' : 'Tap a person to add them to this shift.'}>
+    <${List}>
+      ${saved.map((r, i) => html`<${Item} key=${r.name} lead=${html`<${Avatar} name=${r.name} i=${i} size="sm" />`}
+        title=${r.name} sub=${rolesOn ? html`<span class="inline-flex items-center gap-1.5"><span class=${cx('size-2 rounded-full', ROLE_DOT[r.role])}></span>${ROLE_SHORT[r.role] || r.role}</span>` : 'Bartender'}
+        trail=${html`<span class=${cx('grid size-9 place-items-center rounded-full', forgetting ? 'bg-bad/12 text-bad' : 'bg-accent/12 text-accent')}><${Icon} name=${forgetting ? 'x' : 'plus'} class="size-4" /></span>`}
+        chevron=${false} onMouseDown=${keepFocus} onClick=${() => {
           if (forgetting) { App.forgetName(r.name); return; }
           App.addPeople([{ name: r.name, role: rolesOn ? r.role : 'bartender' }]);
           if (q) { draft = ''; const el = document.querySelector('[data-addnames]'); if (el) el.value = ''; }
           backToField();
-        }}>
-        ${forgetting ? html`<${Icon} name="x" class="size-3.5" />` : html`<${Icon} name="plus" class="size-3.5 text-ink-3" />`}
-        ${rolesOn && !forgetting && html`<span class=${cx('size-1.5 rounded-full', ROLE_DOT[r.role])}></span>`}${r.name}</button>`)}
-    </div>
+        }} />`)}
+    <//>
   <//>`;
 }
 
@@ -394,14 +395,16 @@ function People({ vm }) {
   const hours = done && vm.resolved.staff.filter(p => p.role !== 'support').reduce((t, p) => t + p.hours, 0);
   return html`<div class="flex flex-col gap-5">
     <${Note} vm=${vm} />
-    <${List}>
-      ${people.length > 0 && html`<${Head} />`}
-      ${gs.map(g => html`
-        ${g.role && gs.length > 1 && html`<div key=${'h-' + g.role} class="li t-cap flex items-center gap-2 px-4 pb-1 pt-2.5 text-ink-3" style=${{ '--inset': '1rem' }}>
-          <span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}<span class="text-ink-3/70">${g.people.length}</span></div>`}
-        ${g.people.map(p => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} allClose=${allClose} />`)}`)}
-      <${AddRow} vm=${vm} />
+    <${Section} title="On this shift" aside=${people.length ? people.length + (people.length === 1 ? ' person' : ' people') : 'No one yet'}>
+      <${List}>
+        ${people.length > 0 && html`<${Head} />`}
+        ${gs.map(g => html`
+          ${g.role && gs.length > 1 && html`<div key=${'h-' + g.role} class="li t-cap flex items-center gap-2 px-4 pb-1 pt-2.5 text-ink-3" style=${{ '--inset': '1rem' }}>
+            <span class=${cx('size-2 rounded-full', ROLE_DOT[g.role])}></span>${ROLE_PLURAL[g.role]}<span class="text-ink-3/70">${g.people.length}</span></div>`}
+          ${g.people.map(p => html`<${PersonRow} key=${p.id} vm=${vm} p=${p} allClose=${allClose} />`)}`)}
+      <//>
     <//>
+    <${Section} title="Add to shift" footer="Type a name, paste a list, or choose someone from your saved roster."><${List}><${AddRow} vm=${vm} /><//><//>
     <${StaffDefaults} vm=${vm} />
     <${SavedNames} vm=${vm} />
     ${done && (vm.totalCash > 0 && !vm.blocked
@@ -454,7 +457,7 @@ function StaffDefaults({ vm }) {
 }
 
 function Staff({ vm }) {
-  return html`<${People} vm=${vm} />`;
+  return html`<div class="flex flex-col gap-5"><${ShiftContext} vm=${vm} /><${People} vm=${vm} /></div>`;
 }
 
 // ── A person's drawer ────────────────────────────────────────────────────────

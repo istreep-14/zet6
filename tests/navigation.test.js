@@ -52,7 +52,7 @@ nav.showTab('pay');
 assert.equal(nav.currentTab(), 'pay');
 assert.equal(nav.currentSub(), 'bills');
 
-// A left swipe on Pay steps to the next sub-tab; never to another tab.
+// A left swipe on Pay steps to the next sub-tab first.
 swipe('mainContent', 300, 100);
 await wait(200);
 assert.equal(nav.currentSub('pay'), 'split');
@@ -63,20 +63,24 @@ swipe('mainContent', 300, 100, 'touchcancel');
 await wait(200);
 assert.equal(nav.currentSub('pay'), 'split', 'an interrupted gesture must not navigate');
 
-// Past the last sub-tab: nothing (no tab change, no panel).
+// Past the last sub-tab: continue to the next main tab.
 nav.setSub('pay', 'bonus');
 swipe('mainContent', 300, 100);
 await wait(200);
 assert.equal(nav.currentSub('pay'), 'bonus');
-assert.equal(nav.currentTab(), 'pay', 'tabs only change from the tab bar');
+assert.equal(nav.currentTab(), 'shift', 'an edge swipe advances to the next tab');
 
-// Staff has one page; a swipe never changes the bottom tab.
+// Staff has one page, so its edge swipe advances immediately.
 nav.showTab('staff');
 assert.equal(nav.currentSub(), null);
 swipe('mainContent', 300, 100);
 await wait(200);
+assert.equal(nav.currentTab(), 'tips');
+
+// A right edge swipe travels to the preceding tab too.
+swipe('mainContent', 100, 300);
+await wait(200);
 assert.equal(nav.currentTab(), 'staff');
-assert.equal(nav.currentSub(), null);
 for (const t of ['home', 'pay', 'shift']) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs');
 
 // Old saved tab names.

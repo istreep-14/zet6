@@ -19,7 +19,7 @@ import { cx, Icon, Delta, Alert, Banner, List, Item, Money, Clock, Blocked, Card
 import { fmtBreak, nightSpan, AxisLabels, TimeCell, DefaultTime } from './staff.js';
 import { DragAmount } from '../ui/dragtime.js';
 import { payDelta } from '../ui/changes.js';
-import { smallBillsNeeded } from './tabs.js';
+import { smallBillsNeeded, ShiftContext } from './tabs.js';
 import { EnvelopeTable, Worksheet, DistributionTools } from './payout.js';
 import { BonusPanel } from './sheets.js';
 import { currentSub, currentTab, pushPage } from '../ui/nav.js';
@@ -152,31 +152,13 @@ function PayValue({ vm, p }) {
   </span>`;
 }
 
-// Pay as a list (default) or the one-line table — the switch sits in the
-// caption band (settings.show.payTable, remembered for every session).
-const payTable = vm => !!vm.state.settings.show?.payTable;
-function ViewSwitch({ vm, count }) {
-  const t = payTable(vm);
-  return html`<span class="flex items-center gap-2">${count}
-    <button class="-my-2 -mr-2 grid size-9 place-items-center rounded-full text-accent active:bg-surface-2" onClick=${() => App.toggleShow('payTable')}
-      aria-label=${t ? 'Show as a list' : 'Show as a table'}><${Icon} name=${t ? 'list' : 'table'} class="size-5" /></button></span>`;
-}
-
-// The one-line table: Name · In · Out · Hrs · Tips, every part in its own
-// column so the times, hours and amounts line up down the page.
-// The table is the one place Home edits, live: each In / Out is the same
-// keypad cell as Staff's (tap → keypad, hold → wheel; Next walks In → Out →
-// the next person), the Total row's times are the shift's open / close, and
-// with one pool the Total's tips are a tap-or-hold amount ($1 a row on the
-// wheel). While a cell or the wheel is moving, the tips preview the change
-// (payDelta); otherwise they carry the marks from your last visit.
-// Times as plain text — "5", "2", "11:30" (no a / p, no :00 on the hour) —
-// in the name's weight; the box only shows while it's being edited / held.
-const CELL = 'h-8 w-full rounded-md text-[1rem] tabular-nums transition';
+// Home has one payout ledger instead of two nearly identical presentations.
+// It keeps the useful live time and cash controls, but makes the reading order
+// unmistakable: person → shift → take-home.
+const CELL = 'h-8 min-w-[1.5rem] rounded-md text-[1rem] tabular-nums transition';
 // Every time reads the same quiet grey, typed or following the default.
 const TIME_TONE = () => 'text-ink-3';
-// The name alone (no avatar — the table is for scanning across), the closer's dot after it.
-const TableName = ({ vm, p }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-1.5"><span class="truncate">${p.name}</span>${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}</span>`;
+const TableName = ({ vm, p }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-2"><${PersonAv} vm=${vm} p=${p} size="sm" /><span class="flex min-w-0 flex-col"><span class="truncate font-semibold">${p.name}</span><span class=${cx('t-small inline-flex items-center gap-1.5 text-ink-3', isSup(p) && SUP_TEXT)}>${p.role}${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}</span></span></span>`;
 function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
   const s = vm.shares;
   const raw = id => vm.state.staff.find(x => x.id === id);
@@ -189,19 +171,18 @@ function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
           onSet=${v => App.nudgeCash(v - total)} onPreview=${v => App.previewCash(v == null ? null : v - total)}
           onTap=${() => App.tab('tips')} /></span>`
     : money(total, marks?.$total);
-  return html`<${Table} fixed
-    cols=${[{ label: 'Name', w: 'w-[36%]' }, { label: 'In', w: 'w-[15%]' }, { label: 'Out', w: 'w-[15%]' }, { label: 'Hrs', w: 'w-[12%]' }, { label: 'Tips', align: 'right', w: 'w-[22%]' }]}
+  return html`<${Table} fixed class="payout-ledger"
+    cols=${[{ label: 'Person', w: 'w-[46%]' }, { label: 'Shift', w: 'w-[30%]' }, { label: 'Take home', align: 'right', w: 'w-[24%]' }]}
     rows=${[
       ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id, pageTab),
-        cells: [html`<${TableName} vm=${vm} p=${p} />`, cell(p, 'in'), cell(p, 'out'),
-          html`<span class=${isSup(p) ? 'text-ink-3' : ''}>${fmtHrs(hoursOf(p))}</span>`,
-          money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : '')] })),
-      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<span class="text-ink-2">Chump</span>`, '', '', '', money(s.leftover, null)] }] : []),
+        cells: [html`<${TableName} vm=${vm} p=${p} />`,
+          html`<span class="flex flex-col items-center gap-0.5"><span class="inline-flex items-center gap-1 text-ink-2">${cell(p, 'in')}<span class="text-ink-3">–</span>${cell(p, 'out')}</span><span class="t-small text-ink-3">${fmtHrs(hoursOf(p))}h worked</span></span>`,
+          html`<span class="flex flex-col items-end gap-0.5">${money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : 'text-money')}<span class="t-small text-ink-3">${rate2(p.final / Math.max(hoursOf(p), 0.01))}/h</span></span>`] })),
+      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, html`<span class="t-small text-ink-3">Left after rounding</span>`, money(s.leftover, null)] }] : []),
     ]}
-    foot=${['Total',
-      html`<${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare />`,
-      html`<${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare />`,
-      fmtHrs(hours), tipsTotal]} />`;
+    foot=${[html`<${RowLabel}>Total<//>`,
+      html`<span class="flex flex-col items-center gap-0.5"><span class="inline-flex items-center gap-1"><${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-2" bare /><span class="text-ink-3">–</span><${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-2" bare /></span><span class="t-small text-ink-3">${fmtHrs(hours)}h worked</span></span>`,
+      html`<span class="flex flex-col items-end gap-0.5">${tipsTotal}<span class="t-small text-ink-2">${rate2(s.rate)}/h</span></span>`]} />`;
 }
 // The total's change while a preview runs: everyone's pay plus the chump.
 const payDeltaSum = (vm, now) => {
@@ -215,36 +196,13 @@ const payDeltaSum = (vm, now) => {
 function Pay({ vm, name, pageTab = 'home' }) {
   const s = vm.shares;
   const people = staffOrder(vm, s.perPerson);
-  const { tint } = rolesOf(vm, people);
   const hours = people.filter(p => !isSup(p)).reduce((t, p) => t + hoursOf(p), 0);
   // The total is all the cash: everyone's take-home plus the chump.
   const total = people.reduce((t, p) => t + p.final, 0) + s.leftover;
-  const before = vm.sharesBefore && vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0) + vm.sharesBefore.leftover;
-  const R = vm.resolved;
   const count = people.length + (people.length === 1 ? ' person' : ' people');
-  const span = nightSpan(vm);
-  if (payTable(vm)) return html`<${Section} title=${name || 'Payouts'} aside=${html`<${ViewSwitch} vm=${vm} count=${count} />`}
+  return html`<${Section} title=${name || 'Payouts'} aside=${count}
     footer=${html`<${Key} vm=${vm} people=${people} />`}>
     <${PayTable} vm=${vm} people=${people} total=${total} hours=${hours} pageTab=${pageTab} />
-  <//>`;
-  return html`<${Section} title=${name || 'Payouts'} aside=${html`<${ViewSwitch} vm=${vm} count=${count} />`}
-    footer=${html`<${Key} vm=${vm} people=${people} />`}>
-    <${List}>
-      ${people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id, pageTab)} lead=${html`<${PersonAv} vm=${vm} p=${p} />`}
-        title=${html`${tint && html`<${RoleDot} role=${p.role} />`}<span class="truncate">${p.name}</span>`}
-        sub=${html`<span class="tabular-nums"><${Times} a=${p.inAbs} b=${p.outAbs} /> · ${fmtHrs(hoursOf(p))}h</span>`}
-        trail=${html`<${PayValue} vm=${vm} p=${p} />`}>
-        <div class="-mt-1 pl-[3.25rem]"><${ShiftBar} vm=${vm} p=${p} span=${span} /></div>
-      <//>`)}
-      ${s.leftover > 0 && html`<${Item} lead=${html`<${RoundIcon} name="cash" />`} title="Chump" sub="Left after rounding · stays in the drawer"
-        value=${fmtMoney(s.leftover)} />`}
-      <${Item} class=${TOTAL_FILL} lead=${html`<${RoundIcon} name="sigma" />`} title="Total"
-        sub=${html`<span class="tabular-nums"><${Times} a=${R?.anchorAbs} b=${R?.closeAbs} /> · ${fmtHrs(hours)}h · ${rate2(s.rate)}/h</span>`}
-        trail=${html`<span class="flex shrink-0 flex-col items-end leading-tight">
-          <span class="flex items-baseline gap-1.5"><${Delta} d=${marks?.$total} /><span class=${VALUE}>${fmtMoney(total)}</span></span>
-          ${before != null && html`<span class="t-small tabular-nums text-ink-3">was ${fmtMoney(before)}</span>`}
-        </span>`} />
-    <//>
   <//>`;
 }
 
@@ -381,8 +339,9 @@ function Split({ vm, pageTab = 'home' }) {
 
 // ── The page ─────────────────────────────────────────────────────────────────
 function Home({ vm, name }) {
-  if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
+  if (vm.blocked) return html`<div class="flex flex-col gap-5"><${ShiftContext} vm=${vm} /><${Blocked} vm=${vm} /></div>`;
   return html`<div class="flex flex-col gap-5">
+    <${ShiftContext} vm=${vm} />
     ${currentSub('home') === 'shift' ? html`<${Shift} vm=${vm} />` : html`<${Pay} vm=${vm} name=${name || 'Payouts'} pageTab="home" />`}
     <${AdjustNote} vm=${vm} />
     ${vm.shares.perPool.map(p => p.warning).filter(Boolean).map((w, i) => html`<${Alert} key=${i}>${w}<//>`)}
@@ -390,10 +349,11 @@ function Home({ vm, name }) {
 }
 
 function PayPage({ vm, name }) {
-  if (vm.blocked) return html`<${Blocked} vm=${vm} />`;
+  if (vm.blocked) return html`<div class="flex flex-col gap-5"><${ShiftContext} vm=${vm} /><${Blocked} vm=${vm} /></div>`;
   const view = currentSub('pay');
   return html`<div class="flex flex-col gap-5">
-    ${view === 'bills' ? html`<${DistributionTools} vm=${vm} /><${Bills} vm=${vm} pageTab="pay" />`
+    <${ShiftContext} vm=${vm} />
+    ${view === 'bills' ? html`<${Bills} vm=${vm} pageTab="pay" /><${DistributionTools} vm=${vm} />`
       : view === 'split' ? html`<${Split} vm=${vm} pageTab="pay" />`
       : html`<${BonusPanel} vm=${vm} />`}
     <${AdjustNote} vm=${vm} />

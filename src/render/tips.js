@@ -19,6 +19,7 @@ import { EDGE_TOKENS } from '../resolve.js';
 import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
 import { KeyTime } from '../ui/keytime.js';
 import { currentSub, currentTab, setSubs, setSub } from '../ui/nav.js';
+import { ShiftContext } from './tabs.js';
 import { html, render, useState } from '../ui/preact.js';
 import { toast } from '../ui/toast.js';
 import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, Table, Money, SwitchRow, INPUT, ROLE_DOT, holdRepeat } from '../ui/pkit.js';
@@ -257,7 +258,6 @@ function Entry({ vm, e }) {
     adj && fmtMoney(Math.abs(adj)) + (adj < 0 ? ' short' : ' over'),
   ].filter(Boolean).join(' · ');
   return html`<div class="flex flex-col gap-5" data-pid=${pool.id}>
-    <div class="pull-hint" aria-hidden="true"><span class="pull-idle">Pull to ${mode === 'bills' ? 'type a total' : 'count bills'}</span><span class="pull-armed">Release to ${mode === 'bills' ? 'type a total' : 'count bills'}</span></div>
     ${err && html`<${Alert}>${err}<//>`}
     ${vm.cashNote && html`<${Alert} tone="warn">${vm.cashNote}<//>`}
     <${Section} title=${e.label + (mode === 'bills' ? ' · bills' : ' · total')} aside=${html`<span class="font-semibold text-ink">${fmtMoney(total)}</span>`}
@@ -339,21 +339,47 @@ export function Suggested({ vm }) {
 
 function Tips({ vm }) {
   const e = curEntry() || lastEntries?.[0];
-  return e ? html`<${Entry} key=${e.value} vm=${vm} e=${e} />` : null;
+  return e ? html`<div class="flex flex-col gap-5"><${ShiftContext} vm=${vm} /><${Entry} key=${e.value} vm=${vm} e=${e} /></div>` : null;
 }
 
-// ── Pull down to switch how the entry is entered ────────────────────────────
-// At the top of the page, a drag down follows the finger (with resistance);
-// past PULL it says "Release to …" and letting go flips bills ↔ total.
+// ── Pull down to change the current view ───────────────────────────────────
+// The same refresh-like gesture works across primary pages. Tips retains its
+// bills ↔ total switch; Home, Pay, and Shift use it to swap their views.
 const PULL = 64;
 let pull = null, pullBound = false;
-function pullTo(d) {
-  const panel = $('tab-tips');
+function pullAction() {
+  const tab = currentTab();
+  if (tab === 'tips') {
+    const e = curEntry() || lastEntries?.[0];
+    if (!e) return null;
+    const to = modeOf(e) === 'bills' ? 'type a total' : 'count bills';
+    return { idle: 'Pull to ' + to, armed: 'Release to ' + to, run: () => flipEntry(e) };
+  }
+  if (tab === 'home') {
+    const toShift = currentSub('home') !== 'shift';
+    return { idle: 'Pull to show ' + (toShift ? 'timeline' : 'payouts'), armed: 'Release to show ' + (toShift ? 'timeline' : 'payouts'), run: () => setSub('home', toShift ? 'shift' : 'overview') };
+  }
+  if (tab === 'shift') {
+    const toPools = currentSub('shift') !== 'pools';
+    return { idle: 'Pull to show ' + (toPools ? 'pools' : 'shift setup'), armed: 'Release to show ' + (toPools ? 'pools' : 'shift setup'), run: () => setSub('shift', toPools ? 'pools' : 'shift') };
+  }
+  if (tab === 'pay') {
+    const views = ['bills', 'split', 'bonus'];
+    const at = Math.max(0, views.indexOf(currentSub('pay')));
+    const to = views[(at + 1) % views.length];
+    return { idle: 'Pull to show ' + to, armed: 'Release to show ' + to, run: () => setSub('pay', to) };
+  }
+  return null;
+}
+function pullTo(d, text = '') {
+  const panel = $('tab-' + currentTab());
   if (!panel) return;
   panel.style.transition = d ? 'none' : 'transform .25s cubic-bezier(.2,.8,.3,1)';
   panel.style.transform = d ? `translateY(${d}px)` : '';
   panel.classList.toggle('pulling', d > 0);
   panel.classList.toggle('pull-armed', d > PULL);
+  if (text) panel.dataset.pullText = text;
+  else delete panel.dataset.pullText;
 }
 function bindPull() {
   const m = $('mainContent');
@@ -363,8 +389,9 @@ function bindPull() {
     && !document.querySelector('.sheet-backdrop.open') && !document.documentElement.classList.contains('menu-open');
   m.addEventListener('touchstart', ev => {
     pull = null;
-    if (currentTab() !== 'tips' || ev.touches.length !== 1 || m.scrollTop > 0 || !calm()) return;
-    pull = { x0: ev.touches[0].clientX, y0: ev.touches[0].clientY, on: false, d: 0 };
+    const action = pullAction();
+    if (!action || ev.touches.length !== 1 || m.scrollTop > 0 || !calm()) return;
+    pull = { x0: ev.touches[0].clientX, y0: ev.touches[0].clientY, on: false, d: 0, action };
   }, { passive: true });
   m.addEventListener('touchmove', ev => {
     if (!pull) return;
@@ -376,14 +403,14 @@ function bindPull() {
     }
     if (ev.cancelable) ev.preventDefault();
     pull.d = Math.min(140, Math.max(0, dy) * 0.5);
-    pullTo(pull.d);
+    pullTo(pull.d, pull.d > PULL ? pull.action.armed : pull.action.idle);
   }, { passive: false });
   const end = flip => {
     const p = pull;
     pull = null;
     if (!p?.on) return;
     pullTo(0);
-    if (flip && p.d > PULL) flipEntry();
+    if (flip && p.d > PULL) p.action.run();
   };
   m.addEventListener('touchend', () => end(true), { passive: true });
   m.addEventListener('touchcancel', () => end(false), { passive: true });

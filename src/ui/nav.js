@@ -47,9 +47,9 @@ export const SUBS = {
     { value: 'cash', label: 'Tips' },
   ],
   pay: [
-    { value: 'bills', label: 'Bills' },
-    { value: 'split', label: 'Split' },
-    { value: 'bonus', label: 'Bonus' },
+    { value: 'bills', label: 'Envelopes' },
+    { value: 'split', label: 'Breakdown' },
+    { value: 'bonus', label: 'Extras' },
   ],
   shift: [
     { value: 'shift', label: 'Shift' },
@@ -357,6 +357,9 @@ export function initNav({ can = () => true, subsOn = () => true, edge = null } =
     el.style.transform = x ? `translateX(${x}px)` : '';
   };
   const canStep = delta => subsOn() && stepSub(delta, false);
+  // Leave a page's last sub-tab by continuing into the next main tab. The
+  // Home tab keeps its right-edge menu gesture because it has no prior tab.
+  const tabAt = delta => TABS[TABS.indexOf(cur) + delta] || null;
   const settle = () => { const el = panel(); setX(el, 0, SPRING); if (el) el.style.opacity = ''; swipeTo(0, false); };
   let pulling = false;                         // this swipe is pulling the menu
 
@@ -370,13 +373,15 @@ export function initNav({ can = () => true, subsOn = () => true, edge = null } =
   if (m) sideways(m, () => can() && !topPage(), {
     move(dx) {
       const w = m.clientWidth || 360;
-      if (edge && dx > 0 && !canStep(-1)) {
+      const delta = dx < 0 ? 1 : -1;
+      const nextTab = !canStep(delta) && tabAt(delta);
+      if (edge && dx > 0 && !canStep(-1) && !nextTab) {
         if (!pulling) { pulling = true; setX(panel(), 0); swipeTo(0, true); }
         edge.drag(dx);
         return;
       }
       if (pulling) { pulling = false; edge.drag(0); }
-      const open = canStep(dx < 0 ? 1 : -1);
+      const open = canStep(delta) || !!nextTab;
       const el = panel();
       setX(el, open ? dx : dx / 3);
       if (el) el.style.opacity = open ? String(Math.max(0.35, 1 - Math.abs(dx) / (w * 1.4))) : '';
@@ -388,11 +393,15 @@ export function initNav({ can = () => true, subsOn = () => true, edge = null } =
       const w = m.clientWidth || 360;
       const far = Math.abs(dx) > w / 4 || (fast && Math.abs(dx) > 40);
       const delta = dx < 0 ? 1 : -1;
-      if (!far || !canStep(delta)) { settle(); return; }
+      const nextTab = !canStep(delta) && tabAt(delta);
+      if (!far || (!canStep(delta) && !nextTab)) { settle(); return; }
       setX(el, Math.sign(dx) * w * 0.5, 'transform .12s ease-in, opacity .12s');
       if (el) el.style.opacity = '0.2';
       swipeTo(delta, false);
-      setTimeout(() => stepSub(delta, true), 120);
+      setTimeout(() => {
+        if (canStep(delta)) stepSub(delta, true);
+        else if (nextTab) showTab(nextTab);
+      }, 120);
     },
     cancel() {
       if (pulling) { pulling = false; edge.release(0, false); }
