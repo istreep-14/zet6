@@ -1,11 +1,14 @@
-// Tips (Preact) — for entering the cash and how it's split. Three sub-tabs
-// (the header):
-//   Cash     each pool's cash as one big amount (or, "Count bills instead",
-//            the bill rows); under it Over / short and + Checkpoint
-//   Pools    the shift type (Night / Day) and + Party; each pool's window,
-//            name and who shares it; the support tip-out; + Add pool; the
-//            closer bonus & chump
-//   Drawer   render/payout.js
+// Tips (Preact) — only for entering the cash. The sub-tabs (the header) are
+// the shift's cash entries, set from the pools (nav setSubs):
+//   one per pool ("Night"), and one per extra part of a pool — a later count
+//   of the same pool ("Part 2", or "Day 2" with several pools); then Drawer
+//   (render/payout.js).
+// An entry counts bills by default; pull the page down (like refreshing a
+// feed) to type a total instead, and back. Under it a big "New part" saves
+// this count and starts another. What the pools are (names, windows, who
+// shares them, over / short) is the Shift tab (render/shift.js), which uses
+// the pool pieces exported here (WindowEdge, SharedBy, SupportBox, FormRow,
+// openCashSheet).
 //
 // Inputs show the stored raw strings; Preact diffs each render, so typing
 // keeps focus and the totals update around it.
@@ -16,9 +19,9 @@ import { focusCell } from '../ui/keypad.js';
 import { EDGE_TOKENS } from '../resolve.js';
 import { SHIFT_TYPES, SHIFT_LABEL } from '../shifts.js';
 import { KeyTime } from '../ui/keytime.js';
-import { currentSub } from '../ui/nav.js';
-import { SupportDefault } from './settings.js';
+import { currentSub, currentTab, setSubs, setSub } from '../ui/nav.js';
 import { html, render, useState } from '../ui/preact.js';
+import { toast } from '../ui/toast.js';
 import { cx, Card, Seg, Chip, Field, Button, Denom, Alert, Icon, List, Item, Section, NextStep, Table, Money, SwitchRow, INPUT, ROLE_DOT, holdRepeat } from '../ui/pkit.js';
 import { openSheet, closeSheet, isOpen, sheetBody, setSheetTitle, onSheetClose } from '../ui/sheet.js';
 
@@ -27,7 +30,7 @@ const $ = id => document.getElementById(id);
 const fmtAmt = v => String(parseFloat((v ?? 0).toFixed(2)));
 const EYEBROW = 't-small text-ink-2';
 
-function windowSub(pool, vmPool) {
+export function windowSub(pool, vmPool) {
   const start = pool.window.start.trim();
   const end = pool.window.end.trim();
   if (!start && !end) return 'Whole shift';
@@ -56,7 +59,7 @@ function edgeCell(vm, pool, vmPool, which, cls, tone) {
     }} />`;
 }
 
-function WindowEdge({ vm, pool, vmPool, which }) {
+export function WindowEdge({ vm, pool, vmPool, which }) {
   const raw = String(pool.window[which] || '').trim();
   const opts = [{ v: '', label: which === 'start' ? 'Open' : 'Close' }, { v: 'srv', label: 'Servers out' }, { v: 'bar', label: 'Bar out' }];
   const chip = on => cx('t-small h-9 shrink-0 rounded-full px-3 font-semibold transition active:scale-95', on ? 'bg-accent text-on-accent' : 'bg-surface-2 text-ink-2');
@@ -70,7 +73,7 @@ function WindowEdge({ vm, pool, vmPool, which }) {
 }
 
 
-function SharedBy({ pool }) {
+export function SharedBy({ pool }) {
   return html`<${FormRow} label="Shared by">
     <div class="flex gap-2">
       <${Chip} on=${pool.roles.bartender} role="bartender" onClick=${() => App.poolRole(pool.id, 'bartender')}>Bar<//>
@@ -82,7 +85,7 @@ function SharedBy({ pool }) {
 
 // Support tip-out — shown when the Support chip is on. % and $/hr inherit as
 // placeholders; per-person hours default to their overlap with the window.
-function SupportBox({ pool, vm, vmPool }) {
+export function SupportBox({ pool, vm, vmPool }) {
   const sPool = vm.shares?.perPool.find(p => p.id === pool.id);
   const sup = sPool?.support;
   const supStaff = (vm.resolved?.staff || []).filter(p => p.role === 'support');
@@ -152,27 +155,11 @@ function Amount({ pool }) {
   </div>`;
 }
 
-function CashBatch({ pool, batch, index }) {
-  const counted = countedValue(batch.billCounts);
-  const amount = parseWholeNumber(batch.amount);
-  const total = batch.mode === 'bills' ? counted : amount.valid ? amount.value : 0;
-  return html`<div class="border-t border-line px-4 py-3">
-    <div class="mb-2 flex items-center gap-2">
-      <input class="t-body min-w-0 flex-1 bg-transparent font-semibold outline-none focus:ring-2 focus:ring-accent/40" aria-label=${'Checkpoint ' + (index + 1) + ' name'} placeholder=${'Checkpoint ' + (index + 1)} value=${batch.label || ''} onInput=${e => App.updateCashBatch(pool.id, batch.id, 'label', e.target.value)} />
-      <span class="t-body font-semibold tabular-nums">${fmtMoney(total)}</span>
-      <button class="grid size-11 shrink-0 place-items-center rounded-lg text-ink-3 active:bg-surface-2" aria-label=${'Remove ' + (batch.label || 'checkpoint ' + (index + 1))} onClick=${() => App.removeCashBatch(pool.id, batch.id)}><${Icon} name="trash" class="size-4" /></button>
-    </div>
-    <${Seg} value=${batch.mode} onChange=${v => App.updateCashBatch(pool.id, batch.id, 'mode', v)} items=${[{ value: 'total', label: 'Enter total' }, { value: 'bills', label: 'Count bills' }]} />
-    ${batch.mode === 'total' ? html`<label class="mt-2 block"><span class="t-small text-ink-2">Checkpoint total</span><span class="relative mt-1 block"><span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-3">$</span><input class=${cx(INPUT, 'pl-7 font-semibold')} type="number" min="0" step="1" inputmode="numeric" placeholder="0" aria-label=${(batch.label || 'Checkpoint ' + (index + 1)) + ' total'} value=${batch.amount || ''} onInput=${e => App.updateCashBatch(pool.id, batch.id, 'amount', e.target.value)} /></span></label>`
-      : html`<div class="mt-2"><div class=${cx(BILL_GRID, 't-cap pb-1 text-ink-3')}><span>Bill</span><span class="text-center">Count</span><span class="text-right">Amount</span></div>${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} batch=${batch} d=${d} />`)}</div>`}
-  </div>`;
-}
-
 // The bill rows' columns (Bill · Count · Amount), shared with their caption.
 const BILL_GRID = 'grid grid-cols-[3.5rem_minmax(0,1fr)_4.75rem] items-center gap-3 max-[25rem]:grid-cols-[3.125rem_minmax(0,1fr)_4rem] max-[25rem]:gap-2.5';
 
 // A labelled row: caption over its control, padded like the others.
-const FormRow = ({ label, aside, children, cls = '' }) => html`<div class=${cx('flex flex-col gap-2 px-4 py-3', cls)}>
+export const FormRow = ({ label, aside, children, cls = '' }) => html`<div class=${cx('flex flex-col gap-2 px-4 py-3', cls)}>
   ${(label || aside) && html`<span class="flex items-baseline justify-between gap-3"><span class=${EYEBROW}>${label}</span>${aside && html`<span class="t-small text-right text-ink-3">${aside}</span>`}</span>`}
   ${children}</div>`;
 
@@ -197,70 +184,104 @@ function Adjust({ pool }) {
   </div>`;
 }
 
-// ── Cash: one card per pool ─────────────────────────────────────────────────
-// Plain by default: the pool's name and one big amount. "Count bills
-// instead" swaps the amount for the bill rows (and back). Under it, quiet
-// links: Over / short (a small drawer), + Checkpoint (another count later in
-// the night, added to the pool), Bill counts (with checkpoints).
-function CashCard({ pool, vm }) {
-  const single = vm.state.pools.length === 1;
-  const vmPool = vm.pools.find(p => p.id === pool.id);
-  const total = vmPool ? vmPool.total : 0;
-  const counted = countedValue(pool.cash.billCounts);
-  const adj = vmPool?.adjust || 0;
-  const [legacyView, setLegacyView] = useState(counted > 0 ? 'bills' : 'total');
-  const entry = pool.cash.baseMode || legacyView;
-  const batches = pool.cash.batches || [];
-  const showTotal = !single || entry === 'bills' || adj !== 0 || batches.length > 0;
-  const link = 't-small inline-flex h-9 items-center gap-1 font-semibold text-accent active:opacity-60';
-  const flip = () => { const v = entry === 'total' ? 'bills' : 'total'; if (App.poolBaseMode(pool.id, v)) setLegacyView(v); };
-  return html`<${Card} flush class="pool-editor" data-pid=${pool.id}>
-    <div class="flex items-baseline gap-3 px-4 pt-3">
-      <span class="flex min-w-0 flex-1 flex-col">
-        <span class="t-head truncate">${single ? 'Cash tips' : pool.label}</span>
-        ${!single && html`<span class="t-small text-ink-3">${windowSub(pool, vmPool)}</span>`}
-      </span>
-      ${showTotal && html`<span class="flex shrink-0 flex-col items-end">
-        <span class=${cx('t-head tabular-nums', !total && 'text-ink-3')}>${fmtMoney(total)}</span>
-        ${adj !== 0 && html`<span class="t-small text-ink-3">${fmtMoney(Math.abs(adj))} ${adj < 0 ? 'short' : 'over'}</span>`}
-      </span>`}
-    </div>
-    <div class="px-4 pb-1 pt-3">
-      ${entry === 'total'
-        ? html`<${Amount} pool=${pool} />`
-        : html`<div class=${cx(BILL_GRID, 't-cap pb-1 text-ink-3')}><span>Bill</span><span class="text-center">Count</span><span class="text-right">Amount</span></div>
-          <div class="-mx-4">${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} d=${d} />`)}</div>
-          <div class="t-small pt-1 text-right font-semibold text-ink-2">Counted ${fmtMoney(counted)}</div>`}
-    </div>
-    ${batches.map((batch, i) => html`<${CashBatch} key=${batch.id} pool=${pool} batch=${batch} index=${i} />`)}
-    <div class="flex flex-wrap items-center gap-x-5 px-4 pb-2">
-      <button class=${link} onClick=${flip}>${entry === 'total' ? 'Count bills instead' : 'Type a total instead'}</button>
-      <button class=${link} onClick=${() => openCashSheet('adjust', pool.id)}>${adj ? 'Over / short: ' + (adj < 0 ? '−' : '+') + fmtMoney(Math.abs(adj)) : 'Over / short'}</button>
-      <button class=${link} onClick=${() => App.addCashBatch(pool.id)}><${Icon} name="plus" class="size-3.5" />Checkpoint</button>
-      ${batches.length > 0 && html`<button class=${link} onClick=${() => openCashSheet('ranges', pool.id)}>Bill counts</button>`}
-    </div>
-  <//>`;
+// ── Cash entries ─────────────────────────────────────────────────────────────
+// Every entry the shift has: each pool's main count, then its parts.
+export function entriesOf(state) {
+  const several = state.pools.length > 1;
+  const out = [];
+  state.pools.forEach(pool => {
+    const parts = pool.cash.batches || [];
+    const name = String(pool.label || '').trim() || 'Tips';
+    out.push({ value: 'p:' + pool.id, label: !several && parts.length ? 'Part 1' : name, pool, batch: null, n: 1 });
+    parts.forEach((b, i) => out.push({ value: 'b:' + pool.id + ':' + b.id, pool, batch: b, n: i + 2,
+      label: String(b.label || '').trim() || (several ? name + ' ' + (i + 2) : 'Part ' + (i + 2)) }));
+  });
+  return out;
+}
+// How the pool's main count is entered: 'bills' (the default) or 'total'.
+// An older pool with only a typed amount reads as a total.
+export function entryMode(pool) {
+  const c = pool.cash;
+  if (c.baseMode) return c.baseMode;
+  return String(c.netTotal ?? '').trim() && countedValue(c.billCounts) === 0 ? 'total' : 'bills';
+}
+const modeOf = e => (e.batch ? (e.batch.mode || 'bills') : entryMode(e.pool));
+function entryTotal(e) {
+  if (e.batch) {
+    if (modeOf(e) === 'bills') return countedValue(e.batch.billCounts);
+    const a = parseWholeNumber(e.batch.amount);
+    return a.valid ? a.value : 0;
+  }
+  const c = e.pool.cash, counted = countedValue(c.billCounts), typed = parseWholeNumber(c.netTotal);
+  if (c.baseMode === 'bills') return counted;
+  if (c.baseMode === 'total' || c.restMode === 'total') return typed.valid ? Math.max(typed.value, c.baseMode === 'total' ? 0 : counted) : 0;
+  return counted + (typed.valid ? typed.value : 0);
+}
+const curEntry = () => (lastEntries || []).find(e => e.value === currentSub('tips')) || null;
+
+// Pull down → the other way of entering this entry.
+function flipEntry(e = curEntry()) {
+  if (!e) return;
+  const next = modeOf(e) === 'bills' ? 'total' : 'bills';
+  if (e.batch) App.updateCashBatch(e.pool.id, e.batch.id, 'mode', next);
+  else if (!App.poolBaseMode(e.pool.id, next)) return;
+  toast(next === 'total' ? 'Typing a total' : 'Counting bills');
 }
 
-// ── Pools: one card per pool — its window, name, who shares it ──────────────
-function PoolSetupCard({ pool, vm }) {
-  const single = vm.state.pools.length === 1;
+// A part's typed amount.
+function PartAmount({ pool, batch }) {
+  return html`<div class="relative">
+    <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[1.25rem] text-ink-3">$</span>
+    <input class=${cx(INPUT, 'h-14 pl-10 text-[1.25rem] font-semibold tracking-tight')} type="number" min="0" step="1" placeholder="0" inputmode="numeric"
+      aria-label=${'Total cash' + (batch.label ? ' · ' + batch.label : '')} value=${batch.amount || ''} onInput=${ev => App.updateCashBatch(pool.id, batch.id, 'amount', ev.target.value)} />
+  </div>`;
+}
+
+function Entry({ vm, e }) {
+  const { pool, batch } = e;
   const vmPool = vm.pools.find(p => p.id === pool.id);
-  const rolesOn = vm.state.settings.allRoles;
-  return html`<div data-setup=${pool.id} class="scroll-mt-2"><${Section} title=${single ? 'Who shares the tips' : pool.label}><${Card} flush class="pool-editor">
-    <div class="flex flex-col divide-y divide-line">
-      ${!single && html`<${FormRow} label="Window" aside="tap a time to type it">
-          ${pool.kind === 'party' && !pool.window.start.trim() && !pool.window.end.trim()
-            && html`<span class="t-small text-warn">Set when the party started and ended — only hours inside it share its tips.</span>`}
-          <${WindowEdge} vm=${vm} pool=${pool} vmPool=${vmPool} which="start" />
-          <${WindowEdge} vm=${vm} pool=${pool} vmPool=${vmPool} which="end" />
-        <//>
-        <${FormRow} label="Name"><input class=${cx(INPUT, 'h-11')} value=${pool.label} aria-label="Pool name" onInput=${e => App.poolLabel(pool.id, e.target.value)} /><//>`}
-      ${(rolesOn || !single) && html`<${SharedBy} pool=${pool} />`}
-      ${pool.includeSupport && html`<${SupportBox} pool=${pool} vm=${vm} vmPool=${vmPool} />`}
-      ${!single && html`<div class="px-4 py-3"><${Button} variant="danger" size="sm" onClick=${() => App.removePool(pool.id)}>Remove pool<//></div>`}
+  const mode = modeOf(e);
+  const total = entryTotal(e);
+  const parts = pool.cash.batches || [];
+  const adj = vmPool?.adjust || 0;
+  const several = vm.state.pools.length > 1;
+  const ready = !vm.blocked && vm.totalCash > 0;
+  const err = vm.inputError && vm.blockedTab === 'tips' ? vm.blocked : '';
+  const newPart = () => {
+    const id = App.addCashBatch(pool.id);
+    if (id) requestAnimationFrame(() => setSub('tips', 'b:' + pool.id + ':' + id, { dir: 'left' }));
+  };
+  const poolLine = [
+    several && windowSub(pool, vmPool),
+    (parts.length > 0 || adj) && fmtMoney(vmPool?.total || 0) + ' in ' + (several ? pool.label : 'all'),
+    parts.length > 0 && (parts.length + 1) + ' parts',
+    adj && fmtMoney(Math.abs(adj)) + (adj < 0 ? ' short' : ' over'),
+  ].filter(Boolean).join(' · ');
+  return html`<div class="flex flex-col gap-5" data-pid=${pool.id}>
+    <div class="pull-hint" aria-hidden="true"><span class="pull-idle">Pull to ${mode === 'bills' ? 'type a total' : 'count bills'}</span><span class="pull-armed">Release to ${mode === 'bills' ? 'type a total' : 'count bills'}</span></div>
+    ${err && html`<${Alert}>${err}<//>`}
+    ${vm.cashNote && html`<${Alert} tone="warn">${vm.cashNote}<//>`}
+    <${Section} title=${e.label + (mode === 'bills' ? ' · bills' : ' · total')} aside=${html`<span class="font-semibold text-ink">${fmtMoney(total)}</span>`}
+      footer=${poolLine || null}>
+      ${mode === 'bills'
+        ? html`<div class="page-table">
+            <div class=${cx(BILL_GRID, 't-cap px-4 pb-1 pt-1 text-ink-3')}><span>Bill</span><span class="text-center">Count</span><span class="text-right">Amount</span></div>
+            ${DENOMS.map(d => html`<${BillRow} key=${d} pool=${pool} batch=${batch} d=${d} />`)}
+          </div>`
+        : batch ? html`<${PartAmount} pool=${pool} batch=${batch} />` : html`<${Amount} pool=${pool} />`}
+    <//>
+    <button class="flex h-16 w-full items-center justify-center gap-2.5 rounded-card bg-accent/12 text-accent transition active:scale-[0.98]" onClick=${newPart}>
+      <${Icon} name="plus" class="size-5" /><span class="flex flex-col items-start leading-tight"><span class="t-head">New part</span><span class="t-small text-accent/80">Save this count and start another</span></span>
+    </button>
+    <div class="flex flex-wrap items-center justify-center gap-x-5 gap-y-1">
+      <button class="t-small h-9 font-semibold text-accent active:opacity-60" onClick=${() => flipEntry(e)}>${mode === 'bills' ? 'Type a total instead' : 'Count bills instead'}</button>
+      ${parts.length > 0 && html`<button class="t-small h-9 font-semibold text-accent active:opacity-60" onClick=${() => openCashSheet('ranges', pool.id)}>Bill counts across parts</button>`}
+      ${batch && html`<button class="t-small h-9 font-semibold text-bad active:opacity-60" onClick=${() => App.removeCashBatch(pool.id, batch.id)}>Remove this part</button>`}
     </div>
-  <//><//></div>`;
+    ${ready && html`<${NextStep} tab="home" label="See who gets what"
+      sub=${fmtMoney(vm.totalCash) + ' · $' + vm.shares.rate.toFixed(2) + ' an hour'} />`}
+    ${vm.blockedTab === 'staff' && html`<${NextStep} tab="staff" label="Back to Staff" sub=${vm.blocked} />`}
+  </div>`;
 }
 
 // ── The cash form's small drawers ───────────────────────────────────────────
@@ -317,58 +338,67 @@ export function Suggested({ vm }) {
   <//>`;
 }
 
-// Shift type (Night: one pool · Day: Day + Mid pools) and parties.
-function ShiftType({ vm }) {
-  const type = vm.state.meta.shiftType || 'night';
-  return html`<div class="flex items-center gap-2">
-    <${Seg} class="flex-1" value=${type} onChange=${t => App.setShiftType(t)}
-      items=${SHIFT_TYPES.map(t => ({ value: t, label: SHIFT_LABEL[t] + ' shift' }))} />
-    <${Button} size="sm" variant="tonal" icon="plus" onClick=${() => App.addParty()}>Party<//>
-  </div>`;
-}
-
 function Tips({ vm }) {
-  const v = currentSub('tips');
-  if (v === 'drawer') return null;              // Tips › Drawer is render/payout.js
-  return v === 'pools' ? html`<${PoolSetup} vm=${vm} />` : html`<${Cash} vm=${vm} />`;
+  if (currentSub('tips') === 'drawer') return null;     // Tips › Drawer is render/payout.js
+  const e = curEntry() || lastEntries?.[0];
+  return e ? html`<${Entry} key=${e.value} vm=${vm} e=${e} />` : null;
 }
 
-// Cash: every pool's cash, one card each.
-function Cash({ vm }) {
-  const state = vm.state;
-  const err = vm.inputError && vm.blockedTab === 'tips' ? vm.blocked : '';
-  const ready = !vm.blocked && vm.totalCash > 0;
-  return html`<div class="flex flex-col gap-5">
-    ${err && html`<${Alert}>${err}<//>`}
-    ${vm.cashNote && html`<${Alert} tone="warn">${vm.cashNote}<//>`}
-    ${state.pools.map(pool => html`<${CashCard} key=${pool.id} pool=${pool} vm=${vm} />`)}
-    ${ready && html`<${NextStep} tab="home" label="See who gets what"
-      sub=${fmtMoney(vm.totalCash) + ' · $' + vm.shares.rate.toFixed(2) + ' an hour'} />`}
-    ${vm.blockedTab === 'staff' && html`<${NextStep} tab="staff" label="Back to Staff" sub=${vm.blocked} />`}
-  </div>`;
+// ── Pull down to switch how the entry is entered ────────────────────────────
+// At the top of the page, a drag down follows the finger (with resistance);
+// past PULL it says "Release to …" and letting go flips bills ↔ total.
+const PULL = 64;
+let pull = null, pullBound = false;
+function pullTo(d) {
+  const panel = $('tab-tips');
+  if (!panel) return;
+  panel.style.transition = d ? 'none' : 'transform .25s cubic-bezier(.2,.8,.3,1)';
+  panel.style.transform = d ? `translateY(${d}px)` : '';
+  panel.classList.toggle('pulling', d > 0);
+  panel.classList.toggle('pull-armed', d > PULL);
+}
+function bindPull() {
+  const m = $('mainContent');
+  if (!m || pullBound) return;
+  pullBound = true;
+  const calm = () => !document.documentElement.classList.contains('keypad-open') && !document.body.classList.contains('keyboard-open')
+    && !document.querySelector('.sheet-backdrop.open') && !document.documentElement.classList.contains('menu-open');
+  m.addEventListener('touchstart', ev => {
+    pull = null;
+    if (currentTab() !== 'tips' || currentSub('tips') === 'drawer' || ev.touches.length !== 1 || m.scrollTop > 0 || !calm()) return;
+    pull = { x0: ev.touches[0].clientX, y0: ev.touches[0].clientY, on: false, d: 0 };
+  }, { passive: true });
+  m.addEventListener('touchmove', ev => {
+    if (!pull) return;
+    const dx = ev.touches[0].clientX - pull.x0, dy = ev.touches[0].clientY - pull.y0;
+    if (!pull.on) {
+      if (dy > 10 && dy > Math.abs(dx) * 1.4 && m.scrollTop <= 0) pull.on = true;
+      else if (Math.abs(dx) > 10 || dy < -10) { pull = null; return; }
+      else return;
+    }
+    if (ev.cancelable) ev.preventDefault();
+    pull.d = Math.min(140, Math.max(0, dy) * 0.5);
+    pullTo(pull.d);
+  }, { passive: false });
+  const end = flip => {
+    const p = pull;
+    pull = null;
+    if (!p?.on) return;
+    pullTo(0);
+    if (flip && p.d > PULL) flipEntry();
+  };
+  m.addEventListener('touchend', () => end(true), { passive: true });
+  m.addEventListener('touchcancel', () => end(false), { passive: true });
 }
 
-// Pools: how the tips are split.
-function PoolSetup({ vm }) {
-  const state = vm.state;
-  const single = state.pools.length === 1;
-  return html`<div class="flex flex-col gap-5">
-    <${Section} title="Shift type" footer=${(state.meta.shiftType || 'night') === 'day'
-      ? 'Day: bar + servers share the floor until the servers are out, then Mid is the bar’s.'
-      : 'Night: one pool for the whole shift. + Party adds a private party’s tips over its own window.'}><${ShiftType} vm=${vm} /><//>
-    ${(state.settings.allRoles || !single) && state.pools.map(pool => html`<${PoolSetupCard} key=${pool.id} pool=${pool} vm=${vm} />`)}
-    ${state.settings.multiPool && html`<${Button} variant="tonal" block icon="plus" onClick=${() => App.addPool()}>Add pool<//>`}
-    <${SupportDefault} vm=${vm} />
-    <${List}>
-      <${Item} icon="gift" title="Closer bonus & chump" sub="Who gets the dollars left after rounding" onClick=${() => App.openBonus()} />
-    <//>
-  </div>`;
-}
-
+let lastEntries = null;
 let lastVm = null;
 
 export function renderTips(vm) {
   lastVm = vm;
+  lastEntries = entriesOf(vm.state);
+  setSubs('tips', [...lastEntries.map(e => ({ value: e.value, label: e.label })), { value: 'drawer', label: 'Drawer' }]);
+  bindPull();
   const root = $('tips-root');
   if (root) render(html`<${Tips} vm=${vm} />`, root);
   renderCashSheet(vm);

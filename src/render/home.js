@@ -173,7 +173,10 @@ function ViewSwitch({ vm, count }) {
 // Times as plain text — "5", "2", "11:30" (no a / p, no :00 on the hour) —
 // in the name's weight; the box only shows while it's being edited / held.
 const CELL = 'h-8 w-full rounded-md text-[1rem] tabular-nums transition';
-const TIME_TONE = set => (set ? 'text-ink' : 'text-ink-3');
+// Every time reads the same quiet grey, typed or following the default.
+const TIME_TONE = () => 'text-ink-3';
+// The name alone (no avatar — the table is for scanning across), the closer's dot after it.
+const TableName = ({ vm, p }) => html`<span class="inline-flex min-w-0 max-w-full items-center gap-1.5"><span class="truncate">${p.name}</span>${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}</span>`;
 function PayTable({ vm, people, total, hours }) {
   const s = vm.shares;
   const raw = id => vm.state.staff.find(x => x.id === id);
@@ -184,20 +187,20 @@ function PayTable({ vm, people, total, hours }) {
     ? html`<span class="inline-flex items-baseline justify-end gap-1"><${Delta} d=${payDeltaSum(vm, total) || marks?.$total} />
         <${DragAmount} plain value=${total} min=${0} label="Tips total" cls="-mr-1.5" moneyCls=${VALUE}
           onSet=${v => App.nudgeCash(v - total)} onPreview=${v => App.previewCash(v == null ? null : v - total)}
-          onTap=${() => App.tab('tips', { sub: 'cash' })} /></span>`
+          onTap=${() => App.tab('tips')} /></span>`
     : money(total, marks?.$total);
   return html`<${Table} fixed
-    cols=${[{ label: 'Name', w: 'w-[38%]' }, { label: 'In', w: 'w-[15%]' }, { label: 'Out', w: 'w-[15%]' }, { label: 'Hrs', w: 'w-[10%]' }, { label: 'Tips', align: 'right', w: 'w-[22%]' }]}
+    cols=${[{ label: 'Name', w: 'w-[36%]' }, { label: 'In', w: 'w-[15%]' }, { label: 'Out', w: 'w-[15%]' }, { label: 'Hrs', w: 'w-[12%]' }, { label: 'Tips', align: 'right', w: 'w-[22%]' }]}
     rows=${[
       ...people.map(p => ({ key: p.id, onClick: () => openPerson(p.id),
-        cells: [html`<${NameCell} vm=${vm} p=${p} />`, cell(p, 'in'), cell(p, 'out'),
+        cells: [html`<${TableName} vm=${vm} p=${p} />`, cell(p, 'in'), cell(p, 'out'),
           html`<span class=${isSup(p) ? 'text-ink-3' : ''}>${fmtHrs(hoursOf(p))}</span>`,
           money(p.final, payDelta(vm, p.id, p.final) || markOf(p), isSup(p) ? SUP_TEXT : '')] })),
-      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, '', '', '', money(s.leftover, null)] }] : []),
+      ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<span class="text-ink-2">Chump</span>`, '', '', '', money(s.leftover, null)] }] : []),
     ]}
-    foot=${[html`<${RowLabel}>Total<//>`,
-      html`<${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink" bare />`,
-      html`<${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink" bare />`,
+    foot=${['Total',
+      html`<${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare />`,
+      html`<${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare />`,
       fmtHrs(hours), tipsTotal]} />`;
 }
 // The total's change while a preview runs: everyone's pay plus the chump.

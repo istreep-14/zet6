@@ -1,7 +1,8 @@
 // Shift types — how a session's pools are laid out, plus the default times
 // each type starts from. Pure: no DOM, no store.
 //
-//   night  one pool, the whole shift, bar + servers.
+//   night  one pool, no window (the whole shift: first In → last Out),
+//          the bar's (servers / support off — a night has neither by default).
 //   day    Day  = open → servers out ('srv'), bar + servers share the floor
 //          Mid  = servers out → bar out ('bar'), bartenders only
 //          (the edges are derived, so the switch follows when the servers
@@ -46,7 +47,39 @@ export function presetPools(type) {
       pool('Mid', 'mid', { window: { start: 'srv', end: 'bar' }, roles: { server: false } }),
     ];
   }
-  return [pool('Night', 'night')];
+  return [pool('Night', 'night', { roles: { server: false } })];
+}
+
+// A pool's preset (Shift › Pools › a pool): what each kind means.
+//   night  no window, bar only           day  open → servers out, bar + servers
+//   mid    servers out → bar out, bar    party its own window, bar + servers,
+//                                              support tip-out on
+export const PRESETS = ['night', 'day', 'mid', 'party'];
+export const PRESET_LABEL = { night: 'Night', day: 'Day', mid: 'Mid', party: 'Party' };
+export const PRESET_HINT = {
+  night: 'The whole shift · bar',
+  day: 'Open → servers out · bar + servers',
+  mid: 'Servers out → bar out · bar',
+  party: 'Its own window · + support',
+};
+const PRESET = {
+  night: { window: { start: '', end: '' }, roles: { bartender: true, server: false }, includeSupport: false },
+  day: { window: { start: '', end: 'srv' }, roles: { bartender: true, server: true }, includeSupport: false },
+  mid: { window: { start: 'srv', end: 'bar' }, roles: { bartender: true, server: false }, includeSupport: false },
+  party: { window: { start: '', end: '' }, roles: { bartender: true, server: true }, includeSupport: true },
+};
+// Apply a preset to a pool in place: its kind, window and who shares it. The
+// name follows unless it was typed (blank, a preset's name or "Pool n").
+export function applyPreset(p, kind) {
+  const pr = PRESET[kind];
+  if (!pr) return p;
+  const label = String(p.label || '').trim();
+  if (!label || Object.values(PRESET_LABEL).includes(label) || /^Pool \d+$/.test(label)) p.label = PRESET_LABEL[kind];
+  p.kind = kind;
+  p.window = { ...pr.window };
+  p.roles = { ...pr.roles };
+  p.includeSupport = pr.includeSupport;
+  return p;
 }
 
 // A private party: its own window (set it on the Tips tab), bar + servers,

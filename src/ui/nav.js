@@ -1,5 +1,5 @@
-// Navigation: four tabs — Home · Staff · Tips · Settings — changed only by
-// tapping the tab bar. Inside a tab:
+// Navigation: four tabs — Home · Staff · Tips · Shift — changed only by
+// tapping the tab bar (Settings is a page opened from the menu). Inside a tab:
 //
 //   sub-tabs   every tab has them, as the tab row under the header's title
 //              (Home: Pay · Shift · Bills · Split; Staff: People · Shift;
@@ -33,8 +33,8 @@ import { render } from './preact.js';
 const $ = id => document.getElementById(id);
 const root = () => document.documentElement;
 
-export const TABS = ['home', 'staff', 'tips', 'settings'];
-export const TITLES = { home: 'Home', staff: 'Staff', tips: 'Tips', settings: 'Settings' };
+export const TABS = ['home', 'staff', 'tips', 'shift'];
+export const TITLES = { home: 'Home', staff: 'Staff', tips: 'Tips', shift: 'Shift' };
 export const SUBS = {
   home: [
     { value: 'pay', label: 'Pay' },
@@ -46,21 +46,31 @@ export const SUBS = {
     { value: 'people', label: 'People' },
     { value: 'shift', label: 'Shift' },
   ],
+  // Tips' sub-tabs follow the shift: one per pool and per part of a pool
+  // (render/tips.js sets them with setSubs), then the Drawer.
   tips: [
-    { value: 'cash', label: 'Cash' },
-    { value: 'pools', label: 'Pools' },
+    { value: 'cash', label: 'Tips' },
     { value: 'drawer', label: 'Drawer' },
   ],
-  settings: [
+  shift: [
     { value: 'shift', label: 'Shift' },
-    { value: 'sessions', label: 'Sessions' },
-    { value: 'app', label: 'App' },
+    { value: 'pools', label: 'Pools' },
   ],
 };
 
+// Replace a tab's sub-tabs (Tips: they follow the pools). Keeps the current
+// one when it's still there, else the first.
+export function setSubs(tab, list) {
+  if (!list?.length) return;
+  const same = SUBS[tab] && SUBS[tab].length === list.length && SUBS[tab].every((s, i) => s.value === list[i].value && s.label === list[i].label);
+  if (same) return;
+  SUBS[tab] = list;
+  if (!list.some(s => s.value === sub[tab])) { sub[tab] = list[0].value; applySub(tab); }
+}
+
 // Older saved tab names.
 export function normalizeTab(name) {
-  const legacy = { summary: 'home', payout: 'tips', bills: 'tips', more: 'tips', cash: 'tips' };
+  const legacy = { summary: 'home', payout: 'tips', bills: 'tips', more: 'tips', cash: 'tips', settings: 'shift' };
   return legacy[name] || (TABS.includes(name) ? name : 'home');
 }
 

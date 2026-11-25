@@ -14,7 +14,7 @@ const el = (id, extra = {}) => ({
 const nodes = {
   mainContent: el('mainContent'),
   subpages: el('subpages'),
-  'tab-home': el('tab-home'), 'tab-staff': el('tab-staff'), 'tab-tips': el('tab-tips'), 'tab-settings': el('tab-settings'),
+  'tab-home': el('tab-home'), 'tab-staff': el('tab-staff'), 'tab-tips': el('tab-tips'), 'tab-shift': el('tab-shift'),
 };
 const rootClasses = el('root').classList;
 globalThis.window = { innerWidth: 400 };
@@ -24,7 +24,7 @@ globalThis.document = {
   body: { classList: el('body').classList },
   activeElement: null,
   getElementById: id => nodes[id] || null,
-  querySelectorAll: sel => (sel === '#mainContent > .panel' ? ['tab-home', 'tab-staff', 'tab-tips', 'tab-settings'].map(k => nodes[k]) : []),
+  querySelectorAll: sel => (sel === '#mainContent > .panel' ? ['tab-home', 'tab-staff', 'tab-tips', 'tab-shift'].map(k => nodes[k]) : []),
   createElement: () => el('page'),
   addEventListener() {}, removeEventListener() {},
 };
@@ -82,9 +82,20 @@ for (const t of nav.TABS) assert.ok(nav.SUBS[t]?.length >= 2, t + ' has sub-tabs
 // Old saved tab names.
 assert.equal(nav.normalizeTab('summary'), 'home');
 assert.equal(nav.normalizeTab('payout'), 'tips');
+assert.equal(nav.normalizeTab('settings'), 'shift', 'Settings is a page now; its old tab opens Shift');
+
+// Tips' sub-tabs follow the pools: replaced in place, the current one kept
+// while it's still there, else the first.
+nav.setSubs('tips', [{ value: 'p:1', label: 'Night' }, { value: 'drawer', label: 'Drawer' }]);
+assert.equal(nav.currentSub('tips'), 'p:1');
+nav.setSub('tips', 'drawer');
+nav.setSubs('tips', [{ value: 'p:1', label: 'Night' }, { value: 'b:1:2', label: 'Part 2' }, { value: 'drawer', label: 'Drawer' }]);
+assert.equal(nav.currentSub('tips'), 'drawer', 'still there → kept');
+nav.setSubs('tips', [{ value: 'p:9', label: 'Day' }]);
+assert.equal(nav.currentSub('tips'), 'p:9', 'gone → the first');
 
 // Subpages: push, then a swipe right pops; a short one springs back.
-nav.showTab('settings');
+nav.showTab('shift');
 nav.pushPage({ key: 'a', title: 'A', body: () => null });
 nav.pushPage({ key: 'b', title: 'B', body: () => null });
 assert.equal(nav.stackOf().length, 2);
@@ -106,7 +117,7 @@ assert.ok(!rootClasses.contains('sub-open'));
 nav.pushPage({ key: 'x', title: 'X', body: () => null });
 nav.showTab('home');
 assert.equal(nav.topPage(), null);
-nav.showTab('settings');
+nav.showTab('shift');
 assert.equal(nav.topPage().title, 'X');
 nav.resetNav();
 assert.equal(nav.topPage(), null);

@@ -86,7 +86,9 @@ function metaOf(vm, tab, sessionName) {
     s.pools.length > 1 && { v: s.pools.length, l: 'pools' },
     vm.adjust ? { v: fmtMoney(Math.abs(vm.adjust)), l: vm.adjust < 0 ? 'short' : 'over', tone: 'text-warn' } : null,
   ];
-  return [{ v: sessionName || fmtDay(s.meta.date) }, sessionName && { v: fmtDay(s.meta.date), tone: 'text-ink-3' }];
+  // Shift: the type, the pools, the day.
+  return [{ v: (s.meta.shiftType === 'day' ? 'Day' : 'Night') + ' shift' }, { v: s.pools.length, l: s.pools.length === 1 ? 'pool' : 'pools' },
+    { v: sessionName || fmtDay(s.meta.date), tone: 'text-ink-3' }];
 }
 
 // Hours actually worked by the tipped staff (support is a tip-out). Not
@@ -138,7 +140,14 @@ function placeInk(progress = 0, live = false) {
   const b = Math.min(labels.length - 1, a + 1);
   const f = pos - a;
   const box = row.getBoundingClientRect();
-  const at = l => { const q = l.getBoundingClientRect(); return { x: q.left - box.left, w: q.width }; };
+  // The row scrolls sideways when there are many tabs (Tips' pools and parts):
+  // positions are in the row's content, and the current tab is kept in view.
+  const at = l => { const q = l.getBoundingClientRect(); return { x: q.left - box.left + row.scrollLeft, w: q.width }; };
+  if (!live) {
+    const tab = labels[idx].parentElement, tb = tab.getBoundingClientRect();
+    if (tb.left < box.left) row.scrollLeft -= box.left - tb.left + 8;
+    else if (tb.right > box.right) row.scrollLeft += tb.right - box.right + 8;
+  }
   const A = at(labels[a]), B = at(labels[b]);
   const first = !ink.style.width;
   ink.style.transition = live || first ? 'none' : '';
@@ -161,7 +170,7 @@ function renderBadges(vm) {
     staff: { text: named > 0 ? String(named) : '', tone: named > 0 && errOn('staff') ? 'warn' : '' },
     tips: { text: errOn('tips') || short ? '!' : total > 0 ? fmtMoneyShort(total) : '', tone: errOn('tips') || short ? 'warn' : total > 0 ? 'ok' : '' },
   };
-  ['home', 'staff', 'tips', 'settings'].forEach(t => {
+  ['home', 'staff', 'tips', 'shift'].forEach(t => {
     const el = $('tab-sub-' + t), b = badges[t] || { text: '', tone: '' };
     if (!el) return;
     el.textContent = b.text;

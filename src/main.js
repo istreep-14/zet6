@@ -9,10 +9,10 @@ import { buildViewModel } from './viewmodel.js';
 import { setClock24, setAmFrom } from './time.js';
 import { countedValue, parseWholeNumber } from './util.js';
 import { nextId } from './ids.js';
-import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL } from './shifts.js';
+import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL, applyPreset } from './shifts.js';
 import { mountSheets, closeSheet, closeAllSheets } from './ui/sheet.js';
 import { renderChrome, fmtDay } from './render/tabs.js';
-import { initNav, onNav, showTab, setSub, currentTab, popPage, popAll, topPage, resetNav, renderPages, normalizeTab } from './ui/nav.js';
+import { initNav, onNav, showTab, setSub, currentTab, popPage, popAll, topPage, resetNav, renderPages, normalizeTab, pushPage } from './ui/nav.js';
 import { renderStaff, openStaffEditor } from './render/staff.js';
 import { loadRoster, rememberName, forgetName } from './roster.js';
 import { renderTips } from './render/tips.js';
@@ -22,7 +22,9 @@ import { trackChanges, resetChanges, snapOf, SHOW } from './ui/changes.js';
 import { toast, copyText } from './ui/toast.js';
 import { summaryText } from './textout.js';
 import { renderHome, openPerson as homePerson, resetHomeMarks } from './render/home.js';
-import { renderSettings } from './render/settings.js';
+import { renderSettings, SettingsPage } from './render/settings.js';
+import { renderShift, openPool as shiftPool } from './render/shift.js';
+import { html } from './ui/preact.js';
 import { renderMenu, openMenu, closeMenu, menuOpen, menuEdge, initMenu } from './render/menu.js';
 import { openCloseTime, renderCloseTime, selectCloseTime } from './render/closetime.js';
 import {
@@ -83,6 +85,7 @@ function render(s) {
     people: s.staff.filter(p => p.name.trim()).length,
   });
   renderSettings(lastVm, sessions.list(), sessions.currentId());
+  renderShift(lastVm);
   renderMenu(lastVm, sessions.list(), sessions.currentId());
   renderPages(lastVm);
   renderChrome(lastVm, sessionName());
@@ -136,6 +139,14 @@ function nudgeCash(s, delta) {
   const asTotal = cash.restMode === 'total';
   const base = typed.valid && !typed.empty ? typed.value : asTotal ? countedValue(cash.billCounts) : 0;
   cash.netTotal = String(Math.max(asTotal ? countedValue(cash.billCounts) : 0, base + delta));
+}
+
+// Counting bills: a pool with nothing typed is in bill mode from the first
+// count; an older pool with a typed amount keeps it as its total.
+function startBills(cash) {
+  if (cash.baseMode) return;
+  if (!String(cash.netTotal ?? '').trim()) cash.baseMode = 'bills';
+  else makeCashTotal(cash);
 }
 
 // Older sessions may store an amount in addition to counted bills. Convert it
@@ -258,8 +269,12 @@ window.App = {
     renderStaff(lastVm);
     renderHome(lastVm, sessionName());
     renderSheets(lastVm);
+    renderShift(lastVm);
     renderPages(lastVm);
-    renderSettings(lastVm, sessions.list(), sessions.currentId());
+  },
+  // Settings: a page from the menu, over whatever tab you're on.
+  openSettings() {
+    pushPage({ key: 'settings', title: 'Settings', body: vm => html`<${SettingsPage} vm=${vm} />` });
   },
   toggleShow: key => store.toggleShow(key),
 
@@ -359,7 +374,9 @@ window.App = {
 
   // pools
   selectPool: id => store.mutate(s => { s.ui.selectedPool = id; }, { immediate: true }),
-  addPool() { const id = store.addPool(); App.selectPool(id); App.tab('tips', { sub: 'pools' }); },
+  // A new pool / party opens its page on Shift › Pools.
+  addPool() { const id = store.addPool(); App.selectPool(id); App.tab('shift', { sub: 'pools' }); shiftPool(id); },
+  poolPreset: (id, kind) => store.updatePool(id, p => applyPreset(p, kind), true),
   removePool: store.removePool,
   poolRole: store.togglePoolRole,
   poolLabel: (id, value) => store.updatePool(id, p => { p.label = value; }),
@@ -385,8 +402,9 @@ window.App = {
       s.defaults.byRole = t.byRole;
       s.pools = switchPools(s.pools, type);
       s.ui.selectedPool = s.pools[0].id;
+      // Day has servers; a night is the bar's (unless roles are already in use).
       if (type === 'day') s.settings.allRoles = true;
-      if (s.pools.length > 1) s.settings.multiPool = true;
+      else if (!s.staff.some(p => p.name.trim() && p.role !== 'bartender')) s.settings.allRoles = false;
     }, { immediate: true });
   },
   // A private party: its own pool over the floor pools, window to set.
@@ -397,12 +415,11 @@ window.App = {
       id = p.id;
       s.pools.push(p);
       s.ui.selectedPool = id;
-      s.settings.multiPool = true;
     }, { immediate: true });
-    App.tab('tips', { sub: 'pools' });
-    requestAnimationFrame(() => document.querySelector(`[data-setup="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
+    App.tab('shift', { sub: 'pools' });
+    shiftPool(id);
   },
-  poolBill: (id, denom, value) => store.updatePool(id, p => { if (!p.cash.baseMode) makeCashTotal(p.cash); p.cash.billCounts[denom] = value; }),
+  poolBill: (id, denom, value) => store.updatePool(id, p => { startBills(p.cash); p.cash.billCounts[denom] = value; }),
   poolTotal(id, value) {
     store.updatePool(id, p => { p.cash.netTotal = value; p.cash.restMode = 'total'; p.cash.baseMode = 'total'; });
   },
@@ -429,7 +446,7 @@ window.App = {
     store.updatePool(id, p => {
       p.cash.batches ||= [];
       batchId = nextId('b');
-      p.cash.batches.push({ id: batchId, label: '', mode: 'total', amount: '', billCounts: store.blankBillStrings() });
+      p.cash.batches.push({ id: batchId, label: '', mode: 'bills', amount: '', billCounts: store.blankBillStrings() });
     }, true);
     return batchId;
   },
@@ -454,7 +471,7 @@ window.App = {
     }, true);
   },
   removeCashBatch(id, batchId) {
-    if (!window.confirm('Remove this checkpoint and its cash from the pool?')) return;
+    if (!window.confirm('Remove this part and its cash from the pool?')) return;
     store.updatePool(id, p => { p.cash.batches = (p.cash.batches || []).filter(b => b.id !== batchId); }, true);
   },
   poolAdjust: (id, value) => store.updatePool(id, p => { p.cash.adjust = value; }),
@@ -475,7 +492,7 @@ window.App = {
     store.mutate(s => {
       const p = s.pools.find(x => x.id === id);
       if (!p) return;
-      if (!p.cash.baseMode) makeCashTotal(p.cash);
+      startBills(p.cash);
       const next = Math.max(0, (parseInt(p.cash.billCounts[denom], 10) || 0) + delta);
       p.cash.billCounts[denom] = next ? String(next) : '';
     }, { immediate: true });
@@ -667,7 +684,7 @@ onNav(() => {
   renderStaff(lastVm);
   renderTips(lastVm);
   renderPayout(lastVm);
-  renderSettings(lastVm, sessions.list(), sessions.currentId());
+  renderShift(lastVm);
   renderChrome(lastVm, sessionName());
   requestAnimationFrame(refreshSticky);
 });

@@ -1,12 +1,13 @@
-// Settings tab (Preact) — three sub-tabs (the header):
-//   Shift     this session: its name, the date (inline calendar, dots on
-//             days with other sessions), export, delete
+// Settings (Preact) — a page opened from the menu (pushed over whatever tab
+// you're on; no longer a tab of its own):
 //   Sessions  New session, every saved session (tap to switch; Edit →
 //             rename / delete)
-//   App       theme, display size, roles, several pools, 24-hour time,
-//             morning starts at; copy / export / import
-// The default shift times live on Staff › Defaults (RoleTimes is exported
-// for it), the support tip-out on Tips › Pools (SupportDefault).
+//   Display   theme, display size (also in the menu)
+//   Time      24-hour time, morning starts at
+//   Data      copy / export / import
+// This session's own setup (name, date, shift type, roles, pools) is the
+// Shift tab (render/shift.js), which uses Calendar / sessionInfo from here.
+// Also exports RoleTimes (Staff › Shift) and SupportDefault.
 
 import { fmtMoney } from '../util.js';
 import { html, render } from '../ui/preact.js';
@@ -67,14 +68,14 @@ export const peopleOf = n => (n ? `${n} ${n === 1 ? 'person' : 'people'}` : 'No 
 // Kept from the last render (sessions live outside the view model).
 let sessionsNow = [], currentNow = null;
 
-// ── The tab ──────────────────────────────────────────────────────────────────
+// The sessions as the Shift tab and the menu need them.
+export const sessionInfo = () => ({ sessions: sessionsNow, currentId: currentNow });
 
-function AppPrefs({ vm }) {
+// ── The page ─────────────────────────────────────────────────────────────────
+
+function Prefs({ vm }) {
   const s = vm.state;
-  const extraPools = s.pools.length > 1;
-  const toggle = key => () => App.toggleSetting(key);
-  return html`<div class="flex flex-col gap-6">
-    <${Section} title="Appearance"><${List}>
+  return html`<${Section} title="Display"><${List}>
       <${Item} icon="contrast" title="Theme" chevron=${false}>
         <${Seg} value=${s.settings.theme || 'system'} onChange=${v => App.setTheme(v)}
           items=${[{ value: 'system', label: 'Auto' }, { value: 'light', label: 'Light', icon: 'sun' }, { value: 'dark', label: 'Dark', icon: 'moon' }]} />
@@ -84,37 +85,33 @@ function AppPrefs({ vm }) {
           items=${[{ value: 's', label: 'S' }, { value: 'm', label: 'M' }, { value: 'l', label: 'L' }, { value: 'xl', label: 'XL' }]} />
       <//>
     <//><//>
-
-    <${Section} title="App" footer="Shared by every session."><${List}>
-      <${SwitchRow} icon="users" on=${s.settings.allRoles} onClick=${toggle('allRoles')} label="Servers & support" hint="Role sections, support tip-out, who-shares chips" />
-      <${SwitchRow} icon="cash" on=${s.settings.multiPool || extraPools} disabled=${extraPools} onClick=${toggle('multiPool')} label="Several pools"
-        hint=${extraPools ? `On while ${s.pools.length} pools exist — remove extras to turn off` : 'Split tips by time window (day · mid · parties)'} />
-      <${SwitchRow} icon="clock" on=${s.settings.clock24} onClick=${toggle('clock24')} label="24-hour time" hint="17:00 instead of 5:00p" />
+    <${Section} title="Time"><${List}>
+      <${SwitchRow} icon="clock" on=${s.settings.clock24} onClick=${() => App.toggleSetting('clock24')} label="24-hour time" hint="17:00 instead of 5:00p" />
       <${Item} icon="sun" title="Morning starts at" chevron=${false}
         sub=${'A bare ' + (s.settings.amFrom ?? 9) + ' to 11:59 reads as am, anything else as pm. Type a / p on the keypad for any other time.'}>
         <${Seg} value=${s.settings.amFrom ?? 9} onChange=${v => App.setAmFrom(v)}
           items=${[5, 6, 7, 8, 9, 10].map(h => ({ value: h, label: h + 'a' }))} />
       <//>
     <//><//>
-
     <${Section} title="Data"><${List}>
       <${Item} icon="copy" title="Copy summary as text" sub="For Notes" chevron=${false} onClick=${() => App.copySummary()} />
       <${Item} icon="download" title="Export this session" sub="A .json file" chevron=${false} onClick=${() => App.exportSession()} />
       <${Item} icon="upload" title="Import a session" sub="Adds it and opens it" chevron=${false} onClick=${() => App.triggerImport()} />
-    <//><//>
+    <//><//>`;
+}
+
+export function SettingsPage({ vm }) {
+  return html`<div class="flex flex-col gap-6">
+    <${Sessions} vm=${vm} />
+    <${Prefs} vm=${vm} />
   </div>`;
 }
 
-function Settings({ vm }) {
-  const v = currentSub('settings');
-  return v === 'sessions' ? html`<${Sessions} vm=${vm} />` : v === 'app' ? html`<${AppPrefs} vm=${vm} />` : html`<${Shift} vm=${vm} />`;
-}
-
+// Sessions live outside the view model: kept here for the page, the Shift
+// tab and the menu (main.js calls this every render).
 export function renderSettings(vm, sessions, currentId) {
   sessionsNow = sessions;
   currentNow = currentId;
-  const root = $('settings-root');
-  if (root) render(html`<${Settings} vm=${vm} />`, root);
 }
 
 // ── Sessions ─────────────────────────────────────────────────
@@ -124,11 +121,9 @@ let editing = false;
 function Sessions({ vm }) {
   const rows = rowsOf(vm, sessionsNow, currentNow);
   const iconBtn = 'grid size-9 place-items-center rounded-full';
-  return html`<div class="flex flex-col gap-5">
-    <${List}>
-      <${Item} icon="plus" title=${html`<span class="text-accent">New session</span>`} chevron=${false} onClick=${() => App.newSession()} />
-    <//>
+  return html`<div class="flex flex-col gap-3">
     <${Section} title="Sessions" aside=${(rows.length > 1 || editing) && html`<button class="font-semibold text-accent" onClick=${() => { editing = !editing; App.repaint(); }}>${editing ? 'Done' : 'Edit'}</button>`} footer=${editing ? 'Deleting a session can’t be undone. Export it first to keep a copy.' : 'Tap one to open it.'}><${List}>
+      <${Item} icon="plus" title=${html`<span class="text-accent">New session</span>`} chevron=${false} onClick=${() => App.newSession()} />
       ${rows.map(e => {
         const active = e.id === currentNow;
         const lead = html`<${DateTile} iso=${e.date} active=${active} />`;
@@ -167,7 +162,7 @@ function calendarStep(delta) {
   App.repaint();
 }
 
-function Calendar({ selected, sessionDates }) {
+export function Calendar({ selected, sessionDates }) {
   const first = new Date(calY, calM, 1);
   const lead = first.getDay();
   const days = new Date(calY, calM + 1, 0).getDate();
@@ -235,20 +230,12 @@ function DefCell({ k, title, raw, fallback, field, inAbs, write }) {
     write=${write} next=${navFrom(k)} rerender=${() => App.repaint()} clearable />`;
 }
 
-function Shift({ vm }) {
+// The session's date as the calendar (dots on days with other sessions).
+export function SessionDate({ vm }) {
   const s = vm.state;
-  const entry = sessionsNow.find(e => e.id === currentNow) || {};
   const sessionDates = new Set(sessionsNow.filter(e => e.id !== currentNow).map(e => e.date));
   if (calFor !== s.meta.date) { calFor = s.meta.date; showMonthOf(calFor); }
-  return html`<div class="flex flex-col gap-6">
-    <${Field} page label="Session name" value=${entry.name || ''} placeholder="e.g. Brunch, Private party" maxlength="40" enterkeyhint="done"
-      onChange=${e => App.renameCurrent(e.target.value)} onKeyDown=${e => { if (e.key === 'Enter') e.target.blur(); }} />
-    <${Section} title="Date"><${Calendar} selected=${s.meta.date} sessionDates=${sessionDates} /><//>
-    <${Section} title="This session"><${List}>
-      <${Item} icon="download" title="Export JSON" chevron=${false} onClick=${() => App.exportSession()} />
-      <${Item} icon="trash" tone="danger" title="Delete session" chevron=${false} onClick=${() => App.deleteSession(currentNow)} />
-    <//><//>
-  </div>`;
+  return html`<${Calendar} selected=${s.meta.date} sessionDates=${sessionDates} />`;
 }
 let calFor = null;
 

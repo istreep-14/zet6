@@ -156,8 +156,24 @@ export function toggleCloserOverride(id) {
 
 // ── Defaults actions ──────────────────────────────────────────────────────────
 
+// Setting the shift's open / close: anyone whose own time now reads the same
+// as it (and has no role time in between) latches onto it — it's no longer
+// a typed time, so the next change to the default moves them too.
+const sameReading = (a, b) => {
+  const x = String(a || '').trim().toLowerCase(), y = String(b || '').trim().toLowerCase();
+  if (!x || !y) return false;
+  const num = t => parseFloat(t), mer = t => (/[ap]$/.test(t) ? t.slice(-1) : '');
+  return num(x) === num(y) && (!mer(x) || !mer(y) || mer(x) === mer(y));
+};
 export function setGlobalDefault(field, value, immediate = false) {
-  mutate(s => { s.defaults.global[field] = value; rememberTimes(s); }, { immediate });
+  mutate(s => {
+    s.defaults.global[field] = value;
+    s.staff.forEach(p => {
+      const roleTime = String(s.defaults.byRole?.[p.role]?.[field] || '').trim();
+      if (!roleTime && sameReading(p[field], value)) p[field] = '';
+    });
+    rememberTimes(s);
+  }, { immediate });
 }
 
 export function setRoleDefault(role, field, value, immediate = false) {

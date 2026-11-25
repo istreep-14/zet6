@@ -221,9 +221,10 @@
   .hdr-text { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
   .hdr-title { font-size: 1.25rem; font-weight: 600; line-height: 1.2; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .hdr-actions { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; }
-  .hdr-tabs { position: relative; display: flex; height: var(--tabs-h); }
+  .hdr-tabs { position: relative; display: flex; height: var(--tabs-h); overflow-x: auto; scrollbar-width: none; }
+  .hdr-tabs::-webkit-scrollbar { display: none; }
   .hdr-tab {
-    display: flex; min-width: 0; flex: 1; align-items: center; justify-content: center;
+    display: flex; flex: 1 0 auto; align-items: center; justify-content: center; padding: 0 .875rem;
     font-size: 1rem; font-weight: 400; color: var(--ink-3); transition: color .15s;
   }
   .hdr-tab[aria-selected="true"] { font-weight: 600; color: var(--ink); }
@@ -234,6 +235,19 @@
     pointer-events: none; transition: transform .28s cubic-bezier(.2, .8, .3, 1), width .28s cubic-bezier(.2, .8, .3, 1);
   }
 
+  /* ── Tips: pull down to switch bills ↔ total (render/tips.js) ─────────── */
+  .pull-hint {
+    position: relative; height: 0; margin-bottom: -1.25rem; overflow: visible; pointer-events: none;
+  }
+  .pull-hint > span {
+    position: absolute; left: 50%; top: -2.75rem; transform: translateX(-50%); white-space: nowrap;
+    padding: .375rem .875rem; border-radius: 999px; font-size: .8125rem; font-weight: 600;
+    background: var(--surface-2); color: var(--ink-2); opacity: 0; transition: opacity .15s;
+  }
+  .panel.pulling .pull-hint .pull-idle { opacity: 1; }
+  .panel.pull-armed .pull-hint .pull-idle { opacity: 0; }
+  .panel.pull-armed .pull-hint .pull-armed { opacity: 1; background: var(--accent); color: var(--on-accent); }
+
   /* ── The menu (render/menu.js): a drawer from the left over a scrim ──── */
   .menu-scrim {
     position: fixed; inset: 0; z-index: 104; background: rgb(0 0 0 / .45);
@@ -243,7 +257,7 @@
   .menu {
     position: fixed; top: 0; bottom: 0; left: 0; z-index: 105;
     width: min(19.5rem, 84vw);
-    overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+    overflow: hidden; touch-action: pan-y;
     padding: var(--hdr-top) 0 0 var(--safe-l);
     background: var(--bg); color: var(--ink);
     box-shadow: 1px 0 0 var(--line), var(--shadow);
@@ -252,12 +266,13 @@
   }
   .menu.open, .menu.dragging { transform: none; visibility: visible; transition: transform .3s cubic-bezier(.2, .9, .25, 1); }
   .menu.dragging, .menu-scrim.dragging { transition: none; }
-  .menu-head { padding: 1rem 1.25rem .75rem; }
+  .menu-head { flex-shrink: 0; padding: .75rem 1.25rem .75rem; box-shadow: 0 1px 0 var(--line); }
+  .menu-foot { flex-shrink: 0; display: flex; align-items: center; gap: .75rem; padding: .625rem 1.25rem calc(.625rem + var(--safe-b)); box-shadow: 0 -1px 0 var(--line); }
   .menu-sep { height: 1px; margin: 0 1.25rem; background: var(--line); }
   .menu-row {
-    display: flex; width: 100%; align-items: center; gap: 1.125rem; min-height: 3.25rem;
-    padding: .375rem 1.25rem; text-align: left;
-    font-size: 1.25rem; font-weight: 600; letter-spacing: -.02em; color: var(--ink);
+    display: flex; width: 100%; align-items: center; gap: 1rem; min-height: 2.875rem;
+    padding: .25rem 1.25rem; text-align: left;
+    font-size: 1rem; font-weight: 600; color: var(--ink);
   }
   .menu-row:active { background: var(--surface-2); }
   html.fill-screen .menu, html.fill-screen .menu-scrim { position: absolute; height: var(--app-h); bottom: auto; }
