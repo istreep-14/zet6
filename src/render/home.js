@@ -174,8 +174,8 @@ function PayTable({ vm, people, total, hours, pageTab = 'home' }) {
     ${people.map(p => html`<${Item} key=${p.id} onClick=${() => openPerson(p.id, pageTab)}
       lead=${html`<${PersonAv} vm=${vm} p=${p} size="sm" />`} title=${p.name} sub=${timeSub(p)}
       trail=${html`<${PayoutValue} value=${p.final} d=${payDelta(vm, p.id, p.final) || markOf(p)} tone=${isSup(p) ? SUP_TEXT : ''} />`} />`)}
-    ${s.leftover > 0 && html`<${Item} icon="cash" title="Chump" trail=${html`<${PayoutValue} value=${s.leftover} tone="text-ink-2" />`} chevron=${false} />`}
-    <${Item} icon="sigma" title="Total" sub=${totalSub} trail=${tipsTotal} chevron=${false} />
+    ${s.leftover > 0 && html`<${Item} class="payout-chump" lead=${html`<${RoundIcon} name="cash" small />`} title="Chump" trail=${html`<${PayoutValue} value=${s.leftover} tone="text-ink-2" />`} chevron=${false} />`}
+    <${Item} class="payout-total" lead=${html`<${RoundIcon} name="sigma" small />`} title="Total" sub=${totalSub} trail=${tipsTotal} chevron=${false} />
   <//>`;
 }
 // The total's change while a preview runs: everyone's pay plus the chump.

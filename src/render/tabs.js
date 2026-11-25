@@ -115,7 +115,7 @@ function HeaderBills({ vm }) {
   const need = smallBillsNeeded(vm);
   if (!need) return null;
   return html`<span class="hdr-bills" aria-label=${'Ideal small bills: ' + need.map(b => b.n + ' $' + b.d).join(', ')}>
-    ${need.map(b => html`<span key=${b.d} data-d=${b.d}><b>${b.n}</b><small>$${b.d}</small></span>`)}
+    ${need.map(b => html`<span key=${b.d} data-d=${b.d}><small>$${b.d}</small><b>${b.n}</b></span>`)}
   </span>`;
 }
 

@@ -104,22 +104,22 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
     ? html`<span data-d=${d} class="bill-col font-semibold">${v}</span>`
     : html`<span class="text-ink-3/45">–</span>`;
   const head = d => html`<span data-d=${d} class="bill-col text-[0.625rem] tracking-[-.04em]" aria-label=${'$' + d}>$${d}</span>`;
-  const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} />${!quiet && html`<${Delta} d=${payDelta(vm, p.id, p.final)} under />`}</span>`;
+  const pay = p => html`<span class="relative inline-block"><${Money} value=${p.final} class=${cx('t-small font-semibold', p.final > 0 ? 'text-money' : 'text-ink-3')} />${!quiet && html`<${Delta} d=${payDelta(vm, p.id, p.final)} under />`}</span>`;
   const stackNote = id => {
     const st = vm.stacks?.[id];
     if (!st) return '';
     const k = Object.values(st).reduce((t, x) => t + x, 0);
     return html`<span class="t-small block font-normal leading-tight text-accent">${k} ${k === 1 ? 'stack' : 'stacks'}</span>`;
   };
-  const envelopeName = p => html`<span class="flex min-w-0 items-center gap-2.5"><${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} size="sm" /><span class="flex min-w-0 flex-col"><span class="truncate">${p.name}</span>${stackNote(p.id)}</span></span>`;
+  const envelopeName = p => html`<span class="flex min-w-0 items-center gap-2"><${Avatar} name=${p.name} i=${hueIndex(vm.state, p.id)} size="sm" /><span class="flex min-w-0 flex-col"><span class="t-small truncate">${p.name}</span>${stackNote(p.id)}</span></span>`;
   return html`<${Table} fixed firstWide class="envelope-grid"
-    cols=${[{ label: 'Envelope', w: 'w-[32%]' }, ...cols.map(d => ({ head: head(d), w: 'w-[7%]' })), { label: 'Take home', align: 'right', w: 'w-[26%]' }]}
+    cols=${[{ label: 'Envelope', w: 'w-[27%]' }, ...cols.map(d => ({ head: head(d), w: 'w-[8.833%]' })), { label: 'Take home', align: 'right', w: 'w-[20%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => onRow(p.id),
         cells: [envelopeName(p), ...cols.map(d => count(d, (byPerson[p.id] || {})[d] || 0)), pay(p)] })),
       ...(s.leftover > 0 ? [{ key: 'chump', cells: [html`<${RowLabel} icon="cash">Chump<//>`, ...cols.map(d => count(d, rem[d] || 0)), html`<${Money} value=${s.leftover} class="font-semibold" />`] }] : []),
     ]}
-    foot=${[html`<${RowLabel}>Total<//>`, ...cols.map(d => count(d, colTotal(d))), html`<${Money} value=${grand} class="font-semibold text-money" />`]} />`;
+    foot=${[html`<${RowLabel}>Total<//>`, ...cols.map(d => count(d, colTotal(d))), html`<${Money} value=${grand} class="t-small font-semibold text-money" />`]} />`;
 }
 
 
