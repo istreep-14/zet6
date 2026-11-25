@@ -206,19 +206,34 @@ export function resolvePools(state, resolved) {
     const mode = pool.cash.entryMode;
     const billCounts = {};
     DENOMS.forEach(d => {
-      const parsed = parseWholeNumber(mode === 'nettotal' ? '' : pool.cash.billCounts[d]);
+      const parsed = parseWholeNumber(mode === 'nettotal' || pool.cash.baseMode === 'total' ? '' : pool.cash.billCounts[d]);
       if (!parsed.valid) errors.push(label + ' $' + d + ' count must be a whole number.');
       billCounts[d] = parsed.valid ? parsed.value : 0;
     });
     // netTotal is either the uncounted rest, or (restMode 'total') the whole
     // amount including the counted bills — then rest = total − counted.
-    const counted = poolValue(billCounts);
-    const restParsed = parseWholeNumber(mode === 'perbill' ? '' : pool.cash.netTotal);
+    const baseCounted = poolValue(billCounts);
+    const restParsed = parseWholeNumber(mode === 'perbill' || pool.cash.baseMode === 'bills' ? '' : pool.cash.netTotal);
     if (!restParsed.valid) errors.push(label + ' cash must be a whole-dollar amount.');
     const typed = restParsed.valid ? restParsed.value : 0;
-    const asTotal = pool.cash.restMode === 'total' && String(pool.cash.netTotal ?? '').trim() !== '';
-    if (asTotal && typed < counted) errors.push(label + ': the counted bills come to more than the total cash.');
-    const rest = asTotal ? Math.max(0, typed - counted) : typed;
+    const asTotal = pool.cash.baseMode !== 'bills' && pool.cash.restMode === 'total' && String(pool.cash.netTotal ?? '').trim() !== '';
+    if (asTotal && typed < baseCounted) errors.push(label + ': the counted bills come to more than the total cash.');
+    let rest = asTotal ? Math.max(0, typed - baseCounted) : typed;
+    (pool.cash.batches || []).forEach((batch, i) => {
+      const batchLabel = label + ' checkpoint ' + (i + 1);
+      if (batch.mode === 'bills') {
+        DENOMS.forEach(d => {
+          const parsed = parseWholeNumber(batch.billCounts?.[d]);
+          if (!parsed.valid) errors.push(batchLabel + ' $' + d + ' count must be a whole number.');
+          else billCounts[d] += parsed.value;
+        });
+      } else {
+        const parsed = parseWholeNumber(batch.amount);
+        if (!parsed.valid) errors.push(batchLabel + ' amount must be a whole-dollar amount.');
+        else rest += parsed.value;
+      }
+    });
+    const counted = poolValue(billCounts);
     const adjParsed = parseSignedWhole(pool.cash.adjust);
     if (!adjParsed.valid) errors.push(label + ' register over / short must be whole dollars, e.g. -50.');
     const adjust = adjParsed.valid ? adjParsed.value : 0;

@@ -140,17 +140,17 @@ function Pills({ vm }) {
       { icon: 'clock', label: html`Close ${vm.resolved?.closeAbs != null && html`<${Clock} abs=${vm.resolved.closeAbs} />`}`, aria: 'Close-time what-if', onClick: () => App.openCloseTime() },
       { icon: 'gift', label: 'Chump ' + (sh.leftover > 0 ? fmtMoney(sh.leftover) : '—'), aria: 'Closer bonus and chump', onClick: () => App.openBonus() },
     ] : [];
-  const pill = 't-small inline-flex h-9 shrink-0 items-center gap-1 rounded-full bg-surface-2 px-3 font-semibold text-ink transition active:scale-95';
-  return html`<div class="flex min-w-0 items-center gap-1.5">
-    <div class="flex min-w-0 flex-1 flex-wrap gap-1.5">
+  const pill = 't-small inline-flex h-[var(--tap)] shrink-0 items-center gap-1.5 rounded-lg px-2.5 font-medium text-ink-2 transition active:bg-surface-2';
+  return html`<div class="flex min-w-0 items-center gap-1" role="group" aria-label="Page actions">
+    <div class="hud-actions flex min-w-0 flex-1 items-center gap-0.5">
       ${items.map((it, i) => it.close
-        ? html`<span key="close" class=${cx(pill, 'pr-0.5')}><span class="size-1.5 rounded-full bg-bad/70"></span>Close
-            <${CloseTime} vm=${vm} cls="h-7 min-w-[2.75rem] rounded-full px-1.5 tabular-nums transition" tone="font-semibold text-ink" /></span>`
-        : html`<button key=${i} class=${cx(pill, it.on && '!bg-accent !text-on-accent')} onClick=${it.onClick} aria-label=${it.aria} aria-pressed=${it.on != null ? String(!!it.on) : undefined}>
+        ? html`<span key="close" class=${cx(pill, 'pr-0')}><span class="size-1.5 rounded-full bg-bad/70"></span>Close
+            <${CloseTime} vm=${vm} cls="h-[var(--tap)] min-w-[2.75rem] rounded-lg px-1.5 tabular-nums transition" tone="font-semibold text-ink" /></span>`
+        : html`<button key=${i} class=${cx(pill, it.on && 'bg-accent/12 text-accent')} onClick=${it.onClick} aria-label=${it.aria} aria-pressed=${it.on != null ? String(!!it.on) : undefined}>
             <${Icon} name=${it.on ? 'check' : it.icon} class=${cx('size-4', !it.on && 'text-ink-3')} />${it.label}</button>`)}
       ${!items.length && html`<span class="t-small self-center truncate px-2 text-ink-3">${vm.blocked || 'Swipe up for more'}</span>`}
     </div>
-    <button class="grid size-9 shrink-0 place-items-center rounded-full bg-surface-2 text-ink-2 transition active:scale-95" onClick=${() => App.pageSheet()} aria-label="More for this page"><${Icon} name="chevU" class="size-[1.125rem]" /></button>
+    <button class="t-small inline-flex h-[var(--tap)] shrink-0 items-center gap-1 border-l border-line pl-3 pr-2 font-semibold text-accent transition active:opacity-60" onClick=${() => App.pageSheet()} aria-label="More for this page">More <${Icon} name="chevU" class="size-4" /></button>
   </div>`;
 }
 

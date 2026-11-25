@@ -39,6 +39,7 @@ export function newPool(label = 'Pool') {
       billCounts: blankBillStrings(),
       netTotal: '',
       restMode: 'rest',            // netTotal is 'rest' (uncounted) or 'total' (incl. counted)
+      batches: [],                 // additional, independently entered checkpoints
       adjust: '',                  // signed register over / short, e.g. '-50'
     },
   };

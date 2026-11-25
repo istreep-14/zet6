@@ -1,5 +1,45 @@
 import assert from 'node:assert';
 import { resolveStaff, resolvePools } from '../src/resolve.js';
+import { initialState, blankBillStrings } from '../src/store.js';
+import { serialize, deserialize } from '../src/persist.js';
+
+// Checkpoints are independent: only the selected entry mode contributes,
+// counted bills are merged, and export/import keeps both editable drafts.
+{
+  const state = initialState();
+  const cash = state.pools[0].cash;
+  cash.netTotal = '150';
+  cash.restMode = 'total';
+  cash.billCounts[20] = '5';
+  cash.batches = [
+    { id: 'b101', label: 'First', mode: 'total', amount: '75', billCounts: { ...blankBillStrings(), 100: '9' } },
+    { id: 'b102', label: 'Second', mode: 'bills', amount: '999', billCounts: { ...blankBillStrings(), 20: '2', 5: '2' } },
+  ];
+  const calc = s => resolvePools(s, resolveStaff(s));
+  const r = calc(state);
+  assert.deepStrictEqual(r.errors, []);
+  assert.strictEqual(r.pools[0].total, 275);
+  assert.strictEqual(r.pools[0].counted, 150);
+  assert.strictEqual(r.pools[0].rest, 125);
+  assert.strictEqual(r.pools[0].billCounts[20], 7);
+  const restored = deserialize(serialize(state));
+  assert.deepStrictEqual(restored.pools[0].cash.batches, cash.batches);
+  assert.strictEqual(calc(restored).pools[0].total, 275);
+  restored.pools[0].cash.batches[0].mode = 'bills';
+  assert.strictEqual(calc(restored).pools[0].total, 1100);
+  cash.batches = [];
+  cash.baseMode = 'total';
+  let base = calc(state).pools[0];
+  assert.strictEqual(base.total, 150);
+  assert.strictEqual(base.counted, 0);
+  assert.strictEqual(base.rest, 150);
+  cash.baseMode = 'bills';
+  base = calc(state).pools[0];
+  assert.strictEqual(base.total, 100);
+  assert.strictEqual(base.counted, 100);
+  assert.strictEqual(base.rest, 0);
+  assert.strictEqual(deserialize(serialize(state)).pools[0].cash.baseMode, 'bills');
+}
 
 function baseState(staff, pools, defaults) {
   return {

@@ -7,7 +7,8 @@ import * as persist from './persist.js';
 import * as sessions from './sessions.js';
 import { buildViewModel } from './viewmodel.js';
 import { setClock24, setAmFrom, parseTime, inAbsOf } from './time.js';
-import { countedValue } from './util.js';
+import { countedValue, parseWholeNumber } from './util.js';
+import { nextId } from './ids.js';
 import { presetPools, partyPool, switchPools, cashLostBySwitch, timesFor, SHIFT_LABEL } from './shifts.js';
 import { mountSheets, closeSheet, closeAllSheets, dragToOpen } from './ui/sheet.js';
 import { switchTab, updateTabIndicators, normalizeTab } from './render/tabs.js';
@@ -144,6 +145,18 @@ function nudgeCash(s, vmPool, delta) {
   const rest = Math.max(0, (vmPool.rest || 0) + delta);
   const asTotal = pool.cash.restMode === 'total' && String(pool.cash.netTotal ?? '').trim() !== '';
   pool.cash.netTotal = String(asTotal ? (vmPool.counted || 0) + rest : rest);
+}
+
+// Older sessions may store an amount in addition to counted bills. Convert it
+// to an inclusive total before editing the bill count in the new interface.
+function makeCashTotal(cash) {
+  if (cash.restMode === 'total') return;
+  const raw = String(cash.netTotal ?? '').trim();
+  if (!raw) { cash.restMode = 'total'; return; }
+  const parsed = parseWholeNumber(raw);
+  if (!parsed.valid) return;
+  cash.netTotal = String(parsed.value + countedValue(cash.billCounts));
+  cash.restMode = 'total';
 }
 
 let previewing = false;
@@ -434,7 +447,11 @@ window.App = {
   setShiftType(type) {
     const st = store.getState();
     if ((st.meta.shiftType || 'night') === type) return;
-    const cashOf = p => countedValue(p.cash.billCounts) + (parseInt(p.cash.netTotal, 10) || 0);
+    const cashOf = p => {
+      const counted = p.cash.baseMode === 'total' ? 0 : countedValue(p.cash.billCounts), typed = p.cash.baseMode === 'bills' ? 0 : (parseInt(p.cash.netTotal, 10) || 0);
+      const base = p.cash.restMode === 'total' && String(p.cash.netTotal).trim() ? Math.max(typed, counted) : counted + typed;
+      return base + (p.cash.batches || []).reduce((sum, b) => sum + (b.mode === 'bills' ? countedValue(b.billCounts) : (parseInt(b.amount, 10) || 0)), 0);
+    };
     const lost = cashLostBySwitch(st.pools, type, cashOf);
     const ask = `Switch to a ${SHIFT_LABEL[type].toLowerCase()} shift? The $${lost} entered in the pools that go away will be cleared.`;
     if (lost > 0 && !window.confirm(ask)) return;
@@ -456,44 +473,65 @@ window.App = {
       const p = partyPool(s.pools);
       id = p.id;
       s.pools.push(p);
+      s.ui.selectedPool = id;
       s.settings.multiPool = true;
     }, { immediate: true });
     App.tab('tips');
     requestAnimationFrame(() => document.querySelector(`[data-pid="${id}"]`)?.scrollIntoView({ block: 'start', behavior: 'smooth' }));
   },
-  poolBill: (id, denom, value) => store.updatePool(id, p => { p.cash.billCounts[denom] = value; }),
-  poolNet: (id, value) => store.updatePool(id, p => { p.cash.netTotal = value; }),
-  poolAdjust: (id, value) => store.updatePool(id, p => { p.cash.adjust = value; }),
-  // Count bills on: the amount box now means the total (incl. the counted
-  // bills). Off: the counted bills fold back into one amount.
-  poolCounting(id, on) {
-    store.mutate(s => {
-      const p = s.pools.find(x => x.id === id);
-      if (!p) return;
-      const counted = countedValue(p.cash.billCounts);
-      const n = parseInt(p.cash.netTotal, 10) || 0;
-      if (on) {
-        if (!counted) p.cash.restMode = 'total';
-        return;
+  poolBill: (id, denom, value) => store.updatePool(id, p => { if (!p.cash.baseMode) makeCashTotal(p.cash); p.cash.billCounts[denom] = value; }),
+  poolTotal(id, value) {
+    store.updatePool(id, p => { p.cash.netTotal = value; p.cash.restMode = 'total'; p.cash.baseMode = 'total'; });
+  },
+  poolBaseMode(id, mode) {
+    const pool = store.getState().pools.find(p => p.id === id);
+    if (!pool || pool.cash.baseMode === mode) return true;
+    const c = pool.cash, counted = countedValue(c.billCounts), raw = String(c.netTotal ?? '').trim();
+    const parsed = parseWholeNumber(raw);
+    if (!c.baseMode && mode === 'bills' && raw && parsed.valid) {
+      const previous = c.restMode === 'total' ? Math.max(parsed.value, counted) : parsed.value + counted;
+      if (previous !== counted && !window.confirm('Switching to counted bills changes this starting amount from $' + previous + ' to $' + counted + '. Your entered total stays saved. Continue?')) return false;
+    }
+    store.updatePool(id, p => {
+      if (!p.cash.baseMode && mode === 'total') {
+        makeCashTotal(p.cash);
+        if (!String(p.cash.netTotal ?? '').trim() && counted > 0) p.cash.netTotal = String(counted);
       }
-      const sum = p.cash.restMode === 'total' && String(p.cash.netTotal).trim() ? Math.max(n, counted) : n + counted;
-      p.cash.netTotal = sum ? String(sum) : '';
-      Object.keys(p.cash.billCounts).forEach(d => { p.cash.billCounts[d] = ''; });
-      p.cash.restMode = 'rest';
-    }, { immediate: true });
+      p.cash.baseMode = mode;
+    }, true);
+    return true;
   },
-  // The amount box means the uncounted rest, or the whole total (incl. the
-  // counted bills). Switching keeps the same cash: the typed number converts.
-  poolRestMode(id, mode) {
-    store.mutate(s => {
-      const p = s.pools.find(x => x.id === id);
-      if (!p || (p.cash.restMode || 'rest') === mode) return;
-      const counted = countedValue(p.cash.billCounts);
-      const n = parseInt(p.cash.netTotal, 10);
-      if (Number.isFinite(n)) p.cash.netTotal = String(mode === 'total' ? n + counted : Math.max(0, n - counted));
-      p.cash.restMode = mode;
-    }, { immediate: true });
+  addCashBatch(id) {
+    store.updatePool(id, p => {
+      p.cash.batches ||= [];
+      p.cash.batches.push({ id: nextId('b'), label: '', mode: 'total', amount: '', billCounts: store.blankBillStrings() });
+    }, true);
   },
+  updateCashBatch(id, batchId, field, value) {
+    store.updatePool(id, p => {
+      const b = (p.cash.batches || []).find(x => x.id === batchId);
+      if (b) b[field] = value;
+    }, field === 'mode');
+  },
+  cashBatchBill(id, batchId, denom, value) {
+    store.updatePool(id, p => {
+      const b = (p.cash.batches || []).find(x => x.id === batchId);
+      if (b) b.billCounts[denom] = value;
+    });
+  },
+  cashBatchStep(id, batchId, denom, delta) {
+    store.updatePool(id, p => {
+      const b = (p.cash.batches || []).find(x => x.id === batchId);
+      if (!b) return;
+      const next = Math.max(0, (parseInt(b.billCounts[denom], 10) || 0) + delta);
+      b.billCounts[denom] = next ? String(next) : '';
+    }, true);
+  },
+  removeCashBatch(id, batchId) {
+    if (!window.confirm('Remove this checkpoint and its cash from the pool?')) return;
+    store.updatePool(id, p => { p.cash.batches = (p.cash.batches || []).filter(b => b.id !== batchId); }, true);
+  },
+  poolAdjust: (id, value) => store.updatePool(id, p => { p.cash.adjust = value; }),
   poolSupport(id, field, value) {
     store.updatePool(id, p => {
       p.support ||= { pct: '', rate: '', hours: {} };
@@ -511,6 +549,7 @@ window.App = {
     store.mutate(s => {
       const p = s.pools.find(x => x.id === id);
       if (!p) return;
+      if (!p.cash.baseMode) makeCashTotal(p.cash);
       const next = Math.max(0, (parseInt(p.cash.billCounts[denom], 10) || 0) + delta);
       p.cash.billCounts[denom] = next ? String(next) : '';
     }, { immediate: true });

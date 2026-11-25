@@ -283,7 +283,7 @@ function TotalRow({ vm, hours, paidOut, before, view, col = {} }) {
   // (App.nudgeCash moves the uncounted rest; previewed while dragging,
   // Undo · Apply after). Tap → Tips. Not below the counted bills.
   const vmPool = vm.state.pools.length === 1 ? vm.pools[0] : null;
-  const amount = vmPool && !adj && html`<${DragAmount} value=${paidOut} min=${Math.max(0, paidOut - (vmPool.rest || 0))}
+  const amount = vmPool && !adj && vm.state.pools[0].cash.baseMode !== 'bills' && !(vm.state.pools[0].cash.batches || []).length && html`<${DragAmount} value=${paidOut} min=${Math.max(0, paidOut - (vmPool.rest || 0))}
     cls="-mx-1.5" moneyCls="t-body font-semibold text-money" label="Tips total"
     onSet=${(v, v0) => App.nudgeCash(v - v0)} onPreview=${(v, v0) => App.previewCash(v == null ? null : v - v0)}
     onTap=${() => App.tab('tips')} />`;
@@ -657,7 +657,7 @@ function PayItems({ vm, name }) {
   const paidOut = ordered.reduce((t, p) => t + p.final, 0);
   const paidBefore = adj ? vm.sharesBefore.perPerson.reduce((t, p) => t + p.final, 0) : 0;
   const vmPool = vm.state.pools.length === 1 ? vm.pools[0] : null;
-  const total = vmPool && !adj
+  const total = vmPool && !adj && vm.state.pools[0].cash.baseMode !== 'bills' && !(vm.state.pools[0].cash.batches || []).length
     ? html`<${DragAmount} value=${paidOut} min=${Math.max(0, paidOut - (vmPool.rest || 0))}
         cls="-mx-1.5" moneyCls=${cx(PI_MONEY, 'text-ink')} label="Tips total"
         onSet=${(v, v0) => App.nudgeCash(v - v0)} onPreview=${(v, v0) => App.previewCash(v == null ? null : v - v0)}

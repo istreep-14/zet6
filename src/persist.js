@@ -49,6 +49,7 @@ export function validateV4(state) {
       throw new Error('pool entryMode is invalid');
     }
     assertString(pool.cash.netTotal, 'pool netTotal');
+    if (pool.cash.baseMode != null && !['total', 'bills'].includes(pool.cash.baseMode)) throw new Error('pool cash mode is invalid');
     if (pool.cash.adjust != null) assertString(pool.cash.adjust, 'pool adjust');
     if (pool.cash.restMode != null && pool.cash.restMode !== 'rest' && pool.cash.restMode !== 'total') {
       throw new Error('pool restMode is invalid');
@@ -60,6 +61,21 @@ export function validateV4(state) {
       if (typeof v !== 'string' && typeof v !== 'number') throw new Error('pool bill counts are invalid');
       if (!parseWholeNumber(v).valid) throw new Error('pool bill counts must be whole numbers');
     });
+    if (pool.cash.batches != null) {
+      if (!Array.isArray(pool.cash.batches)) throw new Error('cash checkpoints must be an array');
+      const ids = new Set();
+      pool.cash.batches.forEach(batch => {
+        if (!isPlainObject(batch) || typeof batch.id !== 'string' || !batch.id || ids.has(batch.id) || !['total', 'bills'].includes(batch.mode)) throw new Error('cash checkpoint is invalid');
+        ids.add(batch.id);
+        assertString(batch.label, 'checkpoint label');
+        assertString(batch.amount, 'checkpoint amount');
+        if (!isPlainObject(batch.billCounts)) throw new Error('checkpoint bill counts are invalid');
+        DENOMS.forEach(d => {
+          const v = batch.billCounts[d];
+          if (v != null && ((typeof v !== 'string' && typeof v !== 'number') || !parseWholeNumber(v).valid)) throw new Error('checkpoint bill counts must be whole numbers');
+        });
+      });
+    }
   });
 
   assertString(state.defaults.supportPct, 'supportPct');
@@ -107,6 +123,7 @@ function normalizeCash(pool) {
   c.entryMode = 'mixed';
   if (typeof c.adjust !== 'string') c.adjust = '';
   if (c.restMode !== 'total') c.restMode = 'rest';
+  if (!Array.isArray(c.batches)) c.batches = [];
 }
 
 // ── v3 → v4 migration ─────────────────────────────────────────────────────────
@@ -184,7 +201,7 @@ export function deserialize(raw) {
 
   if (snap.v === 4) {
     validateV4(snap.state);
-    seedIds([...snap.state.staff.map(p => p.id), ...snap.state.pools.map(p => p.id)]);
+    seedIds([...snap.state.staff.map(p => p.id), ...snap.state.pools.map(p => p.id), ...snap.state.pools.flatMap(p => (p.cash.batches || []).map(b => b.id))]);
     return normalizeSettings(normalizeV4(snap.state));
   }
 

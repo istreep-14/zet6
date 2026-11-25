@@ -17,7 +17,7 @@ export const SHEETS = {
   'sheet-fix': { title: 'Envelopes already made' },
   'sheet-stacks': { title: 'Stacks for a manager' },
   'sheet-tidy': { title: 'Tidy the drawer' },
-  'sheet-count': { title: 'Count bills', tall: true },
+  'sheet-bill-ranges': { title: 'Bill counts by checkpoint' },
   'sheet-adjust': { title: 'Register over / short' },
 };
 

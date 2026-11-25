@@ -48,7 +48,8 @@ export function distErrorText(vm) {
 }
 
 // Trades write real bill counts back into the pool — only with one pool.
-const tradesEnabled = vm => vm.state.pools.length === 1;
+// Applying a swap rewrites the cash count; keep checkpoint histories intact.
+const tradesEnabled = vm => vm.state.pools.length === 1 && !(vm.state.pools[0].cash.batches || []).length;
 
 const planCache = new WeakMap();
 function breakPlan(vm) {
@@ -65,10 +66,12 @@ function safeTradeUp(vm) {
 }
 
 function applyBillCountsToPool(vm, newPool) {
+  if ((vm.state.pools[0]?.cash.batches || []).length) return;
   updatePool(vm.state.pools[0].id, pool => {
     // The swapped drawer is now fully counted: the rest and any register
     // over / short are folded into these counts.
     pool.cash.entryMode = 'mixed';
+    pool.cash.baseMode = 'bills';
     pool.cash.netTotal = '';
     pool.cash.restMode = 'rest';
     pool.cash.adjust = '';
@@ -162,7 +165,7 @@ function FixCard({ vm, errMsg, plan }) {
         ${plan.trades.length > 0 && html`<ul class="flex flex-col gap-1.5">${plan.trades.map(t => html`<li class="t-body rounded-xl bg-surface px-3.5 py-2.5 font-semibold">${t}</li>`)}</ul>`}
         <${SwapTable} now=${vm.bills} deltas=${plan.deltas} after=${plan.pool} />
         <${Button} variant="primary" block icon="swap" onClick=${applyPendingTradeDown}>Apply swap to the cash count<//>`
-      : html`<${Button} block onClick=${() => App.tab('tips')}>${vm.state.pools.length > 1 ? 'Edit pool cash' : 'Edit the cash count'}<//>`}
+      : html`${(vm.state.pools[0]?.cash.batches || []).length > 0 && html`<p class="t-small text-ink-2">Edit the checkpoint counts on Tips to keep each batch intact.</p>`}<${Button} block onClick=${() => App.tab('tips')}>${vm.state.pools.length > 1 ? 'Edit pool cash' : 'Edit the cash count'}<//>`}
   <//>`;
 }
 
