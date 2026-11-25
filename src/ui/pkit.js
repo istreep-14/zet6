@@ -421,7 +421,7 @@ export function Item({ lead, icon, title, sub, trail, value, valueTone = '', che
 export const Row = Item;
 
 // Compact table. cols: [{ label, align: 'left'|'center'|'right', w, head
-// (custom header node), onHead, hl (highlight column) }]; rows: [{ key,
+// (custom header node), onHead, hl (highlight column), tight (no side padding) }]; rows: [{ key,
 // cells: [...], onClick, tone: 'muted' } | { section: 'Label' }]; foot:
 // cells for the total row. First column = the label column (left, bold,
 // truncates; `stickyFirst` pins it when the table scrolls sideways). Zebra
@@ -435,7 +435,8 @@ export const TOTAL_FILL = 'bg-[color-mix(in_srgb,var(--surface-2)_60%,var(--zbas
 export function Table({ cols, rows, foot, fixed = false, stickyFirst = false, firstWide = false, scroll = false, lines = false, class: cls = '', ...rest }) {
   const align = c => ({ left: 'text-left', right: 'text-right' }[c.align] || 'text-center');
   const first = cx('pl-4 pr-2 text-left', stickyFirst && 'sticky left-0 z-[1] bg-inherit');
-  const cell = (c, i) => cx('px-1.5 tabular-nums', i === 0 ? first : align(c), i === cols.length - 1 && i > 0 && 'pr-4', c.hl && 'bg-accent/12');
+  const cell = (c, i) => cx(c.tight ? 'px-0' : 'px-1.5', 'tabular-nums', i === 0 ? first : align(c), i === cols.length - 1 && i > 0 && 'pr-4',
+    lines && i > 0 && 'border-l border-line', c.hl && 'bg-accent/12');
   const table = html`<table class=${cx('t-body w-full border-collapse whitespace-nowrap', fixed && 'table-fixed')}>
       ${fixed && html`<colgroup>${cols.map((c, i) => html`<col key=${i} class=${c.w || ''} />`)}</colgroup>`}
       <thead class="thead group sticky top-[var(--thead-top,0px)] z-[3] bg-surface shadow-[0_1px_0_var(--line)] transition-[top] duration-200"><tr>

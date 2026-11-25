@@ -90,7 +90,8 @@ export function applyPendingTradeDown() {
 // ── Envelopes table: person · a column per bill size used · take-home ──────
 // Only the bill sizes that are actually handed out get a column, so the
 // names keep the room they need and nothing scrolls sideways. Names, Chump
-// and Total read at the same size (body); counts in their bill's tint.
+// and Total read at the same size (body); counts in their bill's tint;
+// hairlines between the columns.
 // `order` = the people in row order (default payoutOrder). A person taking
 // bundled stacks (vm.stacks) says so under their name.
 export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App.personModal(id), quiet = false }) {
@@ -116,8 +117,8 @@ export function EnvelopeTable({ vm, byPerson, remBills, order, onRow = id => App
   const label = (dot, text, sub = '') => html`<span class="flex min-w-0 items-center gap-2">${dot}<span class="flex min-w-0 flex-col"><span class="truncate">${text}</span>${sub}</span></span>`;
   const hue = p => html`<span class="size-2.5 shrink-0 rounded-full" style=${{ background: hueVar(hueIndex(vm.state, p.id)) }}></span>`;
   const blank = html`<span class="size-2.5 shrink-0 rounded-full bg-ink-3/30"></span>`;
-  return html`<${Table} fixed firstWide
-    cols=${[{ label: 'Envelope', w: 'w-[35%]' }, ...cols.map(d => ({ head: head(d) })), { label: 'Pay', align: 'right', w: 'w-[20%]' }]}
+  return html`<${Table} fixed firstWide lines
+    cols=${[{ label: 'Envelope', w: 'w-[31%]' }, ...cols.map(d => ({ head: head(d), tight: true })), { label: 'Pay', align: 'right', w: 'w-[17%]' }]}
     rows=${[
       ...ordered.map(p => ({ key: p.id, onClick: () => onRow(p.id),
         cells: [label(hue(p), p.name, stackNote(p.id)), ...cols.map(d => count(d, (byPerson[p.id] || {})[d] || 0)),

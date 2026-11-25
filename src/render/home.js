@@ -1,5 +1,5 @@
 // Home and Pay (Preact). Home is one page, no sub-tabs: the overview —
-// Name · In · Out · Hrs · Tips, each row with a thin shift line under it.
+// Name · In · Out · Hrs · Tips.
 // Pay holds the detailed distribution, split and bonuses.
 //
 //   Pay tabs    Bills    envelopes, exact-change status and drawer tools
@@ -15,7 +15,7 @@ import { DENOMS, fmtHrs, fmtMoney } from '../util.js';
 import { html, render } from '../ui/preact.js';
 import { cx, Icon, Delta, Alert, Banner, List, Item, Money, Clock, Blocked, Card, Section, Stats, Table, Denom, Badge, Avatar, RoundIcon, RowLabel,
   THEAD, Sentinel, zebra, ROLE_DOT, ROLE_PLURAL, TOTAL_FILL, hueIndex, hueVar } from '../ui/pkit.js';
-import { fmtBreak, nightSpan, AxisLabels, TimeCell, DefaultTime } from './staff.js';
+import { fmtBreak, TimeCell, DefaultTime } from './staff.js';
 import { DragAmount } from '../ui/dragtime.js';
 import { payDelta } from '../ui/changes.js';
 import { smallBillsNeeded } from './tabs.js';
@@ -132,40 +132,27 @@ function trackMarks(vm) {
 export function resetHomeMarks() { seen = null; marks = null; onHome = false; clearTimeout(marksTimer); }
 const markOf = p => marks?.[keyOf(p)] || null;
 
-// Their shift as a thin line on the night's axis, under their row's columns
-// (read-only). A placed break is a gap.
-function ShiftBar({ vm, p, span }) {
-  if (!span || p.inAbs == null || p.outAbs == null || p.outAbs <= p.inAbs) return null;
-  const at = t => Math.max(0, Math.min(100, (t - span.a) / (span.b - span.a) * 100));
-  const a = at(p.inAbs), b = at(p.outAbs);
-  const b0 = p.brkStart == null ? null : at(p.brkStart);
-  const b1 = b0 == null ? null : at(p.brkStart + p.brkLen);
-  return html`<span aria-hidden="true" class="ov-track">
-    <span class="ov-fill" style=${{ left: a + '%', width: (b - a) + '%', background: hueVar(hueIndex(vm.state, p.id)) }}></span>
-    ${b0 != null && b1 > b0 && html`<span class="absolute inset-y-0 bg-[var(--zbase)]" style=${{ left: b0 + '%', width: (b1 - b0) + '%' }}></span>`}
-  </span>`;
-}
-
 // ── Overview: Name · In · Out · Hrs · Tips ───────────────────────────────────
 // Plain columns. The name and the take-home are what you scan for (semibold
-// ink, the take-home a size up); times and hours are quiet (small, ink-3).
-// A thin shift line runs under every row's columns on the night's axis, so
-// the timeline needs no page of its own. Chump and Total use the same
-// columns, so every amount lines up. Each In / Out is Staff's own keypad
+// ink, the take-home a size up); times and hours read at body size in ink-2.
+// A person's colour is a dot before the name (the closer's red dot after it),
+// so the name keeps its room and the times sit near the middle. Chump and
+// Total use the same columns, so every amount lines up. Each In / Out is Staff's own keypad
 // cell (tap → keypad, hold → wheel); with one pool the total is a $1 wheel.
 const OV_GRID = 'ov-grid';
-const CELL = 'inline-flex h-7 min-w-0 items-center justify-center rounded-md px-1 text-[0.8125rem] tabular-nums transition';
+const CELL = 'inline-flex h-8 min-w-0 items-center justify-center rounded-md px-1 text-[1rem] tabular-nums transition';
 // Every time reads the same quiet grey, typed or following the default.
-const TIME_TONE = () => 'text-ink-3';
+const TIME_TONE = () => 'text-ink-2';
 const NAME = 't-head truncate';
 const TIPS = 'text-[1.25rem] font-semibold leading-tight tabular-nums';
 const PayoutValue = ({ value, d, tone = '' }) => html`<span class="relative inline-flex justify-end"><span class=${cx(TIPS, tone, d && 'text-accent')}>${fmtMoney(value)}</span><${Delta} d=${d} under /></span>`;
-const Hrs = ({ h, dim }) => html`<span class=${cx('t-small text-right tabular-nums', dim ? 'text-ink-3/70' : 'text-ink-3')}>${fmtHrs(h)}</span>`;
+const Hrs = ({ h, dim }) => html`<span class=${cx('t-body text-center tabular-nums', dim ? 'text-ink-3' : 'text-ink-2')}>${fmtHrs(h)}</span>`;
+const Dot = ({ c }) => html`<span class="size-2.5 shrink-0 rounded-full" style=${{ background: c }} aria-hidden="true"></span>`;
+const OvName = ({ dot, children, tone = 'text-ink', after }) => html`<span class="flex min-w-0 items-center gap-2">${dot}<span class=${cx(NAME, tone)}>${children}</span>${after}</span>`;
 const press = fn => ({ role: 'button', tabIndex: 0, onClick: fn, onKeyDown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn(); } } });
 
 function Overview({ vm, people, total, hours }) {
   const s = vm.shares;
-  const span = nightSpan(vm);
   const raw = id => vm.state.staff.find(x => x.id === id);
   const cell = (p, field) => (raw(p.id) ? html`<${TimeCell} vm=${vm} p=${raw(p.id)} field=${field} cls=${CELL} bare tone=${TIME_TONE} />` : html`<span class="text-center text-ink-3">—</span>`);
   const onePool = vm.state.pools.length === 1;
@@ -181,34 +168,33 @@ function Overview({ vm, people, total, hours }) {
     <div class=${cx(THEAD, 'li px-4 py-2')} style=${{ '--inset': '0' }}>
       <div class=${cx(OV_GRID, 't-cap text-ink-3')}>
         <span class="truncate">${count}</span><span class="text-center">In</span><span class="text-center">Out</span>
-        <span class="text-right">Hrs</span><span class="text-right">Tips</span>
+        <span class="text-center">Hrs</span><span class="text-right">Tips</span>
       </div>
     </div>
     ${people.map(p => html`<div key=${p.id} class="li ov-row" style=${{ '--inset': '0' }} ...${press(() => openPerson(p.id))}>
       <div class=${OV_GRID}>
-        <span class="flex min-w-0 items-center gap-2.5"><${PersonAv} vm=${vm} p=${p} size="sm" /><span class=${NAME}>${p.name}</span></span>
+        <${OvName} dot=${html`<${Dot} c=${hueVar(hueIndex(vm.state, p.id))} />`}
+          after=${p.closer && !allClose(vm) && html`<span class="size-1.5 shrink-0 rounded-full bg-bad" aria-label="closer"></span>`}>${p.name}<//>
         ${cell(p, 'in')}${cell(p, 'out')}
         <${Hrs} h=${hoursOf(p)} dim=${isSup(p)} />
         <${PayoutValue} value=${p.final} d=${payDelta(vm, p.id, p.final) || markOf(p)} tone=${isSup(p) ? SUP_TEXT : 'text-ink'} />
       </div>
-      <${ShiftBar} vm=${vm} p=${p} span=${span} />
     </div>`)}
     ${s.leftover > 0 && html`<div class="li ov-row" style=${{ '--inset': '0' }} ...${press(() => App.tab('pay', { sub: 'bonus' }))}>
       <div class=${OV_GRID}>
-        <span class="flex min-w-0 items-center gap-2.5"><${RoundIcon} name="cash" small /><span class=${cx(NAME, 'text-ink-2')}>Chump</span></span>
+        <${OvName} dot=${html`<${Dot} c="color-mix(in srgb, var(--ink-3) 45%, transparent)" />`} tone="text-ink-2">Chump<//>
         <span></span><span></span><span></span>
         <${PayoutValue} value=${s.leftover} tone="text-ink-2" />
       </div>
     </div>`}
     <div class="li ov-row ov-total" style=${{ '--inset': '0' }}>
       <div class=${OV_GRID}>
-        <span class="flex min-w-0 items-center gap-2.5"><${RoundIcon} name="sigma" small /><span class=${NAME}>Total</span></span>
-        <${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-3" bare />
-        <${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-3" bare />
+        <${OvName} dot=${html`<${Dot} c="transparent" />`}>Total<//>
+        <${DefaultTime} vm=${vm} field="in" cls=${CELL} tone="text-ink-2" bare />
+        <${DefaultTime} vm=${vm} field="out" cls=${CELL} tone="text-ink-2" bare />
         <${Hrs} h=${hours} />
         ${tipsTotal}
       </div>
-      ${span && html`<${AxisLabels} span=${span} />`}
     </div>
   <//>`;
 }

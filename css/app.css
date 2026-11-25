@@ -157,8 +157,7 @@
     --safe-r: env(safe-area-inset-right, 0px);
     --tab-h: 3.75rem;
     --dock: calc(var(--tab-h) + var(--safe-b));   /* top of the tab bar */
-    --hud-h: 3.75rem;                             /* the floating HUD + its gap */
-    --page-end: calc(var(--dock) + var(--hud-h) + 1.5rem);   /* room under a page's last row */
+    --page-end: calc(var(--dock) + 2rem);         /* room under a page's last row */
     --blur: saturate(1.8) blur(20px);
   }
   @media (max-width: 374px) { :root { --gutter: 0.75rem; } }
@@ -221,6 +220,16 @@
   .hdr-btn:active { background: var(--surface-2); }
   .hdr-text { display: flex; min-width: 0; flex: 1; flex-direction: column; justify-content: center; }
   .hdr-title { font-size: 1.25rem; font-weight: 600; line-height: 1.2; letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The shift's figures, trailing the title (render/tabs.js Figs): a value
+     over its label, right-aligned; an accent underline while previewing. */
+  .hdr-figs { display: flex; flex-shrink: 0; align-items: center; gap: .625rem; margin-left: auto; }
+  .hdr-fig { display: flex; min-width: 0; flex-direction: column; align-items: flex-end; padding: .125rem 0; border-radius: .5rem; }
+  .hdr-fig:active { opacity: .6; }
+  .hdr-fig-v { display: inline-flex; align-items: baseline; gap: .0625rem; font-size: 1rem; font-weight: 600; line-height: 1.2; white-space: nowrap; }
+  .hdr-figs.is-preview .hdr-fig-v { color: var(--accent); }
+  .hdr-fig-k { font-size: .6875rem; line-height: 1.2; color: var(--ink-3); white-space: nowrap; }
+  .hdr-fig-k .delta { font-size: .6875rem; }
+  @media (max-width: 374px) { .hdr-figs { gap: .375rem; } }
   .hdr-actions { display: flex; flex-shrink: 0; align-items: center; gap: .5rem; }
   .roster-rail { display: flex; gap: .75rem; overflow-x: auto; overscroll-behavior-x: contain; padding: .25rem var(--gutter) .5rem; margin-inline: calc(-1 * var(--gutter)); scrollbar-width: none; }
   .roster-rail::-webkit-scrollbar { display: none; }
@@ -362,7 +371,7 @@
      screen height and the bottom-anchored layers sit inside it. */
   html.fill-screen, html.fill-screen body { height: var(--app-h); }
   html.fill-screen body { position: relative; }
-  html.fill-screen .tabbar, html.fill-screen .hud, html.fill-screen .sheet-backdrop { position: absolute; }
+  html.fill-screen .tabbar, html.fill-screen .sheet-backdrop { position: absolute; }
   html.fill-screen .sheet-backdrop { height: var(--app-h); bottom: auto; }
   html.fill-screen .sheet { max-height: calc(var(--app-h) - var(--safe-t) - 1rem); }
   html.fill-screen .sheet--tall { height: calc(var(--app-h) - var(--safe-t) - 2.5rem); }
@@ -386,7 +395,7 @@
   /* Scrolling down tucks it away with the header's title row; up brings it
      back (ui/nav.js, html.hdr-hide). Not on a subpage, not with the keypad. */
   html.hdr-hide:not(.sub-open):not(.keypad-open) .tabbar { transform: translateY(100%); }
-  html.hdr-hide:not(.sub-open):not(.keypad-open) .toast { bottom: calc(var(--safe-b) + var(--hud-h) + .5rem); }
+  html.hdr-hide:not(.sub-open):not(.keypad-open) .toast { bottom: calc(var(--safe-b) + .75rem); }
   .tab {
     position: relative;
     min-width: 0;
@@ -434,31 +443,6 @@
   .tab-sub.ok { color: var(--on-accent); background: var(--accent); }
   .tab-sub.warn { color: #fff; background: var(--bad); }
 
-  /* ── HUD (render/tabs.js): the shift's figures on a bar floating over the
-     tab bar. Follows the tab bar down when it tucks away; rides over the
-     keypad (the figures preview what a typed time does); an accent ring
-     while an edit is previewed. Hidden behind a text keyboard. ─────────── */
-  .hud {
-    position: fixed; z-index: 21;
-    left: calc(var(--gutter) + var(--safe-l)); right: calc(var(--gutter) + var(--safe-r));
-    bottom: calc(var(--dock) + .5rem);
-    border-radius: 1rem; overflow: hidden;
-    background: var(--surface);
-    box-shadow: 0 0 0 1px var(--line), 0 .5rem 1.5rem -.5rem rgb(0 0 0 / .3);
-    transition: bottom .25s cubic-bezier(.2, .8, .3, 1), box-shadow .2s;
-  }
-  .hud:empty { display: none; }
-  .hud.is-preview { box-shadow: 0 0 0 1.5px var(--accent), 0 .5rem 1.5rem -.5rem rgb(0 0 0 / .3); }
-  html.hdr-hide:not(.sub-open):not(.keypad-open) .hud { bottom: calc(var(--safe-b) + .5rem); }
-  html.keypad-open .hud { bottom: calc(var(--kp-h, 18rem) + .5rem); z-index: 111; }
-  body.keyboard-open .hud { display: none; }
-  .hud-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); height: calc(var(--hud-h) - .5rem); }
-  .hud-cell { display: flex; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: .0625rem; padding: 0 .125rem; }
-  .hud-cell:active { background: var(--surface-2); }
-  .hud-cell + .hud-cell { border-left: 1px solid var(--line); }
-  .hud-v { display: inline-flex; max-width: 100%; align-items: baseline; gap: .125rem; overflow: hidden; font-size: 1rem; font-weight: 600; line-height: 1.2; white-space: nowrap; }
-  .hud-k { max-width: 100%; overflow: hidden; font-size: .6875rem; line-height: 1.2; color: var(--ink-3); text-overflow: ellipsis; white-space: nowrap; }
-  .hud-k .delta { font-size: .6875rem; }
 
 
   /* ── Bottom sheets: the page colour, cards inside ─────────────────────── */
@@ -529,11 +513,11 @@
      a spacer, not padding — padding taller than the scroller would grow it
      and push the whole page up. */
   html.keypad-open .content::after, html.keypad-open .subpage::after {
-    content: ""; display: block; height: calc(var(--kp-h, 18rem) + var(--hud-h) + 1rem - var(--page-end));
+    content: ""; display: block; height: calc(var(--kp-h, 18rem) + 3rem - var(--page-end));
   }
   html.fill-screen .keypad { position: absolute; }
-  html.keypad-open .sheet-body { padding-bottom: calc(var(--kp-h, 18rem) + var(--hud-h) + 1rem); }
-  [data-kcell] { scroll-margin: 3rem 0 calc(var(--kp-h, 0px) + var(--hud-h) + 1rem); }  /* 3rem: past a sticky table head */
+  html.keypad-open .sheet-body { padding-bottom: calc(var(--kp-h, 18rem) + 1rem); }
+  [data-kcell] { scroll-margin: 3rem 0 calc(var(--kp-h, 0px) + 4.5rem); }  /* 3rem: past a sticky table head */
 
   /* ── Settings switch ──────────────────────────────────────────────────── */
   .switch { position: relative; flex-shrink: 0; width: 3.125rem; height: 1.875rem; border-radius: 999px; background: var(--surface-2); transition: background .25s; }
@@ -578,16 +562,13 @@
   /* bill table (Payout): column heads and drawer totals in the bill's tint */
   .bill-col { color: var(--dc); font-weight: 600; }
 
-  /* ── Home's overview (render/home.js): Name · In · Out · Hrs · Tips, a thin
-     shift line under each row's columns. Chump and Total share the columns,
-     so every amount lines up. ───────────────────────────────────────────── */
-  .ov-grid { display: grid; grid-template-columns: minmax(0, 1fr) 2.75rem 2.75rem 2.25rem 5.25rem; align-items: center; column-gap: .5rem; }
-  .ov-row { display: flex; flex-direction: column; gap: .5rem; padding: .625rem var(--gutter) .5rem; cursor: pointer; transition: background .12s; }
+  /* ── Home's overview (render/home.js): Name · In · Out · Hrs · Tips. Chump
+     and Total share the columns, so every amount lines up. ──────────────── */
+  .ov-grid { display: grid; grid-template-columns: minmax(0, 1fr) 3.25rem 3.25rem 2.75rem 5rem; align-items: center; column-gap: .5rem; }
+  .ov-row { display: flex; min-height: 3.5rem; flex-direction: column; justify-content: center; padding: .5rem var(--gutter); cursor: pointer; transition: background .12s; }
   .ov-row:active { background: var(--surface-2); }
-  .ov-total { cursor: default; padding-bottom: .375rem; background: color-mix(in srgb, var(--surface-2) 60%, var(--surface)); }
+  .ov-total { cursor: default; background: color-mix(in srgb, var(--surface-2) 60%, var(--surface)); }
   .ov-total:active { background: color-mix(in srgb, var(--surface-2) 60%, var(--surface)); }
-  .ov-track { position: relative; display: block; height: 3px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 6%, transparent); }
-  .ov-fill { position: absolute; top: 0; bottom: 0; border-radius: 999px; opacity: .75; }
 }
 
 @layer components {
@@ -660,7 +641,7 @@
   /* ── Toast (ui/toast.js): a short message over the tab bar ──────────── */
   .toast {
     position: fixed; left: 50%; z-index: 120;
-    bottom: calc(var(--dock) + var(--hud-h) + 0.5rem);
+    bottom: calc(var(--dock) + 0.75rem);
     transform: translate(-50%, 0.5rem);
     max-width: calc(100vw - 2rem);
     padding: 0.625rem 1rem; border-radius: 0.875rem;
